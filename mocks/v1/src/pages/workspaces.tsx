@@ -247,6 +247,9 @@ export function WorkspaceDetail() {
   if (!w) return <div className="text-sm text-zinc-400">This workspace doesn’t exist anymore. <Link to="/workspaces">Back to workspaces</Link></div>
   if (!canSeeWorkspace(d, w.id)) return <div className="text-sm text-zinc-400">You don’t have access to this workspace. Ask an admin to add you. <Link to="/workspaces">Back to your workspaces</Link></div>
   const base = `/workspaces/${w.id}`
+  const liveAgents = w.agentIds.filter((id) => agentById(d, id) && agentById(d, id)!.status !== 'revoked').length
+  const conns = d.connectors.filter((c) => c.workspaceId === w.id)
+  const routed = d.stores.filter((s) => conns.some((c) => c.id === s.route))
   return (
     <div>
       <Breadcrumb items={[{ label: 'Workspaces', to: '/workspaces' }, { label: w.name }]} />
@@ -277,7 +280,9 @@ export function WorkspaceDetail() {
         title={`Delete ${w.name}?`}
         typeToConfirm={w.name}
         rows={[
-          ['Players', `${plural(w.userIds.length, 'user')} · ${plural(w.agentIds.length, 'agent')} lose access`, 'amber'],
+          ['Players', `${plural(w.userIds.length, 'user')} · ${plural(liveAgents, 'agent')} lose access`, 'amber'],
+          ['Connectors enrolled here', conns.map((c) => c.name).join(', ') || 'None', conns.length ? 'amber' : undefined],
+          ['Stores that route through them', routed.map((s) => `${s.name} → becomes unreachable`).join('; ') || 'None', routed.length ? 'amber' : undefined],
           ['Tools granted', String(w.tools.length)],
           ['Cabinets', String(d.cabinets.filter((c) => c.workspaceId === w.id).length)],
           ['Connections', [w.https && 'HTTPS', w.mcp && 'MCP'].filter(Boolean).join(' + ') || 'Off'],
@@ -286,7 +291,11 @@ export function WorkspaceDetail() {
             return e ? new Date(e.at).toLocaleString() : 'Never'
           })()],
         ]}
-        body="Its address stops answering immediately. Keys stay in their stores."
+        body={
+          conns.length
+            ? `Its address stops answering immediately. ${conns.map((c) => c.name).join(', ')} ${conns.length === 1 ? 'is' : 'are'} revoked with it${routed.length ? `, so ${routed.map((s) => s.name).join(', ')} can’t be reached until you pick another route for ${routed.length === 1 ? 'it' : 'them'}` : ''}. Keys stay in their stores.`
+            : 'Its address stops answering immediately. Keys stay in their stores.'
+        }
         confirmLabel="Delete workspace"
         onConfirm={() => {
           actions.deleteWorkspace(w.id)

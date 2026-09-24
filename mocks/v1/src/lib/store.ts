@@ -577,7 +577,15 @@ export const actions = {
       d.workspaces = d.workspaces.filter((x) => x.id !== wsId)
       d.cabinets = d.cabinets.filter((c) => c.workspaceId !== wsId)
       for (const a of d.agents) a.workspaceIds = a.workspaceIds.filter((x) => x !== wsId)
-      log(d, { object: `Deleted workspace ${w.name}` })
+      // Connectors are enrolled into a workspace, so they're revoked with it; stores routed through them lose their route.
+      const conns = d.connectors.filter((c) => c.workspaceId === wsId)
+      const routed = d.stores.filter((s) => conns.some((c) => c.id === s.route))
+      d.connectors = d.connectors.filter((c) => c.workspaceId !== wsId)
+      for (const s of routed) s.health = 'unreachable'
+      const detail: [string, string][] = []
+      if (conns.length) detail.push(['Connectors revoked', conns.map((c) => c.name).join(', ')])
+      if (routed.length) detail.push(['Stores now unreachable', routed.map((s) => s.name).join(', ')])
+      log(d, { object: `Deleted workspace ${w.name}`, detail: detail.length ? detail : undefined })
     })
   },
 

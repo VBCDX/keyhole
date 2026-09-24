@@ -244,6 +244,7 @@ function ChangeLockModal({ cabinet, onClose, ws }: { cabinet: Cabinet | null; on
 /* New cabinet                                                         */
 /* ------------------------------------------------------------------ */
 type NewKey = { rid: number; name: string; length: number }
+const KEY_NAME = /^[A-Za-z0-9_./-]+$/
 
 function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => void; ws: Workspace }) {
   const d = useDB()
@@ -253,6 +254,8 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
   const [picked, setPicked] = useState<string[]>([])
   const [toolId, setToolId] = useState('')
   const [slotMap, setSlotMap] = useState<Record<string, string | null>>({})
+  /** Slots the person picked by hand, as opposed to ones filled for them. */
+  const [manual, setManual] = useState<string[]>([])
   const [access, setAccess] = useState<Cabinet['access']>('everyone')
   useEffect(() => {
     if (open) {
@@ -262,31 +265,47 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
       setPicked([])
       setToolId('')
       setSlotMap({})
+      setManual([])
       setAccess('everyone')
     }
   }, [open]) // eslint-disable-line
 
   // The workspace's exposed keys are the access boundary: a cabinet can only reuse keys already exposed here.
   const localKeys = ws.keyIds.map((id) => keyById(d, id)).filter((k): k is NonNullable<typeof k> => !!k && k.storeId === 'st_local' && !k.cabinetId && !k.sourceRemoved)
-  const validNew = newKeys.filter((k) => k.name.trim() && k.length)
+  // A half-filled row would silently drop the pasted value, so every row is either empty or complete.
+  const rowError = (k: NewKey, i: number) => {
+    const n = k.name.trim()
+    if (!n && !k.length) return null
+    if (!n) return 'Name this key, or clear its value.'
+    if (!k.length) return `Paste a value for ${n}.`
+    if (!KEY_NAME.test(n)) return 'Use letters, numbers, and _ . / - only.'
+    if (newKeys.some((x, j) => j < i && x.name.trim() === n)) return `Another key here is already named ${n}.`
+    if (picked.some((id) => keyById(d, id)?.name === n)) return `${n} is already picked from ${ws.name}.`
+    return null
+  }
+  const errors = newKeys.map(rowError)
+  const validNew = newKeys.filter((k, i) => k.name.trim() && k.length && !errors[i])
   const cabinetKeyOptions = [...validNew.map((k) => ({ value: `new:${k.name.trim()}`, label: k.name.trim() })), ...picked.map((id) => ({ value: id, label: keyById(d, id)!.name }))]
   const tool = toolById(d, toolId)
   const tools = orgTools(d)
 
-  // Auto-fill slots: exact name first, else the only cabinet key.
+  // Auto-fill slots: a hand-picked key stays, then an exact name match, else the only cabinet key.
   useEffect(() => {
     if (!tool) return
     setSlotMap(
       Object.fromEntries(
         tool.slots.map((s) => {
+          const current = slotMap[s.name]
+          const stillThere = !!current && cabinetKeyOptions.some((o) => o.value === current)
+          if (manual.includes(s.name) && stillThere) return [s.name, current]
           const exact = cabinetKeyOptions.find((o) => o.label === s.name)
-          return [s.name, exact?.value ?? (cabinetKeyOptions.length === 1 ? cabinetKeyOptions[0].value : slotMap[s.name] ?? null)]
+          return [s.name, exact?.value ?? (cabinetKeyOptions.length === 1 ? cabinetKeyOptions[0].value : stillThere ? current : null)]
         }),
       ),
     )
   }, [toolId, cabinetKeyOptions.map((o) => o.value).join()]) // eslint-disable-line
 
-  const ok = name.trim() && (validNew.length || picked.length) && (!tool || tool.slots.every((s) => slotMap[s.name])) && (access === 'everyone' || access.length > 0)
+  const ok = name.trim() && !errors.some(Boolean) && (validNew.length || picked.length) && (!tool || tool.slots.every((s) => slotMap[s.name])) && (access === 'everyone' || access.length > 0)
 
   return (
     <Modal open={open} onClose={onClose} width={560} title="New cabinet">
@@ -296,21 +315,24 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
       <Field label="Keys" optional="cabinets hold Local keys only" hint={SECRET_LINE}>
         <div className="flex flex-col gap-2">
           {newKeys.map((k, i) => (
-            <SecretField
-              key={k.rid}
-              compact
-              onLength={(n) => setNewKeys(newKeys.map((x, j) => (j === i ? { ...x, length: n } : x)))}
-              placeholder="Paste the value"
-              prefix={
-                <input
-                  aria-label="Key name"
-                  value={k.name}
-                  placeholder="key_name"
-                  onChange={(e) => setNewKeys(newKeys.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
-                  className="w-40 border-r border-brass/20 bg-transparent pr-2 font-mono text-sm2 text-zinc-200 outline-none placeholder:text-zinc-600"
-                />
-              }
-            />
+            <div key={k.rid} className="flex flex-col gap-1">
+              <SecretField
+                id={`cabinet-key-${k.rid}`}
+                compact
+                onLength={(n) => setNewKeys((prev) => prev.map((x, j) => (j === i ? { ...x, length: n } : x)))}
+                placeholder="Paste the value"
+                prefix={
+                  <input
+                    aria-label="Key name"
+                    value={k.name}
+                    placeholder="key_name"
+                    onChange={(e) => setNewKeys(newKeys.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                    className="w-40 border-r border-brass/20 bg-transparent pr-2 font-mono text-sm2 text-zinc-200 outline-none placeholder:text-zinc-600"
+                  />
+                }
+              />
+              {errors[i] && <div className="text-xs2 text-red-400">{errors[i]}</div>}
+            </div>
           ))}
         </div>
       </Field>
@@ -352,7 +374,10 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
             <select
               aria-label={`Key for ${s.name}`}
               value={slotMap[s.name] ?? ''}
-              onChange={(e) => setSlotMap({ ...slotMap, [s.name]: e.target.value || null })}
+              onChange={(e) => {
+                setSlotMap({ ...slotMap, [s.name]: e.target.value || null })
+                setManual([...manual, s.name])
+              }}
               className="min-w-0 flex-1 appearance-none bg-transparent font-mono text-xs text-zinc-200 outline-none"
             >
               <option value="">Pick a cabinet key…</option>
@@ -363,9 +388,9 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
               ))}
             </select>
             {slotMap[s.name] ? (
-              <span className="inline-flex items-center gap-1.5 text-xs2 text-zinc-500">
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-xs2 text-zinc-500">
                 <Dot health="healthy" size={6} />
-                Matched
+                {cabinetKeyOptions.find((o) => o.value === slotMap[s.name])?.label === s.name ? 'Matched by name' : manual.includes(s.name) ? 'Chosen by you' : 'Chosen for you (only key)'}
               </span>
             ) : (
               <span className="text-xs2 text-amber-400">Missing</span>

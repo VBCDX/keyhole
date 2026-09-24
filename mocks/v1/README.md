@@ -36,7 +36,7 @@ A **Prototype controls** pill sits at the bottom left. It isn't part of the prod
 | 5 · Grant with missing slot | Organizations › Tools › Grant, then tick Staging: *Missing: `stripe_secret`* › Expose a key › Use this key › Grant. The exposure is staged and only applied on Grant; Production shows as already granted with its current mapping. |
 | 6 · Revoke | Players › Agents › billing-agent › Revoke token. Its next attempt appears in the log as blocked about 4 s later. |
 | 7 · Live debugging | Audit › Live. ops-agent streams red rows. Expand one › *Open the tool's actions* › add `GET /v1/payouts` › Publish › back to Live, and the rows turn green. |
-| 8 · Support lock | View as Keyhole support › search `mia` › Lock account. View as Dana › Audit shows the support action. |
+| 8 · Support lock | View as Keyhole support › search `mia` › Lock account (a reason or ticket ID is required). View as Dana › Audit shows the support action and its reason; Players › Users › Mia › *Ask support to unlock*, which support then sees on Mia's record. |
 
 ## Ground rules the prototype enforces
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ago, initials, until } from '../lib/format'
-import { actions, isAdmin, me, myRole, org, useDB, useNow, visibleEvents } from '../lib/store'
+import { actions, agentsCreatedBy, isAdmin, me, myRole, org, useDB, useNow, visibleEvents } from '../lib/store'
 import { AuditLog } from '../components/shared'
 import { KeyholeIcon } from '../components/keyhole'
 import { Avatar, Button, Card, Field, Footer, Input, Modal, PageTitle, Toggle } from '../components/ui'
@@ -256,11 +256,19 @@ export function SupportConsole() {
   const now = useNow()
   const [q, setQ] = useState('')
   const [picked, setPicked] = useState<string | null>(null)
-  const [confirm, setConfirm] = useState<null | 'lock' | 'signout'>(null)
+  const [confirm, setConfirm] = useState<null | 'lock' | 'unlock' | 'signout'>(null)
+  const [reason, setReason] = useState('')
   const matches = q.trim().length >= 2 ? d.users.filter((u) => u.email.toLowerCase().includes(q.trim().toLowerCase())) : []
   const u = d.users.find((x) => x.id === picked)
   const orgNames = u ? Object.keys(u.roles).map((id) => d.orgs.find((o) => o.id === id)?.name).filter(Boolean) : []
   const pendingInvite = u ? d.invites.find((i) => i.email === u.email) : null
+  // Support sees membership, never contents: a count of agents, not their names.
+  const agentCount = u ? agentsCreatedBy(d, u, Object.keys(u.roles)).length : 0
+  const ask = (c: NonNullable<typeof confirm>) => {
+    setReason('')
+    setConfirm(c)
+  }
+  const reasonOk = reason.trim().length >= 3
 
   const btnLight = 'rounded-lg bg-slate-200 px-3.5 py-2 text-sm2 font-semibold text-slate-900 hover:bg-white disabled:opacity-40'
   const btnLine = 'rounded-lg border border-support-edge px-3.5 py-2 text-sm2 text-slate-300 hover:bg-white/[0.03] disabled:opacity-40'
@@ -314,12 +322,26 @@ export function SupportConsole() {
               <span>{u.sessions.length} active</span>
               <span className="text-slate-500">Invite</span>
               <span>{pendingInvite ? `Pending · expires ${until(pendingInvite.expiresAt, now).toLowerCase()}` : 'Accepted'}</span>
+              {u.locked && (
+                <>
+                  <span className="text-slate-500">Lock reason</span>
+                  <span>{u.lockReason ?? '—'}</span>
+                </>
+              )}
+              {u.unlockRequest && (
+                <>
+                  <span className="text-slate-500">Unlock request</span>
+                  <span className="text-amber-500">
+                    {u.unlockRequest.by} · {ago(u.unlockRequest.at, now).toLowerCase()}
+                  </span>
+                </>
+              )}
             </div>
             <div className="flex gap-2 border-t border-support-line pt-4">
-              <button className={btnLight} onClick={() => (u.locked ? actions.setLocked(u.id, false) : setConfirm('lock'))}>
+              <button className={btnLight} onClick={() => ask(u.locked ? 'unlock' : 'lock')}>
                 {u.locked ? 'Unlock account' : 'Lock account'}
               </button>
-              <button className={btnLine} disabled={!u.sessions.length} onClick={() => setConfirm('signout')}>
+              <button className={btnLine} disabled={!u.sessions.length} onClick={() => ask('signout')}>
                 Sign out everywhere
               </button>
               <button className={btnLine} disabled={!pendingInvite} onClick={() => actions.supportResendInvite(u.id)}>
@@ -328,13 +350,41 @@ export function SupportConsole() {
             </div>
           </div>
         )}
-        <div className="text-xs text-slate-500">Support cannot view organizations, secrets, or traffic.</div>
+        <div className="max-w-[560px] text-center text-xs text-slate-500">Support sees which organizations an account belongs to — never what’s inside them: no keys, secrets, tools, or traffic.</div>
       </div>
 
-      <Modal open={!!confirm} onClose={() => setConfirm(null)} width={440} title={confirm === 'lock' ? `Lock ${u?.email}?` : `Sign ${u?.email} out everywhere?`}>
+      <Modal
+        open={!!confirm}
+        onClose={() => setConfirm(null)}
+        width={460}
+        title={confirm === 'lock' ? `Lock ${u?.email}?` : confirm === 'unlock' ? `Unlock ${u?.email}?` : `Sign ${u?.email} out everywhere?`}
+      >
+        {confirm !== 'unlock' && u && (
+          <div className="flex flex-col gap-2.5 rounded-[10px] border border-edge bg-rail p-4 text-sm2">
+            <div className="flex justify-between gap-6">
+              <span className="text-zinc-500">Sessions ended</span>
+              <span>{u.sessions.length}</span>
+            </div>
+            <div className="flex justify-between gap-6">
+              <span className="text-zinc-500">Organizations notified</span>
+              <span className="text-right">{orgNames.join(', ') || '—'}</span>
+            </div>
+            {confirm === 'lock' && (
+              <div className="flex justify-between gap-6">
+                <span className="text-zinc-500">Agents they created</span>
+                <span className="text-right">{agentCount ? `${agentCount} · keep working (they belong to the organization)` : 'None'}</span>
+              </div>
+            )}
+          </div>
+        )}
         <div className="text-sm2 leading-relaxed text-zinc-400">
-          {confirm === 'lock' ? 'They’re signed out of every session and can’t sign in until unlocked. Their organizations see this action in their audit log.' : `Ends ${u?.sessions.length} active session${u?.sessions.length === 1 ? '' : 's'}. They can sign in again right away.`}
+          {confirm === 'lock'
+            ? 'They can’t sign in until unlocked. Their organizations see this action and your reason in their audit log; they see the reason on the sign-in screen.'
+            : 'They can sign in again right away. Their organizations see this action and your reason in their audit log.'}
         </div>
+        <Field label="Reason or ticket ID" hint="Required. Keep it factual — the customer reads it.">
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="SUP-4821 · suspected session theft" autoFocus />
+        </Field>
         <Footer>
           <Button size="lg" onClick={() => setConfirm(null)}>
             Cancel
@@ -342,13 +392,15 @@ export function SupportConsole() {
           <Button
             size="lg"
             variant="primary"
+            disabled={!reasonOk}
             onClick={() => {
-              if (u && confirm === 'lock') actions.setLocked(u.id, true)
-              if (u && confirm === 'signout') actions.signOutEverywhere(u.id)
+              if (u && confirm === 'lock') actions.setLocked(u.id, true, reason.trim())
+              if (u && confirm === 'unlock') actions.setLocked(u.id, false, reason.trim())
+              if (u && confirm === 'signout') actions.signOutEverywhere(u.id, reason.trim())
               setConfirm(null)
             }}
           >
-            {confirm === 'lock' ? 'Lock account' : 'Sign out everywhere'}
+            {confirm === 'lock' ? 'Lock account' : confirm === 'unlock' ? 'Unlock account' : 'Sign out everywhere'}
           </Button>
         </Footer>
       </Modal>

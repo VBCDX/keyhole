@@ -48,6 +48,22 @@ export function UserDetail() {
         </div>
         <span className="ml-auto">{u.locked ? <StatusInline tone="amber">Locked by support</StatusInline> : u.status === 'suspended' ? <StatusInline tone="amber">Suspended</StatusInline> : <StatusInline tone="green">Active</StatusInline>}</span>
       </div>
+      {u.locked && (
+        <div className="mt-5 flex items-center justify-between gap-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-400">
+          <div className="leading-relaxed">
+            Keyhole support locked this account {ago(u.lockedAt ?? null, now).toLowerCase()}
+            {u.lockReason ? <> · <span className="text-zinc-300">{u.lockReason}</span></> : ''}. Only Keyhole support can unlock it.
+          </div>
+          {isAdmin(d) &&
+            (u.unlockRequest ? (
+              <span className="shrink-0 text-zinc-400">Unlock requested {ago(u.unlockRequest.at, now).toLowerCase()}</span>
+            ) : (
+              <Button size="sm" className="shrink-0" onClick={() => actions.requestUnlock(u.id)}>
+                Ask support to unlock
+              </Button>
+            ))}
+        </div>
+      )}
       <div className="mt-6 grid grid-cols-2 gap-4">
         <Card className="p-5">
           <div className="eyebrow">Workspaces</div>

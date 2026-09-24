@@ -186,6 +186,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
                     items={[
                       { label: 'Change role', onClick: () => setRoleFor({ user: u, role, invited }) },
                       { label: 'Assign workspaces', onClick: () => setWsFor({ user: u, role, invited }) },
+                      u.locked ? { label: u.unlockRequest ? 'Unlock requested' : 'Ask support to unlock', disabled: !!u.unlockRequest, onClick: () => actions.requestUnlock(u.id) } : null,
                       u.status === 'suspended' ? { label: 'Reactivate', onClick: () => actions.setUserSuspended(u.id, false) } : { label: 'Suspend', onClick: () => setSuspendFor({ user: u, role, invited }) },
                       { label: 'Remove', danger: true, onClick: () => setRemoveFor({ user: u, role, invited }) },
                     ]}
@@ -219,9 +220,10 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
         rows={[
           ['Workspaces', removeFor ? wsNames(removeFor.user, removeFor.role) : ''],
           ['Cabinets they own', cabinetsOwned.length ? cabinetsOwned.map((c) => `${c.name} · ${c.keyIds.length} keys, ${c.tools.length} tool${c.tools.length === 1 ? '' : 's'}`).join('; ') : 'None', cabinetsOwned.length ? 'amber' : undefined],
+          ['Agents they created', removeFor ? createdAgentsLabel(agentsCreatedBy(d, removeFor.user).map((a) => a.label)) : ''],
           ['Last active', ago(removeFor?.user.lastActive ?? null, now)],
         ]}
-        body={cabinetsOwned.length ? 'Their cabinet becomes orphaned. Reassign it now, or leave it for an admin to handle.' : 'They lose access to every workspace in this organization.'}
+        body={`${cabinetsOwned.length ? 'Their cabinet becomes orphaned. Reassign it now, or leave it for an admin to handle.' : 'They lose access to every workspace in this organization.'} Agents they created belong to the organization and keep working — revoke them separately if they should stop.`}
         secondary={cabinetsOwned.length ? { label: 'Reassign cabinet first', onClick: () => nav(`/workspaces/${cabinetsOwned[0].workspaceId}/cabinets`) } : undefined}
         confirmLabel="Remove user"
         onConfirm={() => removeFor && actions.removeUser(removeFor.user.id)}

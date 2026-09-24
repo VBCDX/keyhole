@@ -17,6 +17,10 @@ export interface User {
   /** Set by Keyhole support; blocks sign-in. */
   locked: boolean
   lockedAt?: number
+  /** Support's reason or ticket ID, shown to the person and in their organizations' logs. */
+  lockReason?: string
+  /** An admin asked support to unlock the account ("Dana Keller · Acme Corp"). */
+  unlockRequest?: { by: string; at: number }
   lastActive: number | null
   sessions: { device: string; place: string; at: number }[]
 }

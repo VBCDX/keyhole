@@ -848,18 +848,21 @@ export const actions = {
   },
 
   /* Support */
-  setLocked(userId: string, locked: boolean) {
+  /** Support acts on an account only with a reason or ticket ID, which every affected organization sees. */
+  setLocked(userId: string, locked: boolean, reason: string) {
     update((d) => {
       const u = userById(d, userId)
       if (!u) return
       u.locked = locked
       u.lockedAt = locked ? Date.now() : undefined
+      u.lockReason = locked ? reason : undefined
+      u.unlockRequest = undefined
       if (locked) u.sessions = []
       for (const orgId of Object.keys(u.roles))
-        log(d, { orgId, type: 'support', actor: 'Keyhole support', actorKind: 'support', actorId: 'support', object: `${locked ? 'Locked' : 'Unlocked'} account ${u.email}` })
+        log(d, { orgId, type: 'support', actor: 'Keyhole support', actorKind: 'support', actorId: 'support', object: `${locked ? 'Locked' : 'Unlocked'} account ${u.email}`, detail: [['Reason or ticket', reason]] })
     })
   },
-  signOutEverywhere(userId: string) {
+  signOutEverywhere(userId: string, reason?: string) {
     update((d) => {
       const u = userById(d, userId)
       if (!u) return
@@ -867,7 +870,24 @@ export const actions = {
       u.sessions = []
       if (d.currentUserId === 'support')
         for (const orgId of Object.keys(u.roles))
-          log(d, { orgId, type: 'support', actor: 'Keyhole support', actorKind: 'support', actorId: 'support', object: `Signed ${u.email} out everywhere (${was} session${was === 1 ? '' : 's'})` })
+          log(d, {
+            orgId,
+            type: 'support',
+            actor: 'Keyhole support',
+            actorKind: 'support',
+            actorId: 'support',
+            object: `Signed ${u.email} out everywhere (${was} session${was === 1 ? '' : 's'})`,
+            detail: reason ? [['Reason or ticket', reason]] : undefined,
+          })
+    })
+  },
+  /** Only support can unlock; an admin can ask for it, and support sees the request. */
+  requestUnlock(userId: string) {
+    update((d) => {
+      const u = userById(d, userId)
+      if (!u?.locked) return
+      u.unlockRequest = { by: `${me(d).name} · ${org(d)?.name}`, at: Date.now() }
+      log(d, { object: `Asked Keyhole support to unlock ${u.email}` })
     })
   },
   supportResendInvite(userId: string) {

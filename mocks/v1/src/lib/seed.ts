@@ -34,6 +34,7 @@ export function freshDB(): DB {
     currentUserId: 'u_dana',
     currentOrgId: 'org_acme',
     checklistDismissed: false,
+    configDownloadedAt: null,
     firstCallAt: null,
     orgs: [{ id: 'org_acme', name: 'Acme Corp', createdAt: now - 2 * MIN }],
     users: [dana(now)],
@@ -156,6 +157,7 @@ export function populatedDB(): DB {
     currentUserId: 'u_dana',
     currentOrgId: 'org_acme',
     checklistDismissed: true,
+    configDownloadedAt: now - 3 * DAY,
     firstCallAt: now - 3 * DAY,
     orgs: [
       { id: 'org_acme', name: 'Acme Corp', createdAt: now - 60 * DAY },

@@ -432,7 +432,9 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
       setSel(t ? toolWorkspaces(d, t.id).map((w) => w.id) : [])
     }
   }, [toolId]) // eslint-disable-line
-  const tool: Tool | undefined = tools.find((t) => t.id === picked)
+  const draft: Tool | undefined = tools.find((t) => t.id === picked)
+  // Grants use the published version; a draft can't be granted until it's published.
+  const tool = draft?.published ? { ...draft.published, id: draft.id } : undefined
   const slotState = (wsId: string) => {
     const w = workspaces.find((x) => x.id === wsId)!
     return tool!.slots.map((s) => ({ slot: s.name, keyId: overrides[`${wsId}:${s.name}`] ?? autoMatch(d, w.keyIds, s.name) }))
@@ -448,12 +450,17 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
             <Select value={picked} onChange={(e) => setPicked(e.target.value)}>
               <option value="">Pick a tool…</option>
               {tools.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.displayName} · v{t.version}
+                <option key={t.id} value={t.id} disabled={!t.published}>
+                  {t.displayName} · {t.published ? `v${t.published.version}` : 'draft, publish it first'}
                 </option>
               ))}
             </Select>
           </Field>
+          {draft && !draft.published && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3.5 py-2.5 text-xs text-amber-400">
+              {draft.displayName} is a draft that has never been published, so agents can’t use it yet. <Link to={`/tools/${draft.id}?section=publish`}>Publish v{draft.version}</Link>, then grant it.
+            </div>
+          )}
         </>
       ) : done !== null ? (
         <>

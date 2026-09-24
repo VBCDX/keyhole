@@ -19,7 +19,7 @@ import type {
 } from './types'
 
 const LS_KEY = 'keyhole-mocks-v1'
-const VERSION = 3
+const VERSION = 4
 
 function load(): DB {
   try {
@@ -168,10 +168,16 @@ export function filledSlot(d: DB, w: Workspace, wt: WorkspaceTool, slot: string)
   const id = wt.slotMap[slot]
   return id && w.keyIds.includes(id) && keyById(d, id) ? id : null
 }
-/** Slot names of a granted tool that have no usable key in this workspace. */
+/**
+ * What agents actually get: the last published snapshot. Drafts never serve traffic.
+ * (Null for a tool that has never been published.)
+ */
+export const liveTool = (t: Tool | undefined) => (t?.published ?? null)
+
+/** Slot names of a granted tool's published version that have no usable key in this workspace. */
 export function missingSlots(d: DB, w: Workspace, wt: WorkspaceTool) {
   const t = toolById(d, wt.toolId)
-  return (t?.slots ?? []).filter((s) => !filledSlot(d, w, wt, s.name)).map((s) => s.name)
+  return (liveTool(t)?.slots ?? t?.slots ?? []).filter((s) => !filledSlot(d, w, wt, s.name)).map((s) => s.name)
 }
 
 /** What un-exposing keys would break: tool slots and cabinet keys in the workspace that point at them. */
@@ -256,6 +262,9 @@ export const actions = {
   },
   dismissChecklist() {
     update((d) => void (d.checklistDismissed = true))
+  },
+  markConfigDownloaded() {
+    update((d) => void (d.configDownloadedAt ??= Date.now()))
   },
 
   /* Keys + stores */
@@ -395,6 +404,18 @@ export const actions = {
     update((d) => {
       const t = toolById(d, id)
       if (!t) return
+      // Slots keep their id across versions: a renamed slot keeps the key each workspace picked for it.
+      const before = t.published
+      const renames = before ? t.slots.map((s) => [before.slots.find((o) => o.id === s.id)?.name, s.name] as const).filter(([o, n]) => o && o !== n) : []
+      const carry = (m: Record<string, string | null>) => {
+        for (const [o, n] of renames)
+          if (m[n] == null && m[o!] != null) {
+            m[n] = m[o!]
+            delete m[o!]
+          }
+      }
+      for (const w of d.workspaces) for (const wt of w.tools) if (wt.toolId === id) carry(wt.slotMap)
+      for (const c of d.cabinets) for (const ct of c.tools) if (ct.toolId === id) carry(ct.slotMap)
       t.status = 'published'
       const { internalName, displayName, description, baseUrl, actions: acts, slots, perMinute, timeoutMs } = t
       t.published = structuredClone({ internalName, displayName, description, baseUrl, actions: acts, slots, perMinute, timeoutMs, version: t.version })
@@ -465,7 +486,7 @@ export const actions = {
       if (!w || !t) return
       const existing = w.tools.find((x) => x.toolId === toolId)
       if (existing) existing.slotMap = slotMap
-      else w.tools.push({ toolId, slotMap, enabled: true, perMinute: t.perMinute })
+      else w.tools.push({ toolId, slotMap, enabled: true, perMinute: (liveTool(t) ?? t).perMinute })
       log(d, { object: `Granted ${t.displayName} to ${w.name}`, workspaceId: wsId })
     })
   },
@@ -810,8 +831,8 @@ export const actions = {
     update((d) => {
       const w = wsById(d, wsId)
       const a = agentId ? agentById(d, agentId) : null
-      const wt = w?.tools.find((t) => t.enabled && !missingSlots(d, w, t).length)
-      const t = wt ? toolById(d, wt.toolId) : null
+      const wt = w?.tools.find((t) => t.enabled && liveTool(toolById(d, t.toolId)) && !missingSlots(d, w, t).length)
+      const t = wt ? liveTool(toolById(d, wt.toolId)) : null
       const act = t?.actions[0]
       if (a) a.lastUsedAt = Date.now()
       const detail: [string, string][] = [['Action', act ? `${act.method} ${act.path}` : '—'], ['Workspace', w?.name ?? '—'], ['Route', 'Direct']]

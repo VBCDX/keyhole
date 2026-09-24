@@ -20,14 +20,18 @@ export function Checklist() {
   const wsWithTool = ws.find((w) => w.tools.length)
   const connected = ws.find((w) => w.mcp || w.https)
   const target = connected ?? wsWithTool ?? ws[0]
+  const tools = orgTools(d)
+  const toPublish = tools.find((t) => !t.published) ?? tools[0]
   const steps = [
     { t: 'Add your first key', sub: 'The Local store is ready', done: orgKeys(d).some((k) => !k.cabinetId), to: `/orgs/${d.currentOrgId}/stores/st_local?add=1` },
-    { t: 'Create a tool', sub: 'Import an API description or pick from the catalog', done: orgTools(d).length > 0, to: '/tools' },
+    { t: 'Create a tool', sub: 'Import an API description or pick from the catalog', done: tools.length > 0, to: '/tools' },
+    { t: 'Publish the tool', sub: 'New tools start as drafts. Agents can only use a published version', done: tools.some((t) => t.published), to: toPublish ? `/tools/${toPublish.id}?section=publish` : '/tools' },
     { t: 'Create a workspace and attach the tool', sub: '', done: !!wsWithTool, to: ws[0] ? `/workspaces/${ws[0].id}/tools` : '/workspaces?new=1' },
     { t: 'Create an agent', sub: '', done: orgAgents(d).length > 0, to: '/players/agents?new=1' },
-    { t: 'Turn on MCP or HTTPS and download the config', sub: '', done: !!connected, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
+    { t: 'Turn on MCP or HTTPS and download the config', sub: '', done: !!connected && !!d.configDownloadedAt, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
     { t: 'Make your first call', sub: 'We wait here — this checks off when the first request lands', done: !!d.firstCallAt, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
   ]
+  const waitStep = steps.length - 1
   const doneCount = steps.filter((s) => s.done).length
   const allDone = doneCount === steps.length
   const nextIndex = steps.findIndex((s) => !s.done)
@@ -48,7 +52,7 @@ export function Checklist() {
       ) : (
         <>
           <div className="text-sm font-semibold">Get set up</div>
-          <div className="mt-0.5 text-sm2 text-zinc-400">Six steps to your first guarded call. Each checks off on its own.</div>
+          <div className="mt-0.5 text-sm2 text-zinc-400">Seven steps to your first guarded call. Each checks off on its own.</div>
         </>
       )}
       <div className="mt-4 flex flex-col">
@@ -68,7 +72,7 @@ export function Checklist() {
               </Link>
               {s.sub && !s.done && (
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
-                  {i === 5 && i === nextIndex && <KeyholeIcon size={12} pulse />}
+                  {i === waitStep && i === nextIndex && <KeyholeIcon size={12} pulse />}
                   {s.sub}
                 </div>
               )}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ago } from '../lib/format'
-import { actions, agentById, getDB, isAdmin, log, orgEvents, sessionTokenFor, toolById, update, useDB, useNow } from '../lib/store'
+import { actions, agentById, getDB, isAdmin, liveTool, log, orgEvents, sessionTokenFor, toolById, update, useDB, useNow } from '../lib/store'
 import type { AuditEvent, Workspace } from '../lib/types'
 import { EnrollPanel } from '../components/EnrollPanel'
 import { CopyChip, KeyholeIcon } from '../components/keyhole'
@@ -177,10 +177,11 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
   const onDownload = () => {
     const cfg = configFor(kind, client, w, token ?? '<PASTE_AGENT_TOKEN>')
     download(cfg.filename, cfg.text)
+    actions.markConfigDownloaded()
     expectFirstRequest('download')
   }
 
-  const firstTool = w.tools.map((t) => toolById(d, t.toolId)).find(Boolean)
+  const firstTool = w.tools.map((t) => liveTool(toolById(d, t.toolId))).find(Boolean)
   const curl = `curl ${host(w)}/${firstTool?.internalName ?? 'tool'}${firstTool?.actions[0]?.path.replace(/\{.*?\}/g, 'ID') ?? '/'} \\\n  -H "Authorization: Bearer $KEYHOLE_TOKEN"`
 
   return (

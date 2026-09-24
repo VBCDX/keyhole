@@ -224,6 +224,8 @@ export interface DB {
   currentUserId: string
   currentOrgId: string
   checklistDismissed: boolean
+  /** When someone first downloaded a connection config (checklist step). */
+  configDownloadedAt: number | null
   firstCallAt: number | null
   orgs: Org[]
   users: User[]

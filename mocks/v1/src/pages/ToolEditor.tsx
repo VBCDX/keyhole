@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ago, plural, uid } from '../lib/format'
 import { testCall } from '../lib/simulate'
-import { actions, isAdmin, keyById, orgEvents, toolById, toolWorkspaces, useDB, useNow } from '../lib/store'
+import { actions, filledSlot, isAdmin, orgEvents, toolById, toolWorkspaces, useDB, useNow } from '../lib/store'
 import type { HttpMethod, KeySlot, Tool, ToolAction, ToolInput, ToolSnapshot } from '../lib/types'
 import { CopyChip, KeyholeIcon } from '../components/keyhole'
 import { ImpactDialog } from '../components/shared'
@@ -133,6 +133,16 @@ export function ToolEditor() {
   const hasDraft = t.status === 'draft'
   const nameOk = /^[a-z][a-z0-9_]*$/.test(t.internalName)
   const granted = toolWorkspaces(d, t.id)
+  // Slots that would have no key once this draft goes live (a renamed slot keeps its key; a new one doesn't).
+  const unfilledAfterPublish = granted.flatMap((w) => {
+    const wt = w.tools.find((x) => x.toolId === t.id)!
+    return t.slots
+      .filter((s) => {
+        const old = t.published?.slots.find((o) => o.id === s.id)?.name
+        return !filledSlot(d, w, wt, s.name) && !(old && filledSlot(d, w, wt, old))
+      })
+      .map((s) => `${w.name} · ${s.name}`)
+  })
 
   return (
     <div className="flex h-full flex-col bg-page text-zinc-100">
@@ -426,6 +436,11 @@ export function ToolEditor() {
           ))}
         </ul>
         <div className="text-sm2 text-zinc-400">{granted.length ? `${granted.map((w) => w.name).join(', ')} switch to v${t.version} on their next request.` : 'It isn’t granted to any workspace yet.'}</div>
+        {unfilledAfterPublish.length > 0 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3.5 py-2.5 text-xs text-amber-400">
+            These slots have no key once v{t.version} is live, so calls through them fail until someone picks one: <span className="font-mono">{unfilledAfterPublish.join(', ')}</span>
+          </div>
+        )}
         <Footer>
           <Button size="lg" onClick={() => setPublishing(false)}>
             Cancel
@@ -464,9 +479,10 @@ export function ToolEditor() {
 
 function TestCallPanel({ t }: { t: Tool }) {
   const d = useDB()
+  // The editor tests this draft, so it needs a workspace where the draft's slots are filled.
   const ready = toolWorkspaces(d, t.id).filter((w) => {
     const wt = w.tools.find((x) => x.toolId === t.id)!
-    return t.slots.every((s) => wt.slotMap[s.name] && keyById(d, wt.slotMap[s.name]))
+    return t.slots.every((s) => filledSlot(d, w, wt, s.name))
   })
   const [wsId, setWsId] = useState('')
   const [actionId, setActionId] = useState('')
@@ -487,7 +503,7 @@ function TestCallPanel({ t }: { t: Tool }) {
   if (!ready.length)
     return (
       <div className="mt-3 rounded-[10px] border border-edge bg-panel p-5 text-sm2 text-zinc-400">
-        Test calls run in a workspace where this tool’s key slots are filled. Attach it to one first —{' '}
+        Test calls run in a workspace where this tool’s key slots are filled. {t.published ? 'Attach it to one first —' : 'Publish it, then'}{' '}
         <Link to={`/workspaces`}>pick a workspace</Link> and add the tool on its Tools tab.
       </div>
     )
@@ -530,7 +546,7 @@ function TestCallPanel({ t }: { t: Tool }) {
             setRunning(true)
             setResult(null)
             window.setTimeout(() => {
-              setResult(testCall({ toolId: t.id, wsId, actionId }))
+              setResult(testCall({ toolId: t.id, wsId, actionId, draft: true }))
               setRunning(false)
             }, 700)
           }}

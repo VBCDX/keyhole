@@ -10,6 +10,7 @@ import {
   isAdmin,
   filledSlot,
   keyById,
+  liveTool,
   missingSlots,
   orgAgents,
   orgEvents,
@@ -468,6 +469,9 @@ export function WsTools() {
           {w.tools.map((wt) => {
             const t = toolById(d, wt.toolId)
             if (!t) return null
+            // Agents get the published version; a newer draft doesn't change anything here until it's published.
+            const live = liveTool(t)
+            const slots = (live ?? t).slots
             const missing = missingSlots(d, w, wt)
             const r = results[wt.toolId]
             return (
@@ -478,11 +482,12 @@ export function WsTools() {
                       {t.displayName}
                     </Link>
                     <div className="text-xs text-zinc-500">
-                      v{t.published?.version ?? t.version} {t.status === 'draft' && !t.published && '· draft'}
+                      {live ? `v${live.version}` : <span className="text-amber-400">Not published</span>}
+                      {live && t.status === 'draft' && <span> · draft v{t.version} pending</span>}
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
-                    {t.slots.map((s) => {
+                    {slots.map((s) => {
                       const k = keyById(d, filledSlot(d, w, wt, s.name))
                       return (
                         <div key={s.id} className="flex items-center gap-2 text-xs">
@@ -508,7 +513,7 @@ export function WsTools() {
                         </div>
                       )
                     })}
-                    {!t.slots.length && <span className="text-xs text-zinc-500">No key needed</span>}
+                    {!slots.length && <span className="text-xs text-zinc-500">No key needed</span>}
                   </div>
                   <div>
                     <Toggle on={wt.enabled} onChange={(v) => actions.updateWorkspaceTool(w.id, t.id, { enabled: v })} label={`Turn ${t.displayName} on or off`} disabled={!admin} />
@@ -609,11 +614,15 @@ function LimitInput({ value, disabled, onCommit }: { value: number; disabled: bo
 export function AddToolModal({ open, onClose, ws }: { open: boolean; onClose: () => void; ws: Workspace }) {
   const d = useDB()
   const available = orgTools(d).filter((t) => !ws.tools.some((x) => x.toolId === t.id))
+  // Only published tools can be granted: a draft isn't usable by agents yet.
+  const publishable = available.filter((t) => t.published)
+  const drafts = available.filter((t) => !t.published)
   const [toolId, setToolId] = useState('')
-  const tool = toolById(d, toolId)
+  const picked = toolById(d, toolId)
+  const tool = liveTool(picked)
   const [map, setMap] = useState<Record<string, string | null>>({})
   useEffect(() => {
-    if (open) setToolId(available.length === 1 ? available[0].id : '')
+    if (open) setToolId(publishable.length === 1 ? publishable[0].id : '')
   }, [open]) // eslint-disable-line
   useEffect(() => {
     if (tool) setMap(Object.fromEntries(tool.slots.map((s) => [s.name, autoMatch(d, ws.keyIds, s.name)])))
@@ -621,13 +630,13 @@ export function AddToolModal({ open, onClose, ws }: { open: boolean; onClose: ()
   const matched = useMemo(() => new Set(tool?.slots.filter((s) => map[s.name] && keyById(d, map[s.name])?.name === s.name).map((s) => s.name)), [tool, map, d])
   return (
     <Modal open={open} onClose={onClose} width={520} title={`Add tool to ${ws.name}`}>
-      {available.length > 1 || !tool ? (
+      {publishable.length !== 1 || !tool ? (
         <Field label="Tool">
           <Select value={toolId} onChange={(e) => setToolId(e.target.value)}>
             <option value="">Pick a tool from the organization…</option>
             {available.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.displayName} · v{t.version}
+              <option key={t.id} value={t.id} disabled={!t.published}>
+                {t.displayName} · {t.published ? `v${t.published.version}` : 'draft, publish it first'}
               </option>
             ))}
           </Select>
@@ -637,7 +646,19 @@ export function AddToolModal({ open, onClose, ws }: { open: boolean; onClose: ()
           {tool.displayName} · v{tool.version}
         </div>
       )}
-      {tool && (
+      {drafts.length > 0 && !tool && (
+        <div className="-mt-2 text-xs text-zinc-500">
+          Drafts can’t be added until they’re published:{' '}
+          {drafts.map((t, i) => (
+            <span key={t.id}>
+              {i > 0 && ', '}
+              <Link to={`/tools/${t.id}?section=publish`}>{t.displayName}</Link>
+            </span>
+          ))}
+          .
+        </div>
+      )}
+      {tool && picked && (
         <>
           <div>
             <div className="eyebrow mt-1.5">Fill key slots</div>
@@ -688,7 +709,7 @@ export function AddToolModal({ open, onClose, ws }: { open: boolean; onClose: ()
           variant="primary"
           disabled={!tool || tool.slots.some((s) => !map[s.name])}
           onClick={() => {
-            actions.grantTool(ws.id, tool!.id, map)
+            actions.grantTool(ws.id, picked!.id, map)
             onClose()
           }}
         >

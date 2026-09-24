@@ -15,12 +15,23 @@ import { ToolsPage } from './pages/tools'
 import { WorkspaceDetail, WorkspacesList, WsAudit, WsCabinets, WsConnect, WsSummary, WsTools } from './pages/workspaces'
 
 function Locked() {
+  const u = me(useDB())
   return (
     <div className="flex h-full items-center justify-center bg-page text-zinc-100">
-      <div className="flex w-[400px] flex-col items-center gap-3 text-center">
+      <div className="flex w-[420px] flex-col items-center gap-3 text-center">
         <KeyholeIcon size={28} state="error" />
         <div className="text-[15px] font-semibold">This account is locked</div>
-        <div className="text-sm2 leading-relaxed text-zinc-400">Keyhole support locked it and ended every session. Ask an administrator of your organization, or contact support, to have it unlocked.</div>
+        <div className="text-sm2 leading-relaxed text-zinc-400">
+          Keyhole support locked it and ended every session. Only Keyhole support can unlock it — contact <span className="text-zinc-200">support@keyhole.dev</span>
+          {u.lockReason ? ' and quote the case below.' : '.'}
+        </div>
+        {u.lockReason && (
+          <div className="rounded-lg border border-edge bg-panel px-3.5 py-2.5 text-sm2">
+            <span className="text-zinc-500">Case · </span>
+            <span className="text-zinc-200">{u.lockReason}</span>
+          </div>
+        )}
+        {u.unlockRequest && <div className="text-xs text-zinc-500">An administrator of your organization has already asked support to unlock it.</div>}
       </div>
     </div>
   )

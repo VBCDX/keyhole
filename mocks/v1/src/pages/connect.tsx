@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ago } from '../lib/format'
-import { actions, agentById, getDB, isAdmin, log, orgEvents, sessionTokenFor, toolById, update, useDB, useNow } from '../lib/store'
+import { actions, agentById, getDB, isAdmin, liveTool, log, orgEvents, sessionTokenFor, toolById, update, useDB, useNow } from '../lib/store'
 import type { AuditEvent, Workspace } from '../lib/types'
 import { EnrollPanel } from '../components/EnrollPanel'
+import { ImpactDialog } from '../components/shared'
 import { CopyChip, KeyholeIcon } from '../components/keyhole'
 import { Button, Card, Field, Segmented, Select, SlideOver, Toggle } from '../components/ui'
 import { useWorkspace } from './workspaces'
@@ -55,7 +56,7 @@ function download(filename: string, text: string) {
 
 type Verify = { state: 'idle' | 'waiting' | 'success' | 'failed'; event?: AuditEvent }
 
-function VerifyCard({ v, w }: { v: Verify; w: Workspace }) {
+function VerifyCard({ v, w, last }: { v: Verify; w: Workspace; last?: AuditEvent }) {
   const d = useDB()
   const now = useNow()
   if (v.state === 'success' && v.event) {
@@ -115,7 +116,12 @@ function VerifyCard({ v, w }: { v: Verify; w: Workspace }) {
       <KeyholeIcon pulse />
       <div>
         <div className="text-[13px] font-semibold">Waiting for the first request…</div>
-        <div className="mt-0.5 text-xs text-zinc-500">Run your agent — the first call through this workspace shows here.</div>
+        <div className="mt-0.5 text-xs text-zinc-500">Run your agent — its first call through this workspace shows here.</div>
+        {last && (
+          <div className="mt-1 text-xs2 text-zinc-600">
+            Last verified here: {last.actor}, {ago(last.at, now).toLowerCase()}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -135,7 +141,8 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
     if (open) {
       const fresh = agents.find((a) => sessionTokenFor(a.id))
       setAgentId((fresh ?? agents[0])?.id ?? '')
-      setVerify(lastVerified ? { state: 'success', event: lastVerified } : { state: 'waiting' })
+      // Never show an earlier success as if it were this agent's: start from Waiting.
+      setVerify({ state: 'waiting' })
     }
     return () => window.clearTimeout(timer.current)
   }, [open]) // eslint-disable-line
@@ -177,10 +184,11 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
   const onDownload = () => {
     const cfg = configFor(kind, client, w, token ?? '<PASTE_AGENT_TOKEN>')
     download(cfg.filename, cfg.text)
+    actions.markConfigDownloaded()
     expectFirstRequest('download')
   }
 
-  const firstTool = w.tools.map((t) => toolById(d, t.toolId)).find(Boolean)
+  const firstTool = w.tools.map((t) => liveTool(toolById(d, t.toolId))).find(Boolean)
   const curl = `curl ${host(w)}/${firstTool?.internalName ?? 'tool'}${firstTool?.actions[0]?.path.replace(/\{.*?\}/g, 'ID') ?? '/'} \\\n  -H "Authorization: Bearer $KEYHOLE_TOKEN"`
 
   return (
@@ -209,7 +217,15 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
           ) : (
             <>
               <Field label="Agent">
-                <Select value={agentId} onChange={(e) => setAgentId(e.target.value)} className="bg-rail">
+                <Select
+                  value={agentId}
+                  onChange={(e) => {
+                    setAgentId(e.target.value)
+                    window.clearTimeout(timer.current)
+                    setVerify({ state: 'waiting' })
+                  }}
+                  className="bg-rail"
+                >
                   {agents.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label}
@@ -257,7 +273,7 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
         <EnrollPanel workspaceId={w.id} showWait={false} intro="Route this workspace's traffic through your own network. Run this on a machine inside it:" onEnrolled={() => expectFirstRequest('connector')} />
       )}
       <div className="mt-auto border-t border-line pt-[18px]">
-        <VerifyCard v={verify} w={w} />
+        <VerifyCard v={verify} w={w} last={lastVerified} />
       </div>
     </SlideOver>
   )
@@ -265,9 +281,13 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
 
 export function ConnectTab() {
   const d = useDB()
+  const now = useNow()
   const w = useWorkspace()
   const admin = isAdmin(d)
   const [panel, setPanel] = useState<Kind | null>(null)
+  const [turningOff, setTurningOff] = useState<Kind | null>(null)
+  const active = w.agentIds.map((id) => agentById(d, id)).filter((a) => a?.status === 'active').map((a) => a!.label)
+  const lastRequest = orgEvents(d).find((e) => e.workspaceId === w.id && e.type === 'request' && e.actorKind === 'agent')
   const row = (kind: Kind, title: string, sub: string) => {
     const on = w[kind]
     return (
@@ -287,8 +307,10 @@ export function ConnectTab() {
             label={`Turn ${title} ${on ? 'off' : 'on'}`}
             disabled={!admin}
             onChange={(v) => {
-              actions.setConnection(w.id, kind, v)
-              if (v) setPanel(kind)
+              // Turning a method on is harmless; turning it off disconnects agents, so it's previewed first.
+              if (!v) return setTurningOff(kind)
+              actions.setConnection(w.id, kind, true)
+              setPanel(kind)
             }}
           />
         </div>
@@ -301,6 +323,19 @@ export function ConnectTab() {
       {row('mcp', 'MCP', "AI assistants connect here and see this workspace's tools")}
       {!admin && <div className="text-xs text-zinc-500">Only admins can turn connection methods on or off.</div>}
       <ConnectPanel kind={panel ?? 'mcp'} w={w} open={!!panel} onClose={() => setPanel(null)} />
+      <ImpactDialog
+        open={!!turningOff}
+        onClose={() => setTurningOff(null)}
+        title={`Turn ${turningOff?.toUpperCase()} off for ${w.name}?`}
+        rows={[
+          ['Active agents on this workspace', active.join(', ') || 'None', active.length ? 'amber' : undefined],
+          ['Last agent request', lastRequest ? `${lastRequest.actor} · ${ago(lastRequest.at, now).toLowerCase()}` : 'Never'],
+          ['Other method', turningOff && w[turningOff === 'mcp' ? 'https' : 'mcp'] ? `${turningOff === 'mcp' ? 'HTTPS' : 'MCP'} stays on` : 'Off — nothing can connect'],
+        ]}
+        body={`Agents connected over ${turningOff?.toUpperCase()} are refused on their next request. Turning it back on restores them with the same tokens.`}
+        confirmLabel={`Turn ${turningOff?.toUpperCase()} off`}
+        onConfirm={() => turningOff && actions.setConnection(w.id, turningOff, false)}
+      />
     </div>
   )
 }

@@ -34,6 +34,7 @@ export function freshDB(): DB {
     currentUserId: 'u_dana',
     currentOrgId: 'org_acme',
     checklistDismissed: false,
+    configDownloadedAt: null,
     firstCallAt: null,
     orgs: [{ id: 'org_acme', name: 'Acme Corp', createdAt: now - 2 * MIN }],
     users: [dana(now)],
@@ -156,6 +157,7 @@ export function populatedDB(): DB {
     currentUserId: 'u_dana',
     currentOrgId: 'org_acme',
     checklistDismissed: true,
+    configDownloadedAt: now - 3 * DAY,
     firstCallAt: now - 3 * DAY,
     orgs: [
       { id: 'org_acme', name: 'Acme Corp', createdAt: now - 60 * DAY },
@@ -179,7 +181,7 @@ export function populatedDB(): DB {
     },
     stores: [
       { id: 'st_local', orgId: 'org_acme', type: 'local', name: 'Local store', health: 'healthy', checkedAt: now - 40_000 },
-      { id: 'st_bao', orgId: 'org_acme', type: 'openbao', name: 'Payments vault', health: 'healthy', checkedAt: now - 4 * MIN, address: 'https://bao.acme.internal:8200', route: 'cn_edge01', auth: 'approle', path: 'secret/data/payments/', cacheSeconds: 60 },
+      { id: 'st_bao', orgId: 'org_acme', type: 'openbao', name: 'Payments vault', health: 'healthy', checkedAt: now - 4 * MIN, address: 'https://bao.acme.internal:8200', route: 'cn_edge01', auth: 'approle', path: 'secret/data/payments/', cacheSeconds: 60, certName: 'vault-ca.pem', skipVerify: false },
     ],
     keys: [
       { id: 'k_stripe', orgId: 'org_acme', name: 'stripe_secret', storeId: 'st_local', length: 32, createdAt: now - 20 * DAY, rotatedAt: now - 6 * DAY, expiresAt: null, rotationReminderDays: 90, notes: 'Restricted key — charges read only' },

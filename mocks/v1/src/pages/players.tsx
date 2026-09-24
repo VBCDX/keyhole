@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ago, initials, maskToken, until } from '../lib/format'
-import { actions, agentById, isAdmin, orgAgents, orgEvents, orgWorkspaces, useDB, useNow, userById, wsById } from '../lib/store'
+import { actions, agentById, canSeeWorkspace, isAdmin, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
 import type { Agent } from '../lib/types'
 import { TokenPanel } from '../components/keyhole'
-import { AgentsTable, AuditLog, RevokeAgentDialog, UsersTable, useUserRows } from '../components/shared'
+import { AgentsTable, AuditLog, RevokeAgentDialog, RotateAgentDialog, SuspendAgentDialog, UsersTable, useUserRows } from '../components/shared'
 import { Avatar, Breadcrumb, Button, Card, Checkbox, Field, Footer, Input, Modal, PageTitle, Segmented, StatusInline, cx } from '../components/ui'
 import { InviteModal, PendingInvites } from './orgs'
 
@@ -33,8 +33,8 @@ export function UserDetail() {
   if (!u || !u.roles[d.currentOrgId]) return <div className="text-sm text-zinc-400">This person isn’t in this organization. <Link to="/players/users">Back to users</Link></div>
   const role = u.roles[d.currentOrgId]
   const ws = orgWorkspaces(d).filter((w) => role === 'Owner' || w.userIds.includes(u.id))
-  const cabinets = d.cabinets.filter((c) => c.ownerId === u.id)
-  const events = orgEvents(d).filter((e) => e.actorId === u.id || e.object.includes(u.email) || e.object.includes(u.name))
+  const cabinets = d.cabinets.filter((c) => c.ownerId === u.id && canSeeWorkspace(d, c.workspaceId))
+  const events = visibleEvents(d).filter((e) => e.actorId === u.id || e.object.includes(u.email) || e.object.includes(u.name))
   return (
     <div className="max-w-[1080px]">
       <Breadcrumb items={[{ label: 'Players' }, { label: 'Users', to: '/players/users' }, { label: u.name }]} />
@@ -48,6 +48,22 @@ export function UserDetail() {
         </div>
         <span className="ml-auto">{u.locked ? <StatusInline tone="amber">Locked by support</StatusInline> : u.status === 'suspended' ? <StatusInline tone="amber">Suspended</StatusInline> : <StatusInline tone="green">Active</StatusInline>}</span>
       </div>
+      {u.locked && (
+        <div className="mt-5 flex items-center justify-between gap-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-400">
+          <div className="leading-relaxed">
+            Keyhole support locked this account {ago(u.lockedAt ?? null, now).toLowerCase()}
+            {u.lockReason ? <> · <span className="text-zinc-300">{u.lockReason}</span></> : ''}. Only Keyhole support can unlock it.
+          </div>
+          {isAdmin(d) &&
+            (u.unlockRequest ? (
+              <span className="shrink-0 text-zinc-400">Unlock requested {ago(u.unlockRequest.at, now).toLowerCase()}</span>
+            ) : (
+              <Button size="sm" className="shrink-0" onClick={() => actions.requestUnlock(u.id)}>
+                Ask support to unlock
+              </Button>
+            ))}
+        </div>
+      )}
       <div className="mt-6 grid grid-cols-2 gap-4">
         <Card className="p-5">
           <div className="eyebrow">Workspaces</div>
@@ -172,13 +188,15 @@ export function AgentDetail() {
   const { agentId } = useParams()
   const a = agentById(d, agentId!)
   const [revoking, setRevoking] = useState(false)
+  const [rotating, setRotating] = useState(false)
+  const [suspending, setSuspending] = useState(false)
   const [rotated, setRotated] = useState<string | null>(null)
   const [label, setLabel] = useState(a?.label ?? '')
   if (!a) return <div className="text-sm text-zinc-400">This agent doesn’t exist. <Link to="/players/agents">Back to agents</Link></div>
   const admin = isAdmin(d)
   const revoked = a.status === 'revoked'
-  const lockLists = d.cabinets.filter((c) => Array.isArray(c.access) && c.access.some((p) => p.kind === 'agent' && p.id === a.id)).map((c) => c.name)
-  const events = orgEvents(d).filter((e) => e.actorId === a.id || e.object.includes(a.label))
+  const lockLists = d.cabinets.filter((c) => canSeeWorkspace(d, c.workspaceId) && Array.isArray(c.access) && c.access.some((p) => p.kind === 'agent' && p.id === a.id)).map((c) => c.name)
+  const events = visibleEvents(d).filter((e) => e.actorId === a.id || e.object.includes(a.label))
   return (
     <div className="max-w-[1080px]">
       <Breadcrumb items={[{ label: 'Players' }, { label: 'Agents', to: '/players/agents' }, { label: a.label }]} />
@@ -188,8 +206,8 @@ export function AgentDetail() {
           admin &&
           !revoked && (
             <>
-              <Button onClick={() => setRotated(actions.rotateAgent(a.id))}>Rotate token</Button>
-              <Button onClick={() => actions.setAgentStatus(a.id, a.status === 'suspended' ? 'active' : 'suspended')}>{a.status === 'suspended' ? 'Resume' : 'Suspend'}</Button>
+              <Button onClick={() => setRotating(true)}>Rotate token</Button>
+              <Button onClick={() => (a.status === 'suspended' ? actions.setAgentStatus(a.id, 'active') : setSuspending(true))}>{a.status === 'suspended' ? 'Resume' : 'Suspend'}</Button>
               <Button variant="danger" onClick={() => setRevoking(true)}>
                 Revoke token
               </Button>
@@ -234,6 +252,8 @@ export function AgentDetail() {
       <div className="eyebrow mt-7 mb-3">Activity</div>
       <AuditLog events={events} scopeLabel={a.label} />
       <RevokeAgentDialog agent={revoking ? a : null} onClose={() => setRevoking(false)} lockLists={lockLists} />
+      <RotateAgentDialog agent={rotating ? a : null} onClose={() => setRotating(false)} onRotated={(_, token) => setRotated(token)} />
+      <SuspendAgentDialog agent={suspending ? a : null} onClose={() => setSuspending(false)} />
       <Modal open={!!rotated} onClose={() => {}} width={540} dismissable={false}>
         {rotated && <TokenPanel token={rotated} title="Token rotated" subtitle={a.label} note="The old token keeps working for 10 minutes so running agents can switch over." onDone={() => setRotated(null)} />}
       </Modal>

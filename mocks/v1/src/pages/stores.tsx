@@ -6,14 +6,18 @@ import { actions, isAdmin, keyUsage, lastUsedForKey, orgConnectors, orgKeys, org
 import type { Key, SecretStore } from '../lib/types'
 import { LockedDots, SECRET_LINE, SecretField } from '../components/keyhole'
 import { ImpactDialog, ListBody } from '../components/shared'
-import { Button, Checkbox, Dot, Field, Footer, Input, Menu, Modal, Pill, Row, Select, SlideOver, Table, Textarea, cx } from '../components/ui'
+import { Button, Checkbox, Dot, FOCUS_RING, Field, Footer, Input, Menu, Modal, Pill, Row, Select, SlideOver, Table, Textarea, activateOnKey, cx } from '../components/ui'
 
 function storeHealth(d: ReturnType<typeof useDB>, s: SecretStore) {
   const conn = s.route && s.route !== 'public' ? d.connectors.find((c) => c.id === s.route) : null
   if (s.health === 'sealed') return { dot: 'error' as const, text: 'Sealed', tone: 'text-red-400' }
   if (s.health === 'unreachable') return { dot: 'error' as const, text: 'Can’t reach', tone: 'text-red-400' }
   if (s.health === 'denied') return { dot: 'error' as const, text: 'Not allowed', tone: 'text-red-400' }
+  // A route through a connector that no longer exists can't reach anything.
+  if (s.route && s.route !== 'public' && !conn) return { dot: 'error' as const, text: 'Connector revoked', tone: 'text-red-400' }
   if (conn?.health === 'offline') return { dot: 'degraded' as const, text: `Connector ${conn.name} offline`, tone: 'text-amber-400' }
+  // Reachable, but anyone on the path could read the traffic — never shown as plain healthy.
+  if (s.skipVerify) return { dot: 'degraded' as const, text: 'Unverified TLS', tone: 'text-amber-400' }
   return { dot: 'healthy' as const, text: '', tone: '' }
 }
 
@@ -27,7 +31,13 @@ export function StoreRow({ s, onClick, chevron = true }: { s: SecretStore; onCli
   const keys = d.keys.filter((k) => k.storeId === s.id && !k.cabinetId)
   const h = storeHealth(d, s)
   return (
-    <div onClick={onClick} className={cx('flex items-center gap-2.5 rounded-[10px] border border-edge bg-panel px-4 py-3.5', onClick && 'cursor-pointer hover:border-zinc-700')}>
+    <div
+      onClick={onClick}
+      role={onClick ? 'link' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? activateOnKey(onClick) : undefined}
+      className={cx('flex items-center gap-2.5 rounded-[10px] border border-edge bg-panel px-4 py-3.5', onClick && cx('cursor-pointer hover:border-zinc-700', FOCUS_RING))}
+    >
       <TypeMark type={s.type} />
       <Dot health={h.dot} />
       <span className="text-md font-semibold">{s.name}</span>
@@ -200,12 +210,12 @@ export function StoreDetail() {
   const { orgId, storeId } = useParams()
   const [params, setParams] = useSearchParams()
   const s = storeById(d, storeId!)
-  const [adding, setAdding] = useState(params.get('add') === '1')
+  const admin = isAdmin(d)
+  const [adding, setAdding] = useState(params.get('add') === '1' && admin)
   const [importing, setImporting] = useState(false)
   const [replacing, setReplacing] = useState<Key | null>(null)
   const [deleting, setDeleting] = useState<Key | null>(null)
   const [removing, setRemoving] = useState(false)
-  const admin = isAdmin(d)
 
   useEffect(() => {
     if (params.get('add')) {
@@ -231,12 +241,14 @@ export function StoreDetail() {
           <StoreRow s={s} chevron={false} />
         </div>
         {s.type === 'local' ? (
-          <div className="flex gap-2">
-            <Button onClick={() => setImporting(true)}>Import from .env</Button>
-            <Button variant="primary" onClick={() => setAdding(true)}>
-              Add key
-            </Button>
-          </div>
+          admin && (
+            <div className="flex gap-2">
+              <Button onClick={() => setImporting(true)}>Import from .env</Button>
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                Add key
+              </Button>
+            </div>
+          )
         ) : (
           admin && (
             <div className="flex gap-2">
@@ -261,8 +273,23 @@ export function StoreDetail() {
           <span className="font-mono text-xs">{s.path}</span>
           <span className="text-zinc-500">Cache values for</span>
           <span>{s.cacheSeconds} seconds</span>
+          <span className="text-zinc-500">Certificate</span>
+          {s.skipVerify ? (
+            <span className="flex items-center gap-3">
+              <span className="font-semibold text-red-400">Not verified — traffic can be intercepted</span>
+              {admin && (
+                <button type="button" className="text-brass hover:text-brass-light" onClick={() => nav(`/orgs/${orgId}/stores/connect-openbao?edit=${s.id}&step=4`)}>
+                  Upload certificate
+                </button>
+              )}
+            </span>
+          ) : (
+            <span className="font-mono text-xs">{s.certName ?? '—'}</span>
+          )}
         </div>
       )}
+
+      {s.type === 'local' && !admin && <div className="mt-3 text-xs text-zinc-500">Only admins manage organization keys. Put your own keys in a cabinet.</div>}
 
       {keys.length === 0 ? (
         <div className="mt-4 max-w-[960px] rounded-[10px] border border-edge bg-panel p-10 text-center text-[13px] text-zinc-400">
@@ -275,6 +302,8 @@ export function StoreDetail() {
               const uses = keyUsage(d, k.id)
               const cab = k.cabinetId ? d.cabinets.find((c) => c.id === k.cabinetId) : null
               const soon = k.expiresAt && k.expiresAt - now < 14 * DAY
+              // Members may only replace values in cabinets they own; everything else is admin-only.
+              const ownCabinetKey = !!cab && cab.ownerId === d.currentUserId
               return (
                 <Row key={k.id} cols={KEY_COLS}>
                   <div className="min-w-0">
@@ -289,11 +318,11 @@ export function StoreDetail() {
                     <LockedDots />
                   </div>
                   <div className="text-right">
-                    {s.type === 'local' && (
+                    {s.type === 'local' && (admin || ownCabinetKey) && (
                       <Menu
                         items={[
                           { label: 'Replace value', onClick: () => setReplacing(k) },
-                          { label: 'Delete key', danger: true, onClick: () => setDeleting(k) },
+                          admin ? { label: 'Delete key', danger: true, onClick: () => setDeleting(k) } : null,
                         ]}
                       />
                     )}
@@ -473,7 +502,8 @@ export function ImportEnvModal({ open, onClose }: { open: boolean; onClose: () =
   const [rows, setRows] = useState<EnvRow[] | null>(null)
   const [drag, setDrag] = useState(false)
   useEffect(() => setRows(null), [open])
-  const existing = new Set(d.keys.filter((k) => k.storeId === 'st_local').map((k) => k.name))
+  // Cabinet keys belong to their cabinet; an import only ever matches organization keys.
+  const existing = new Set(d.keys.filter((k) => k.orgId === d.currentOrgId && k.storeId === 'st_local' && !k.cabinetId).map((k) => k.name))
   const take = (text: string) => setRows(parseEnv(text, existing))
   const readFile = (f: File) => f.text().then(take)
   const sel = rows?.filter((r) => r.selected) ?? []

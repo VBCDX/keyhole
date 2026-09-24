@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { expiringSoon, plural } from '../lib/format'
-import { actions, orgAgents, orgConnectors, orgEvents, orgKeys, orgStores, orgTools, orgWorkspaces, useDB, useNow } from '../lib/store'
+import { actions, myRole, orgAgents, orgKeys, orgStores, orgTools, orgWorkspaces, useDB, useNow, visibleConnectors, visibleEvents } from '../lib/store'
 import { KeyholeIcon } from '../components/keyhole'
 import { LogFeed } from '../components/shared'
 import { Card, CloseX, Dot, cx } from '../components/ui'
@@ -20,14 +20,19 @@ export function Checklist() {
   const wsWithTool = ws.find((w) => w.tools.length)
   const connected = ws.find((w) => w.mcp || w.https)
   const target = connected ?? wsWithTool ?? ws[0]
+  const tools = orgTools(d)
+  const toPublish = tools.find((t) => !t.published) ?? tools[0]
   const steps = [
     { t: 'Add your first key', sub: 'The Local store is ready', done: orgKeys(d).some((k) => !k.cabinetId), to: `/orgs/${d.currentOrgId}/stores/st_local?add=1` },
-    { t: 'Create a tool', sub: 'Import an API description or pick from the catalog', done: orgTools(d).length > 0, to: '/tools' },
+    { t: 'Create a tool', sub: 'Import an API description or pick from the catalog', done: tools.length > 0, to: '/tools' },
+    { t: 'Publish the tool', sub: 'New tools start as drafts. Agents can only use a published version', done: tools.some((t) => t.published), to: toPublish ? `/tools/${toPublish.id}?section=publish` : '/tools' },
     { t: 'Create a workspace and attach the tool', sub: '', done: !!wsWithTool, to: ws[0] ? `/workspaces/${ws[0].id}/tools` : '/workspaces?new=1' },
     { t: 'Create an agent', sub: '', done: orgAgents(d).length > 0, to: '/players/agents?new=1' },
-    { t: 'Turn on MCP or HTTPS and download the config', sub: '', done: !!connected, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
+    // A call routed through a connector lands without any download, so a first call also completes this step.
+    { t: 'Turn on MCP or HTTPS and download the config', sub: '', done: (!!connected && !!d.configDownloadedAt) || !!d.firstCallAt, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
     { t: 'Make your first call', sub: 'We wait here — this checks off when the first request lands', done: !!d.firstCallAt, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
   ]
+  const waitStep = steps.length - 1
   const doneCount = steps.filter((s) => s.done).length
   const allDone = doneCount === steps.length
   const nextIndex = steps.findIndex((s) => !s.done)
@@ -48,7 +53,7 @@ export function Checklist() {
       ) : (
         <>
           <div className="text-sm font-semibold">Get set up</div>
-          <div className="mt-0.5 text-sm2 text-zinc-400">Six steps to your first guarded call. Each checks off on its own.</div>
+          <div className="mt-0.5 text-sm2 text-zinc-400">Seven steps to your first guarded call. Each checks off on its own.</div>
         </>
       )}
       <div className="mt-4 flex flex-col">
@@ -68,7 +73,7 @@ export function Checklist() {
               </Link>
               {s.sub && !s.done && (
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
-                  {i === 5 && i === nextIndex && <KeyholeIcon size={12} pulse />}
+                  {i === waitStep && i === nextIndex && <KeyholeIcon size={12} pulse />}
                   {s.sub}
                 </div>
               )}
@@ -83,14 +88,19 @@ export function Checklist() {
 export function Home() {
   const d = useDB()
   const now = useNow()
-  const events = orgEvents(d)
+  // The `user` role only sees its own workspaces, so the org-wide traffic baseline doesn't apply.
+  const scoped = myRole(d) === 'user'
+  const events = visibleEvents(d)
+  const base = scoped ? { requests: 0, blocked: 0 } : d.statsBase
   const day = events.filter((e) => now - e.at < 86_400_000)
-  const requests = d.statsBase.requests + day.filter((e) => e.type === 'request').length
-  const blocked = d.statsBase.blocked + day.filter((e) => e.severity === 'blocked').length
-  const expiring = orgAgents(d).filter((a) => a.status !== 'revoked' && expiringSoon(a.expiresAt, now)).length
+  const requests = base.requests + day.filter((e) => e.type === 'request').length
+  const blocked = base.blocked + day.filter((e) => e.severity === 'blocked').length
+  const myWs = new Set(orgWorkspaces(d).map((w) => w.id))
+  const expiring = orgAgents(d).filter((a) => a.status !== 'revoked' && expiringSoon(a.expiresAt, now) && (!scoped || a.workspaceIds.some((id) => myWs.has(id)))).length
   const stores = orgStores(d)
   const unhealthyStores = stores.filter((s) => s.health !== 'healthy')
-  const connectors = orgConnectors(d)
+  const unverified = stores.filter((s) => s.health === 'healthy' && s.skipVerify)
+  const connectors = visibleConnectors(d)
   const badConn = connectors.filter((c) => c.health !== 'healthy')
   const traffic = events.filter((e) => ['request', 'blocked', 'error', 'verification'].includes(e.type))
   const showChecklist = !d.checklistDismissed
@@ -101,7 +111,7 @@ export function Home() {
       {showChecklist && <Checklist />}
 
       <div className={cx('flex gap-4', showChecklist ? 'mt-6 max-w-[960px]' : 'mt-5 max-w-[1080px]')}>
-        <Stat label="Requests · 24 h" className="flex-[1.4]">
+        <Stat label={scoped ? 'Requests · 24 h · your workspaces' : 'Requests · 24 h'} className="flex-[1.4]">
           <div className="flex items-end justify-between">
             <div className="mt-1.5 text-[22px] font-semibold">{requests.toLocaleString()}</div>
             {requests > 0 && (
@@ -123,9 +133,9 @@ export function Home() {
         </Stat>
         <Stat label={stores.length > 1 ? 'Stores' : 'Store health'}>
           <Link to={`/orgs/${d.currentOrgId}/stores`} className="mt-3 flex items-center gap-2">
-            <Dot health={unhealthyStores.length ? 'error' : 'healthy'} />
-            <span className={cx('text-[13px]', unhealthyStores.length ? 'text-red-400' : 'text-zinc-300')}>
-              {stores.length === 1 && !unhealthyStores.length ? 'Local store healthy' : unhealthyStores.length ? `${unhealthyStores.length} unhealthy` : `${stores.length} healthy`}
+            <Dot health={unhealthyStores.length ? 'error' : unverified.length ? 'degraded' : 'healthy'} />
+            <span className={cx('text-[13px]', unhealthyStores.length ? 'text-red-400' : unverified.length ? 'text-amber-400' : 'text-zinc-300')}>
+              {unhealthyStores.length ? `${unhealthyStores.length} unhealthy` : unverified.length ? `${unverified.length} with unverified TLS` : stores.length === 1 ? 'Local store healthy' : `${stores.length} healthy`}
             </span>
           </Link>
         </Stat>

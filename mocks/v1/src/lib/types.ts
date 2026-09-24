@@ -17,6 +17,10 @@ export interface User {
   /** Set by Keyhole support; blocks sign-in. */
   locked: boolean
   lockedAt?: number
+  /** Support's reason or ticket ID, shown to the person and in their organizations' logs. */
+  lockReason?: string
+  /** An admin asked support to unlock the account ("Dana Keller · Acme Corp"). */
+  unlockRequest?: { by: string; at: number }
   lastActive: number | null
   sessions: { device: string; place: string; at: number }[]
 }
@@ -47,6 +51,10 @@ export interface SecretStore {
   auth?: 'approle' | 'kubernetes' | 'token'
   path?: string
   cacheSeconds?: number
+  /** File name of the uploaded CA certificate (the certificate itself isn't kept in the mock). */
+  certName?: string | null
+  /** TLS certificate verification turned off. Traffic to the vault can be intercepted. */
+  skipVerify?: boolean
 }
 
 export interface Key {
@@ -224,6 +232,8 @@ export interface DB {
   currentUserId: string
   currentOrgId: string
   checklistDismissed: boolean
+  /** When someone first downloaded a connection config (checklist step). */
+  configDownloadedAt: number | null
   firstCallAt: number | null
   orgs: Org[]
   users: User[]

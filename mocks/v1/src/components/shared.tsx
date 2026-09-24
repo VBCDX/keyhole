@@ -2,12 +2,14 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ago, clock, expiringSoon, initials, maskToken, until } from '../lib/format'
 import { liveTick } from '../lib/simulate'
-import { actions, isAdmin, myRole, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
+import { actions, agentsCreatedBy, isAdmin, myRole, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
 import type { Agent, AuditEvent, Role, User } from '../lib/types'
 import { CopyChip, TokenPanel } from './keyhole'
 import {
   Avatar,
   Button,
+  FOCUS_RING,
+  activateOnKey,
   Checkbox,
   ErrorBox,
   Field,
@@ -149,6 +151,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
   const [roleFor, setRoleFor] = useState<UserRow | null>(null)
   const [wsFor, setWsFor] = useState<UserRow | null>(null)
   const [removeFor, setRemoveFor] = useState<UserRow | null>(null)
+  const [suspendFor, setSuspendFor] = useState<UserRow | null>(null)
   const workspaces = orgWorkspaces(d)
   const wsNames = (u: User, role: Role) => (role === 'Owner' ? 'All' : workspaces.filter((w) => w.userIds.includes(u.id)).map((w) => w.name).join(', ') || '—')
   const invitedWs = (u: User) => d.invites.find((i) => i.email === u.email && i.orgId === d.currentOrgId)?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || '—'
@@ -183,7 +186,8 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
                     items={[
                       { label: 'Change role', onClick: () => setRoleFor({ user: u, role, invited }) },
                       { label: 'Assign workspaces', onClick: () => setWsFor({ user: u, role, invited }) },
-                      u.status === 'suspended' ? { label: 'Reactivate', onClick: () => actions.setUserSuspended(u.id, false) } : { label: 'Suspend', onClick: () => actions.setUserSuspended(u.id, true) },
+                      u.locked ? { label: u.unlockRequest ? 'Unlock requested' : 'Ask support to unlock', disabled: !!u.unlockRequest, onClick: () => actions.requestUnlock(u.id) } : null,
+                      u.status === 'suspended' ? { label: 'Reactivate', onClick: () => actions.setUserSuspended(u.id, false) } : { label: 'Suspend', onClick: () => setSuspendFor({ user: u, role, invited }) },
                       { label: 'Remove', danger: true, onClick: () => setRemoveFor({ user: u, role, invited }) },
                     ]}
                   />
@@ -194,6 +198,19 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
         </ListBody>
       </Table>
 
+      <ImpactDialog
+        open={!!suspendFor}
+        onClose={() => setSuspendFor(null)}
+        title={`Suspend ${suspendFor?.user.name}?`}
+        rows={[
+          ['Workspaces', suspendFor ? wsNames(suspendFor.user, suspendFor.role) : ''],
+          ['Agents they created', suspendFor ? createdAgentsLabel(agentsCreatedBy(d, suspendFor.user).map((a) => a.label)) : ''],
+          ['Last active', ago(suspendFor?.user.lastActive ?? null, now)],
+        ]}
+        body="They can’t sign in or use any workspace until you reactivate them. Nothing they own is deleted."
+        confirmLabel="Suspend user"
+        onConfirm={() => suspendFor && actions.setUserSuspended(suspendFor.user.id, true)}
+      />
       <ChangeRoleModal row={roleFor} onClose={() => setRoleFor(null)} />
       <AssignWorkspacesModal row={wsFor} onClose={() => setWsFor(null)} />
       <ImpactDialog
@@ -203,9 +220,10 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
         rows={[
           ['Workspaces', removeFor ? wsNames(removeFor.user, removeFor.role) : ''],
           ['Cabinets they own', cabinetsOwned.length ? cabinetsOwned.map((c) => `${c.name} · ${c.keyIds.length} keys, ${c.tools.length} tool${c.tools.length === 1 ? '' : 's'}`).join('; ') : 'None', cabinetsOwned.length ? 'amber' : undefined],
+          ['Agents they created', removeFor ? createdAgentsLabel(agentsCreatedBy(d, removeFor.user).map((a) => a.label)) : ''],
           ['Last active', ago(removeFor?.user.lastActive ?? null, now)],
         ]}
-        body={cabinetsOwned.length ? 'Their cabinet becomes orphaned. Reassign it now, or leave it for an admin to handle.' : 'They lose access to every workspace in this organization.'}
+        body={`${cabinetsOwned.length ? 'Their cabinet becomes orphaned. Reassign it now, or leave it for an admin to handle.' : 'They lose access to every workspace in this organization.'} Agents they created belong to the organization and keep working — revoke them separately if they should stop.`}
         secondary={cabinetsOwned.length ? { label: 'Reassign cabinet first', onClick: () => nav(`/workspaces/${cabinetsOwned[0].workspaceId}/cabinets`) } : undefined}
         confirmLabel="Remove user"
         onConfirm={() => removeFor && actions.removeUser(removeFor.user.id)}
@@ -294,6 +312,8 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
   const admin = isAdmin(d)
   const [editing, setEditing] = useState<string | null>(null)
   const [rotated, setRotated] = useState<{ agent: Agent; token: string } | null>(null)
+  const [rotateFor, setRotateFor] = useState<Agent | null>(null)
+  const [suspendFor, setSuspendFor] = useState<Agent | null>(null)
   const [revokeFor, setRevokeFor] = useState<Agent | null>(null)
   const wsNames = (a: Agent) => a.workspaceIds.map((id) => wsById(d, id)?.name).filter(Boolean).join(', ') || '—'
   const lockLists = (a: Agent) => d.cabinets.filter((c) => Array.isArray(c.access) && c.access.some((p) => p.kind === 'agent' && p.id === a.id)).map((c) => c.name)
@@ -342,10 +362,8 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={cx('masked-token text-xs', revoked ? 'text-zinc-600' : 'text-zinc-400')}>{maskToken(a.tokenLast4)}</span>
-                  {!revoked && <CopyChip value={maskToken(a.tokenLast4)} display="" variant="inline" neutral className="!px-1.5" />}
-                </div>
+                {/* Masked only, and nothing to copy: the full token was shown once, at creation. */}
+                <div className={cx('masked-token text-xs', revoked ? 'text-zinc-600' : 'text-zinc-400')}>{maskToken(a.tokenLast4)}</div>
                 <div>
                   {a.status === 'active' ? <StatusInline tone="green">Active</StatusInline> : a.status === 'suspended' ? <StatusInline tone="amber">Suspended</StatusInline> : <StatusInline tone="gray">Revoked</StatusInline>}
                 </div>
@@ -360,8 +378,8 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
                   {admin && !revoked && (
                     <Menu
                       items={[
-                        { label: 'Rotate token', onClick: () => setRotated({ agent: a, token: actions.rotateAgent(a.id) }) },
-                        a.status === 'suspended' ? { label: 'Resume', onClick: () => actions.setAgentStatus(a.id, 'active') } : { label: 'Suspend', onClick: () => actions.setAgentStatus(a.id, 'suspended') },
+                        { label: 'Rotate token', onClick: () => setRotateFor(a) },
+                        a.status === 'suspended' ? { label: 'Resume', onClick: () => actions.setAgentStatus(a.id, 'active') } : { label: 'Suspend', onClick: () => setSuspendFor(a) },
                         { label: 'Revoke token', danger: true, onClick: () => setRevokeFor(a) },
                       ]}
                     />
@@ -384,8 +402,54 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
           />
         )}
       </Modal>
+      <RotateAgentDialog agent={rotateFor} onClose={() => setRotateFor(null)} onRotated={(agent, token) => setRotated({ agent, token })} />
+      <SuspendAgentDialog agent={suspendFor} onClose={() => setSuspendFor(null)} />
       <RevokeAgentDialog agent={revokeFor} onClose={() => setRevokeFor(null)} lockLists={revokeFor ? lockLists(revokeFor) : []} />
     </>
+  )
+}
+
+/** "billing-agent, docs-agent (keep working)" — agents belong to the organization. */
+export const createdAgentsLabel = (labels: string[]) => (labels.length ? `${labels.join(', ')} (keep working)` : 'None')
+
+/** Rotating starts a 10-minute clock for a running agent, so it gets a preview first. */
+export function RotateAgentDialog({ agent, onClose, onRotated }: { agent: Agent | null; onClose: () => void; onRotated: (agent: Agent, token: string) => void }) {
+  const d = useDB()
+  const now = useNow(5000)
+  const recent = agent?.lastUsedAt && now - agent.lastUsedAt < 60 * 60_000
+  return (
+    <ImpactDialog
+      open={!!agent}
+      onClose={onClose}
+      title={`Rotate token for ${agent?.label}?`}
+      rows={[
+        ['Last used', ago(agent?.lastUsedAt ?? null, now), recent ? 'amber' : undefined],
+        ['Workspaces', agent?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None'],
+        ['Current token', agent ? `${maskToken(agent.tokenLast4)} · works 10 more minutes` : '', 'amber'],
+      ]}
+      body="The new token is shown once. Put it in the agent’s config within 10 minutes — after that, requests with the old token are blocked."
+      confirmLabel="Rotate token"
+      onConfirm={() => agent && onRotated(agent, actions.rotateAgent(agent.id))}
+    />
+  )
+}
+
+export function SuspendAgentDialog({ agent, onClose }: { agent: Agent | null; onClose: () => void }) {
+  const d = useDB()
+  const now = useNow(5000)
+  return (
+    <ImpactDialog
+      open={!!agent}
+      onClose={onClose}
+      title={`Suspend ${agent?.label}?`}
+      rows={[
+        ['Last used', ago(agent?.lastUsedAt ?? null, now)],
+        ['Workspaces', agent?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None'],
+      ]}
+      body="Its requests are blocked and logged until you resume it. The token stays the same, so resuming needs no config change."
+      confirmLabel="Suspend agent"
+      onConfirm={() => agent && actions.setAgentStatus(agent.id, 'suspended')}
+    />
   )
 }
 
@@ -437,9 +501,11 @@ export function LogRow({ e, compact, expanded, onToggle, fresh }: { e: AuditEven
   return (
     <div className={cx('border-b border-line', blocked && 'border-l-[3px] border-l-red-600 bg-red-500/[0.04]', fresh && 'animate-row-in')}>
       <div
-        className={cx('flex items-center gap-3.5 px-4 text-sm2', compact ? 'py-2.5' : 'py-[11px]', expandable && 'cursor-pointer hover:bg-white/[0.015]')}
+        className={cx('flex items-center gap-3.5 px-4 text-sm2', compact ? 'py-2.5' : 'py-[11px]', expandable && cx('cursor-pointer hover:bg-white/[0.015]', FOCUS_RING))}
         onClick={expandable ? onToggle : undefined}
         role={expandable ? 'button' : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        onKeyDown={expandable && onToggle ? activateOnKey(onToggle) : undefined}
         aria-expanded={expandable ? expanded : undefined}
       >
         <span className={cx('shrink-0 font-mono text-xs2 text-zinc-500', blocked ? 'w-[61px]' : 'w-16')}>{clock(e.at)}</span>

@@ -6,8 +6,12 @@ import {
   actions,
   agentById,
   autoMatch,
+  canSeeWorkspace,
   isAdmin,
+  filledSlot,
   keyById,
+  liveTool,
+  missingSlots,
   orgAgents,
   orgEvents,
   orgKeys,
@@ -17,7 +21,9 @@ import {
   slotCandidates,
   storeById,
   toolById,
+  unexposeImpact,
   useDB,
+  visibleEvents,
   wsById,
 } from '../lib/store'
 import type { Key, Workspace } from '../lib/types'
@@ -36,7 +42,7 @@ function wsHealth(d: ReturnType<typeof useDB>, w: Workspace) {
   const conns = d.connectors.filter((c) => c.workspaceId === w.id)
   if (conns.some((c) => c.health === 'offline')) return { h: 'offline' as const, t: 'Connector offline' }
   if (conns.some((c) => c.health === 'degraded')) return { h: 'degraded' as const, t: 'Connector degraded' }
-  const missing = w.tools.some((t) => Object.values(t.slotMap).some((v) => !v))
+  const missing = w.tools.some((t) => missingSlots(d, w, t).length)
   if (missing) return { h: 'degraded' as const, t: 'Missing key slot' }
   if (w.keyIds.some((id) => keyById(d, id)?.sourceRemoved)) return { h: 'degraded' as const, t: 'Key source removed' }
   return { h: 'healthy' as const, t: 'Healthy' }
@@ -239,7 +245,11 @@ export function WorkspaceDetail() {
   const w = wsById(d, wsId!)
   const [deleting, setDeleting] = useState(false)
   if (!w) return <div className="text-sm text-zinc-400">This workspace doesn’t exist anymore. <Link to="/workspaces">Back to workspaces</Link></div>
+  if (!canSeeWorkspace(d, w.id)) return <div className="text-sm text-zinc-400">You don’t have access to this workspace. Ask an admin to add you. <Link to="/workspaces">Back to your workspaces</Link></div>
   const base = `/workspaces/${w.id}`
+  const liveAgents = w.agentIds.filter((id) => agentById(d, id) && agentById(d, id)!.status !== 'revoked').length
+  const conns = d.connectors.filter((c) => c.workspaceId === w.id)
+  const routed = d.stores.filter((s) => conns.some((c) => c.id === s.route))
   return (
     <div>
       <Breadcrumb items={[{ label: 'Workspaces', to: '/workspaces' }, { label: w.name }]} />
@@ -270,7 +280,9 @@ export function WorkspaceDetail() {
         title={`Delete ${w.name}?`}
         typeToConfirm={w.name}
         rows={[
-          ['Players', `${plural(w.userIds.length, 'user')} · ${plural(w.agentIds.length, 'agent')} lose access`, 'amber'],
+          ['Players', `${plural(w.userIds.length, 'user')} · ${plural(liveAgents, 'agent')} lose access`, 'amber'],
+          ['Connectors enrolled here', conns.map((c) => c.name).join(', ') || 'None', conns.length ? 'amber' : undefined],
+          ['Stores that route through them', routed.map((s) => `${s.name} → becomes unreachable`).join('; ') || 'None', routed.length ? 'amber' : undefined],
           ['Tools granted', String(w.tools.length)],
           ['Cabinets', String(d.cabinets.filter((c) => c.workspaceId === w.id).length)],
           ['Connections', [w.https && 'HTTPS', w.mcp && 'MCP'].filter(Boolean).join(' + ') || 'Off'],
@@ -279,7 +291,11 @@ export function WorkspaceDetail() {
             return e ? new Date(e.at).toLocaleString() : 'Never'
           })()],
         ]}
-        body="Its address stops answering immediately. Keys stay in their stores."
+        body={
+          conns.length
+            ? `Its address stops answering immediately. ${conns.map((c) => c.name).join(', ')} ${conns.length === 1 ? 'is' : 'are'} revoked with it${routed.length ? `, so ${routed.map((s) => s.name).join(', ')} can’t be reached until you pick another route for ${routed.length === 1 ? 'it' : 'them'}` : ''}. Keys stay in their stores.`
+            : 'Its address stops answering immediately. Keys stay in their stores.'
+        }
         confirmLabel="Delete workspace"
         onConfirm={() => {
           actions.deleteWorkspace(w.id)
@@ -302,11 +318,17 @@ export function WsSummary() {
   const rows = useUserRows(w.id)
   const [editKeys, setEditKeys] = useState(false)
   const [keys, setKeys] = useState<string[]>([])
+  const [confirmKeys, setConfirmKeys] = useState(false)
   const [editPlayers, setEditPlayers] = useState(false)
   const [pu, setPu] = useState<string[]>([])
   const [pa, setPa] = useState<string[]>([])
   const admin = isAdmin(d)
   const agents = w.agentIds.map((id) => agentById(d, id)).filter(Boolean) as NonNullable<ReturnType<typeof agentById>>[]
+  const impact = unexposeImpact(d, w.id, keys)
+  const saveKeys = () => {
+    actions.setWorkspaceKeys(w.id, keys)
+    setEditKeys(false)
+  }
   return (
     <div className="mt-5 flex max-w-[1160px] flex-col gap-7">
       <div>
@@ -372,18 +394,24 @@ export function WsSummary() {
           <Button size="lg" onClick={() => setEditKeys(false)}>
             Cancel
           </Button>
-          <Button
-            size="lg"
-            variant="primary"
-            onClick={() => {
-              actions.setWorkspaceKeys(w.id, keys)
-              setEditKeys(false)
-            }}
-          >
+          <Button size="lg" variant="primary" onClick={() => (impact.slots.length || impact.cabinets.length ? setConfirmKeys(true) : saveKeys())}>
             Save keys
           </Button>
         </Footer>
       </Modal>
+      <ImpactDialog
+        open={confirmKeys}
+        onClose={() => setConfirmKeys(false)}
+        title={`Stop exposing ${impact.removed.map((id) => keyById(d, id)?.name).join(', ')} in ${w.name}?`}
+        rows={[
+          ['Tool slots that lose their key', impact.slots.map((x) => `${x.tool} · ${x.slot}`).join('; ') || 'None', impact.slots.length ? 'amber' : undefined],
+          ['Cabinets that lose a key', impact.cabinets.map((c) => `${c.name} · ${c.keys.join(', ')}`).join('; ') || 'None', impact.cabinets.length ? 'amber' : undefined],
+          ['Agents on this workspace', plural(agents.filter((a) => a.status === 'active').length, 'active agent')],
+        ]}
+        body="Those slots show Missing, and calls through them fail until another exposed key fills them. The keys themselves stay in their stores."
+        confirmLabel="Stop exposing"
+        onConfirm={saveKeys}
+      />
       <Modal open={editPlayers} onClose={() => setEditPlayers(false)} width={560} title={`Who gets access to “${w.name}”?`}>
         <PlayerPicker users={pu} agents={pa} onUsers={setPu} onAgents={setPa} />
         <Footer>
@@ -418,7 +446,13 @@ export function WsTools() {
   const [adding, setAdding] = useState(false)
   const [results, setResults] = useState<Record<string, ReturnType<typeof testCall>>>({})
   const [removing, setRemoving] = useState<string | null>(null)
+  const [turningOff, setTurningOff] = useState<string | null>(null)
   const available = orgTools(d).filter((t) => !w.tools.some((x) => x.toolId === t.id))
+  const activeAgents = w.agentIds.filter((id) => agentById(d, id)?.status === 'active').length
+  const lastCalled = (toolId: string | null) => {
+    const e = orgEvents(d).find((x) => x.workspaceId === w.id && x.type === 'request' && x.object === toolById(d, toolId ?? '')?.displayName)
+    return e ? new Date(e.at).toLocaleString() : 'Never'
+  }
   return (
     <div className="mt-5 max-w-[1060px]">
       {admin && w.tools.length > 0 && (
@@ -450,7 +484,10 @@ export function WsTools() {
           {w.tools.map((wt) => {
             const t = toolById(d, wt.toolId)
             if (!t) return null
-            const missing = t.slots.find((s) => !wt.slotMap[s.name])
+            // Agents get the published version; a newer draft doesn't change anything here until it's published.
+            const live = liveTool(t)
+            const slots = (live ?? t).slots
+            const missing = missingSlots(d, w, wt)
             const r = results[wt.toolId]
             return (
               <div key={wt.toolId} className="border-b border-line">
@@ -460,12 +497,13 @@ export function WsTools() {
                       {t.displayName}
                     </Link>
                     <div className="text-xs text-zinc-500">
-                      v{t.published?.version ?? t.version} {t.status === 'draft' && !t.published && '· draft'}
+                      {live ? `v${live.version}` : <span className="text-amber-400">Not published</span>}
+                      {live && t.status === 'draft' && <span> · draft v{t.version} pending</span>}
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
-                    {t.slots.map((s) => {
-                      const k = keyById(d, wt.slotMap[s.name])
+                    {slots.map((s) => {
+                      const k = keyById(d, filledSlot(d, w, wt, s.name))
                       return (
                         <div key={s.id} className="flex items-center gap-2 text-xs">
                           <span className="font-mono text-brass-light">{s.name}</span>
@@ -473,7 +511,7 @@ export function WsTools() {
                           {admin ? (
                             <select
                               aria-label={`Key for ${s.name}`}
-                              value={wt.slotMap[s.name] ?? ''}
+                              value={k?.id ?? ''}
                               onChange={(e) => actions.updateWorkspaceTool(w.id, t.id, { slotMap: { ...wt.slotMap, [s.name]: e.target.value || null } })}
                               className={cx('rounded-md border bg-page px-2 py-0.5 font-mono text-xs outline-none', k ? 'border-edge text-zinc-300' : 'border-amber-500/40 text-amber-400')}
                             >
@@ -485,30 +523,22 @@ export function WsTools() {
                               ))}
                             </select>
                           ) : (
-                            <span className="font-mono text-zinc-300">{k?.name ?? 'Missing'}</span>
+                            <span className={cx('font-mono', k ? 'text-zinc-300' : 'text-amber-400')}>{k?.name ?? 'Missing'}</span>
                           )}
                         </div>
                       )
                     })}
-                    {!t.slots.length && <span className="text-xs text-zinc-500">No key needed</span>}
+                    {!slots.length && <span className="text-xs text-zinc-500">No key needed</span>}
                   </div>
                   <div>
-                    <Toggle on={wt.enabled} onChange={(v) => actions.updateWorkspaceTool(w.id, t.id, { enabled: v })} label={`Turn ${t.displayName} on or off`} disabled={!admin} />
+                    <Toggle on={wt.enabled} onChange={(v) => (v ? actions.updateWorkspaceTool(w.id, t.id, { enabled: true }) : setTurningOff(t.id))} label={`Turn ${t.displayName} on or off`} disabled={!admin} />
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                    <input
-                      type="number"
-                      min={1}
-                      aria-label="Calls per minute"
-                      value={wt.perMinute}
-                      disabled={!admin}
-                      onChange={(e) => actions.updateWorkspaceTool(w.id, t.id, { perMinute: Math.max(1, Number(e.target.value)) })}
-                      className="w-14 rounded-md border border-edge bg-page px-2 py-1 text-[13px] text-zinc-200 outline-none focus:border-zinc-500"
-                    />
+                    <LimitInput key={wt.perMinute} value={wt.perMinute} disabled={!admin} onCommit={(n) => actions.updateWorkspaceTool(w.id, t.id, { perMinute: n })} />
                     /min
                   </div>
                   <div>
-                    <Button size="sm" disabled={!wt.enabled} onClick={() => setResults({ ...results, [t.id]: testCall({ toolId: t.id, wsId: w.id, missingSlot: missing?.name }) })}>
+                    <Button size="sm" disabled={!wt.enabled} onClick={() => setResults({ ...results, [t.id]: testCall({ toolId: t.id, wsId: w.id, missingSlot: missing[0] }) })}>
                       Test call
                     </Button>
                   </div>
@@ -520,6 +550,18 @@ export function WsTools() {
                     )}
                   </div>
                 </Row>
+                {missing.map((m) => (
+                  <div key={m} className="mx-4 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3.5 py-2 text-xs text-amber-400">
+                    Missing: <span className="font-mono text-xs2">{m}</span> — this workspace exposes no key for that slot, so calls fail.{' '}
+                    {admin ? (
+                      <>
+                        Pick one above, or <Link to={`/workspaces/${w.id}/summary`}>expose a key</Link>.
+                      </>
+                    ) : (
+                      'Ask an admin to fill it.'
+                    )}
+                  </div>
+                ))}
                 {r && (
                   <div className={cx('mx-4 mb-3 flex items-center gap-3 rounded-lg border px-3.5 py-2 text-xs', r.ok ? 'border-green-500/30 bg-green-500/[0.05]' : 'border-amber-500/30 bg-amber-500/[0.05]')}>
                     {r.ok ? (
@@ -547,28 +589,64 @@ export function WsTools() {
         onClose={() => setRemoving(null)}
         title={`Remove ${removing ? toolById(d, removing)?.displayName : ''} from ${w.name}?`}
         rows={[
-          ['Agents that can call it', plural(w.agentIds.filter((id) => agentById(d, id)?.status === 'active').length, 'agent')],
-          ['Last called', (() => {
-            const e = orgEvents(d).find((x) => x.workspaceId === w.id && x.object === toolById(d, removing ?? '')?.displayName)
-            return e ? new Date(e.at).toLocaleString() : 'Never'
-          })()],
+          ['Agents that can call it', plural(activeAgents, 'agent')],
+          ['Last called', lastCalled(removing)],
         ]}
         body="Agents stop seeing this tool on their next request. The tool itself stays in the organization."
         confirmLabel="Remove tool"
         onConfirm={() => removing && actions.removeWorkspaceTool(w.id, removing)}
       />
+      <ImpactDialog
+        open={!!turningOff}
+        onClose={() => setTurningOff(null)}
+        title={`Turn ${turningOff ? toolById(d, turningOff)?.displayName : ''} off in ${w.name}?`}
+        rows={[
+          ['Agents that can call it', plural(activeAgents, 'agent'), activeAgents ? 'amber' : undefined],
+          ['Last called', lastCalled(turningOff)],
+        ]}
+        body="Agents stop seeing this tool on their next request. Its key slots stay filled, so turning it back on is instant."
+        confirmLabel="Turn off"
+        onConfirm={() => turningOff && actions.updateWorkspaceTool(w.id, turningOff, { enabled: false })}
+      />
     </div>
+  )
+}
+
+/** Per-workspace rate limit. Saves (and logs) once, on blur or Enter — not on every keystroke. */
+function LimitInput({ value, disabled, onCommit }: { value: number; disabled: boolean; onCommit: (n: number) => void }) {
+  const [v, setV] = useState(String(value))
+  const commit = () => {
+    const n = Math.max(1, Math.round(Number(v)) || 1)
+    setV(String(n))
+    if (n !== value) onCommit(n)
+  }
+  return (
+    <input
+      type="number"
+      min={1}
+      aria-label="Calls per minute"
+      value={v}
+      disabled={disabled}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      className="w-14 rounded-md border border-edge bg-page px-2 py-1 text-[13px] text-zinc-200 outline-none focus:border-zinc-500"
+    />
   )
 }
 
 export function AddToolModal({ open, onClose, ws }: { open: boolean; onClose: () => void; ws: Workspace }) {
   const d = useDB()
   const available = orgTools(d).filter((t) => !ws.tools.some((x) => x.toolId === t.id))
+  // Only published tools can be granted: a draft isn't usable by agents yet.
+  const publishable = available.filter((t) => t.published)
+  const drafts = available.filter((t) => !t.published)
   const [toolId, setToolId] = useState('')
-  const tool = toolById(d, toolId)
+  const picked = toolById(d, toolId)
+  const tool = liveTool(picked)
   const [map, setMap] = useState<Record<string, string | null>>({})
   useEffect(() => {
-    if (open) setToolId(available.length === 1 ? available[0].id : '')
+    if (open) setToolId(publishable.length === 1 ? publishable[0].id : '')
   }, [open]) // eslint-disable-line
   useEffect(() => {
     if (tool) setMap(Object.fromEntries(tool.slots.map((s) => [s.name, autoMatch(d, ws.keyIds, s.name)])))
@@ -576,13 +654,13 @@ export function AddToolModal({ open, onClose, ws }: { open: boolean; onClose: ()
   const matched = useMemo(() => new Set(tool?.slots.filter((s) => map[s.name] && keyById(d, map[s.name])?.name === s.name).map((s) => s.name)), [tool, map, d])
   return (
     <Modal open={open} onClose={onClose} width={520} title={`Add tool to ${ws.name}`}>
-      {available.length > 1 || !tool ? (
+      {publishable.length !== 1 || !tool ? (
         <Field label="Tool">
           <Select value={toolId} onChange={(e) => setToolId(e.target.value)}>
             <option value="">Pick a tool from the organization…</option>
             {available.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.displayName} · v{t.version}
+              <option key={t.id} value={t.id} disabled={!t.published}>
+                {t.displayName} · {t.published ? `v${t.published.version}` : 'draft, publish it first'}
               </option>
             ))}
           </Select>
@@ -592,7 +670,19 @@ export function AddToolModal({ open, onClose, ws }: { open: boolean; onClose: ()
           {tool.displayName} · v{tool.version}
         </div>
       )}
-      {tool && (
+      {drafts.length > 0 && !tool && (
+        <div className="-mt-2 text-xs text-zinc-500">
+          Drafts can’t be added until they’re published:{' '}
+          {drafts.map((t, i) => (
+            <span key={t.id}>
+              {i > 0 && ', '}
+              <Link to={`/tools/${t.id}?section=publish`}>{t.displayName}</Link>
+            </span>
+          ))}
+          .
+        </div>
+      )}
+      {tool && picked && (
         <>
           <div>
             <div className="eyebrow mt-1.5">Fill key slots</div>
@@ -643,7 +733,7 @@ export function AddToolModal({ open, onClose, ws }: { open: boolean; onClose: ()
           variant="primary"
           disabled={!tool || tool.slots.some((s) => !map[s.name])}
           onClick={() => {
-            actions.grantTool(ws.id, tool!.id, map)
+            actions.grantTool(ws.id, picked!.id, map)
             onClose()
           }}
         >
@@ -660,7 +750,7 @@ export function WsAudit() {
   const [params] = useSearchParams()
   return (
     <div className="mt-5 max-w-[1080px]">
-      <AuditLog events={orgEvents(d).filter((e) => e.workspaceId === w.id)} scopeLabel={w.name} hideWorkspaceFilter initialExpand={params.get('event') ?? undefined} />
+      <AuditLog events={visibleEvents(d).filter((e) => e.workspaceId === w.id)} scopeLabel={w.name} hideWorkspaceFilter initialExpand={params.get('event') ?? undefined} />
     </div>
   )
 }

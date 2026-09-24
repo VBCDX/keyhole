@@ -439,14 +439,15 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   useEffect(() => {
     if (toolId !== null) {
-      setPicked(toolId)
+      setPicked('')
       setOverrides({})
       setDone(null)
       setFixing(null)
       setSel([])
     }
   }, [toolId]) // eslint-disable-line
-  const draft: Tool | undefined = tools.find((t) => t.id === picked)
+  // Opened from a row's Grant button the tool is fixed; from "Attach tool" it's picked here.
+  const draft: Tool | undefined = tools.find((t) => t.id === (toolId || picked))
   // Grants use the published version; a draft can't be granted until it's published.
   const tool = draft?.published ? { ...draft.published, id: draft.id } : undefined
   const existing = (wsId: string) => workspaces.find((w) => w.id === wsId)?.tools.find((x) => x.toolId === tool?.id)
@@ -457,7 +458,7 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
       return { slot: s.name, keyId: staged ?? autoMatch(d, w.keyIds, s.name), staged: staged && !w.keyIds.includes(staged) ? staged : null }
     })
   }
-  const ready = sel.filter((id) => !existing(id) && slotState(id).every((s) => s.keyId))
+  const ready = tool ? sel.filter((id) => !existing(id) && slotState(id).every((s) => s.keyId)) : []
   const missing = sel.filter((id) => !ready.includes(id))
   const keyLabel = (id: string | null | undefined) => (id ? (keyById(d, id)?.name ?? '—') : 'Missing')
 
@@ -475,16 +476,18 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
     <Modal open={toolId !== null} onClose={onClose} width={560} title={tool ? `Grant “${tool.displayName}” to workspaces` : 'Attach tool'}>
       {!tool ? (
         <>
-          <Field label="Tool">
-            <Select value={picked} onChange={(e) => setPicked(e.target.value)}>
-              <option value="">Pick a tool…</option>
-              {tools.map((t) => (
-                <option key={t.id} value={t.id} disabled={!t.published}>
-                  {t.displayName} · {t.published ? `v${t.published.version}` : 'draft, publish it first'}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {!toolId && (
+            <Field label="Tool">
+              <Select value={picked} onChange={(e) => setPicked(e.target.value)}>
+                <option value="">Pick a tool…</option>
+                {tools.map((t) => (
+                  <option key={t.id} value={t.id} disabled={!t.published}>
+                    {t.displayName} · {t.published ? `v${t.published.version}` : 'draft, publish it first'}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           {draft && !draft.published && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3.5 py-2.5 text-xs text-amber-400">
               {draft.displayName} is a draft that has never been published, so agents can’t use it yet. <Link to={`/tools/${draft.id}?section=publish`}>Publish v{draft.version}</Link>, then grant it.

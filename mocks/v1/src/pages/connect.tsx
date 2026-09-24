@@ -56,7 +56,7 @@ function download(filename: string, text: string) {
 
 type Verify = { state: 'idle' | 'waiting' | 'success' | 'failed'; event?: AuditEvent }
 
-function VerifyCard({ v, w }: { v: Verify; w: Workspace }) {
+function VerifyCard({ v, w, last }: { v: Verify; w: Workspace; last?: AuditEvent }) {
   const d = useDB()
   const now = useNow()
   if (v.state === 'success' && v.event) {
@@ -116,7 +116,12 @@ function VerifyCard({ v, w }: { v: Verify; w: Workspace }) {
       <KeyholeIcon pulse />
       <div>
         <div className="text-[13px] font-semibold">Waiting for the first request…</div>
-        <div className="mt-0.5 text-xs text-zinc-500">Run your agent — the first call through this workspace shows here.</div>
+        <div className="mt-0.5 text-xs text-zinc-500">Run your agent — its first call through this workspace shows here.</div>
+        {last && (
+          <div className="mt-1 text-xs2 text-zinc-600">
+            Last verified here: {last.actor}, {ago(last.at, now).toLowerCase()}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -136,7 +141,8 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
     if (open) {
       const fresh = agents.find((a) => sessionTokenFor(a.id))
       setAgentId((fresh ?? agents[0])?.id ?? '')
-      setVerify(lastVerified ? { state: 'success', event: lastVerified } : { state: 'waiting' })
+      // Never show an earlier success as if it were this agent's: start from Waiting.
+      setVerify({ state: 'waiting' })
     }
     return () => window.clearTimeout(timer.current)
   }, [open]) // eslint-disable-line
@@ -211,7 +217,15 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
           ) : (
             <>
               <Field label="Agent">
-                <Select value={agentId} onChange={(e) => setAgentId(e.target.value)} className="bg-rail">
+                <Select
+                  value={agentId}
+                  onChange={(e) => {
+                    setAgentId(e.target.value)
+                    window.clearTimeout(timer.current)
+                    setVerify({ state: 'waiting' })
+                  }}
+                  className="bg-rail"
+                >
                   {agents.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label}
@@ -259,7 +273,7 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
         <EnrollPanel workspaceId={w.id} showWait={false} intro="Route this workspace's traffic through your own network. Run this on a machine inside it:" onEnrolled={() => expectFirstRequest('connector')} />
       )}
       <div className="mt-auto border-t border-line pt-[18px]">
-        <VerifyCard v={verify} w={w} />
+        <VerifyCard v={verify} w={w} last={lastVerified} />
       </div>
     </SlideOver>
   )

@@ -362,10 +362,8 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={cx('masked-token text-xs', revoked ? 'text-zinc-600' : 'text-zinc-400')}>{maskToken(a.tokenLast4)}</span>
-                  {!revoked && <CopyChip value={maskToken(a.tokenLast4)} display="" variant="inline" neutral className="!px-1.5" />}
-                </div>
+                {/* Masked only, and nothing to copy: the full token was shown once, at creation. */}
+                <div className={cx('masked-token text-xs', revoked ? 'text-zinc-600' : 'text-zinc-400')}>{maskToken(a.tokenLast4)}</div>
                 <div>
                   {a.status === 'active' ? <StatusInline tone="green">Active</StatusInline> : a.status === 'suspended' ? <StatusInline tone="amber">Suspended</StatusInline> : <StatusInline tone="gray">Revoked</StatusInline>}
                 </div>

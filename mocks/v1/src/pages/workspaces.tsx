@@ -514,15 +514,7 @@ export function WsTools() {
                     <Toggle on={wt.enabled} onChange={(v) => actions.updateWorkspaceTool(w.id, t.id, { enabled: v })} label={`Turn ${t.displayName} on or off`} disabled={!admin} />
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                    <input
-                      type="number"
-                      min={1}
-                      aria-label="Calls per minute"
-                      value={wt.perMinute}
-                      disabled={!admin}
-                      onChange={(e) => actions.updateWorkspaceTool(w.id, t.id, { perMinute: Math.max(1, Number(e.target.value)) })}
-                      className="w-14 rounded-md border border-edge bg-page px-2 py-1 text-[13px] text-zinc-200 outline-none focus:border-zinc-500"
-                    />
+                    <LimitInput key={wt.perMinute} value={wt.perMinute} disabled={!admin} onCommit={(n) => actions.updateWorkspaceTool(w.id, t.id, { perMinute: n })} />
                     /min
                   </div>
                   <div>
@@ -588,6 +580,29 @@ export function WsTools() {
         onConfirm={() => removing && actions.removeWorkspaceTool(w.id, removing)}
       />
     </div>
+  )
+}
+
+/** Per-workspace rate limit. Saves (and logs) once, on blur or Enter — not on every keystroke. */
+function LimitInput({ value, disabled, onCommit }: { value: number; disabled: boolean; onCommit: (n: number) => void }) {
+  const [v, setV] = useState(String(value))
+  const commit = () => {
+    const n = Math.max(1, Math.round(Number(v)) || 1)
+    setV(String(n))
+    if (n !== value) onCommit(n)
+  }
+  return (
+    <input
+      type="number"
+      min={1}
+      aria-label="Calls per minute"
+      value={v}
+      disabled={disabled}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      className="w-14 rounded-md border border-edge bg-page px-2 py-1 text-[13px] text-zinc-200 outline-none focus:border-zinc-500"
+    />
   )
 }
 

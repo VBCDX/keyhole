@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { CATALOG } from './catalog'
-import { DAY, newToken, trackingCode, uid } from './format'
+import { DAY, newToken, plural, trackingCode, uid } from './format'
 import { freshDB, populatedDB } from './seed'
 import type {
   Agent,
@@ -197,6 +197,19 @@ export function lastUsedForKey(d: DB, keyId: string) {
 /* ------------------------------------------------------------------ */
 /* Actions                                                             */
 /* ------------------------------------------------------------------ */
+/** Display name of a person or agent, for log details. */
+const playerName = (d: DB, p: PlayerRef) => (p.kind === 'user' ? (userById(d, p.id)?.name ?? p.id) : (agentById(d, p.id)?.label ?? p.id))
+/** "Added"/"Removed" detail rows for a change to a list of players. */
+function playerDiff(d: DB, before: PlayerRef[], after: PlayerRef[]) {
+  const has = (list: PlayerRef[], p: PlayerRef) => list.some((x) => x.kind === p.kind && x.id === p.id)
+  const added = after.filter((p) => !has(before, p)).map((p) => playerName(d, p))
+  const removed = before.filter((p) => !has(after, p)).map((p) => playerName(d, p))
+  const detail: [string, string][] = []
+  if (added.length) detail.push(['Added', added.join(', ')])
+  if (removed.length) detail.push(['Removed', removed.join(', ')])
+  return { added, removed, detail }
+}
+
 function actorName(d: DB) {
   return d.currentUserId === 'support' ? 'Keyhole support' : (me(d)?.name ?? 'Someone')
 }
@@ -458,8 +471,25 @@ export const actions = {
   },
   updateWorkspaceTool(wsId: string, toolId: string, patch: Partial<{ enabled: boolean; perMinute: number; slotMap: Record<string, string | null> }>) {
     update((d) => {
-      const wt = wsById(d, wsId)?.tools.find((x) => x.toolId === toolId)
-      if (wt) Object.assign(wt, patch)
+      const w = wsById(d, wsId)
+      const wt = w?.tools.find((x) => x.toolId === toolId)
+      if (!w || !wt) return
+      const tool = toolById(d, toolId)?.displayName ?? 'Tool'
+      const keyName = (id: string | null | undefined) => (id ? (keyById(d, id)?.name ?? id) : 'Missing')
+      // Every change to who can reach which key is logged with its before → after.
+      if (patch.slotMap) {
+        const changed = Object.keys({ ...wt.slotMap, ...patch.slotMap }).filter((s) => (wt.slotMap[s] ?? null) !== (patch.slotMap![s] ?? null))
+        if (changed.length)
+          log(d, {
+            object: `Changed ${tool} key slot${changed.length === 1 ? '' : 's'} in ${w.name}`,
+            workspaceId: wsId,
+            detail: changed.map((s): [string, string] => [s, `${keyName(wt.slotMap[s])} → ${keyName(patch.slotMap![s])}`]),
+          })
+      }
+      if (patch.enabled !== undefined && patch.enabled !== wt.enabled) log(d, { object: `Turned ${tool} ${patch.enabled ? 'on' : 'off'} in ${w.name}`, workspaceId: wsId })
+      if (patch.perMinute !== undefined && patch.perMinute !== wt.perMinute)
+        log(d, { object: `Set ${tool} limit in ${w.name} to ${patch.perMinute}/min`, workspaceId: wsId, detail: [['Calls per minute', `${wt.perMinute} → ${patch.perMinute}`]] })
+      Object.assign(wt, patch)
     })
   },
   removeWorkspaceTool(wsId: string, toolId: string) {
@@ -482,6 +512,13 @@ export const actions = {
     update((d) => {
       const w = wsById(d, wsId)
       if (!w) return
+      const refs = (u: string[], a: string[]): PlayerRef[] => [...u.map((id) => ({ kind: 'user' as const, id })), ...a.map((id) => ({ kind: 'agent' as const, id }))]
+      const diff = playerDiff(d, refs(w.userIds, w.agentIds), refs(userIds, agentIds))
+      if (diff.detail.length) {
+        const one = diff.added.length + diff.removed.length === 1
+        const object = one ? (diff.added.length ? `Added ${diff.added[0]} to ${w.name}` : `Removed ${diff.removed[0]} from ${w.name}`) : `Changed who can use ${w.name}`
+        log(d, { object, workspaceId: wsId, detail: diff.detail })
+      }
       w.userIds = userIds
       w.agentIds = agentIds
       for (const a of d.agents) {
@@ -542,7 +579,9 @@ export const actions = {
   renameAgent(id: string, label: string) {
     update((d) => {
       const a = agentById(d, id)
-      if (a && label.trim()) a.label = label.trim()
+      if (!a || !label.trim() || label.trim() === a.label) return
+      log(d, { object: `Renamed agent ${a.label} → ${label.trim()}` })
+      a.label = label.trim()
     })
   },
   setAgentStatus(id: string, status: 'active' | 'suspended') {
@@ -644,8 +683,10 @@ export const actions = {
     update((d) => {
       const u = userById(d, userId)
       if (!u) return
+      const before = u.roles[d.currentOrgId]
+      if (before === role) return
       u.roles[d.currentOrgId] = role
-      log(d, { object: `Changed ${u.name}'s role to ${role}` })
+      log(d, { object: `Changed ${u.name}'s role to ${role}`, detail: [['Role', `${before} → ${role}`]] })
     })
   },
   setUserSuspended(userId: string, suspended: boolean) {
@@ -658,12 +699,19 @@ export const actions = {
   },
   setUserWorkspaces(userId: string, wsIds: string[]) {
     update((d) => {
+      const name = userById(d, userId)?.name
+      // One entry per workspace, so each workspace's own log shows who joined or left it.
       for (const w of d.workspaces.filter((x) => x.orgId === d.currentOrgId)) {
         const has = w.userIds.includes(userId)
-        if (wsIds.includes(w.id) && !has) w.userIds.push(userId)
-        if (!wsIds.includes(w.id) && has) w.userIds = w.userIds.filter((x) => x !== userId)
+        if (wsIds.includes(w.id) && !has) {
+          w.userIds.push(userId)
+          log(d, { object: `Added ${name} to ${w.name}`, workspaceId: w.id })
+        }
+        if (!wsIds.includes(w.id) && has) {
+          w.userIds = w.userIds.filter((x) => x !== userId)
+          log(d, { object: `Removed ${name} from ${w.name}`, workspaceId: w.id })
+        }
       }
-      log(d, { object: `Updated workspaces for ${userById(d, userId)?.name}` })
     })
   },
   removeUser(userId: string) {
@@ -706,8 +754,10 @@ export const actions = {
     update((d) => {
       const c = d.cabinets.find((x) => x.id === id)
       if (!c) return
+      const label = (a: Cabinet['access']) => (a === 'everyone' ? 'Everyone in the workspace' : `Only ${plural(a.length, 'player')}`)
+      const detail: [string, string][] = [['Lock', `${label(c.access)} → ${label(access)}`], ...playerDiff(d, c.access === 'everyone' ? [] : c.access, access === 'everyone' ? [] : access).detail]
       c.access = access
-      log(d, { object: `Changed lock on ${c.name}`, workspaceId: c.workspaceId })
+      log(d, { object: `Changed lock on ${c.name}`, workspaceId: c.workspaceId, detail })
     })
   },
   reassignCabinet(id: string, ownerId: string) {

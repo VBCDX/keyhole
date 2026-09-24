@@ -109,6 +109,8 @@ export const orgWorkspaces = (d: DB) => {
   return all.filter((w) => w.userIds.includes(d.currentUserId))
 }
 export const orgEvents = (d: DB) => d.events.filter((e) => e.orgId === d.currentOrgId)
+/** Connectors the current person may see: all for admins, those enrolled in their own workspaces for `user`. */
+export const visibleConnectors = (d: DB) => orgConnectors(d).filter((c) => isAdmin(d) || canSeeWorkspace(d, c.workspaceId))
 /** Whether the current person may open a workspace: admins any in the org, `user` only their own. */
 export const canSeeWorkspace = (d: DB, wsId: string) => orgWorkspaces(d).some((w) => w.id === wsId)
 
@@ -154,8 +156,8 @@ export const keyUsage = (d: DB, keyId: string) => {
 export const agentsCreatedBy = (d: DB, u: User, orgIds = [d.currentOrgId]) =>
   d.agents.filter((a) => orgIds.includes(a.orgId) && a.createdBy === u.name && a.status !== 'revoked')
 
-export const toolWorkspaces = (d: DB, toolId: string) =>
-  d.workspaces.filter((w) => w.tools.some((t) => t.toolId === toolId))
+/** Workspaces a tool is granted to — only the ones the current person can see. */
+export const toolWorkspaces = (d: DB, toolId: string) => orgWorkspaces(d).filter((w) => w.tools.some((t) => t.toolId === toolId))
 
 /** Keys a workspace can use to fill a slot, with the name-matched one first. */
 export function slotCandidates(d: DB, keyIds: string[], slot: string) {

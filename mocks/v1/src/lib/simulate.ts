@@ -1,5 +1,5 @@
 import { trackingCode } from './format'
-import { agentById, liveTool, log, missingSlots, toolById, update } from './store'
+import { agentById, canSeeWorkspace, liveTool, log, missingSlots, toolById, update } from './store'
 import type { DB } from './types'
 
 /**
@@ -96,7 +96,11 @@ export function testCall(opts: { toolId: string; wsId: string; actionId?: string
   update((d) => {
     const tool = toolById(d, opts.toolId)
     const ws = d.workspaces.find((w) => w.id === opts.wsId)
-    if (!tool || !ws) return
+    // A test call runs as the person clicking it, so it's limited to workspaces they can use.
+    if (!tool || !ws || !canSeeWorkspace(d, ws.id)) {
+      result = { ok: false, status: 0, ms: 0, trk, message: 'You don’t have access to that workspace.' }
+      return
+    }
     const t = opts.draft ? tool : liveTool(tool)
     if (!t) {
       result = { ok: false, status: 0, ms: 0, trk, message: `${tool.displayName} isn’t published yet, so agents can’t call it.` }

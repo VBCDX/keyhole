@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { expiringSoon, plural } from '../lib/format'
-import { actions, myRole, orgAgents, orgConnectors, orgKeys, orgStores, orgTools, orgWorkspaces, useDB, useNow, visibleEvents } from '../lib/store'
+import { actions, myRole, orgAgents, orgKeys, orgStores, orgTools, orgWorkspaces, useDB, useNow, visibleConnectors, visibleEvents } from '../lib/store'
 import { KeyholeIcon } from '../components/keyhole'
 import { LogFeed } from '../components/shared'
 import { Card, CloseX, Dot, cx } from '../components/ui'
@@ -99,7 +99,7 @@ export function Home() {
   const stores = orgStores(d)
   const unhealthyStores = stores.filter((s) => s.health !== 'healthy')
   const unverified = stores.filter((s) => s.health === 'healthy' && s.skipVerify)
-  const connectors = orgConnectors(d)
+  const connectors = visibleConnectors(d)
   const badConn = connectors.filter((c) => c.health !== 'healthy')
   const traffic = events.filter((e) => ['request', 'blocked', 'error', 'verification'].includes(e.type))
   const showChecklist = !d.checklistDismissed

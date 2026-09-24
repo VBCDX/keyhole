@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ago, plural } from '../lib/format'
-import { actions, isAdmin, orgConnectors, useDB, useNow, wsById } from '../lib/store'
+import { actions, isAdmin, useDB, useNow, visibleConnectors, wsById } from '../lib/store'
 import type { Connector } from '../lib/types'
 import { EnrollPanel } from '../components/EnrollPanel'
 import { ImpactDialog, ListBody } from '../components/shared'
@@ -36,7 +36,7 @@ export function Connectors() {
   const d = useDB()
   const now = useNow()
   const admin = isAdmin(d)
-  const list = orgConnectors(d)
+  const list = visibleConnectors(d)
   const [enrolling, setEnrolling] = useState(false)
   const [renaming, setRenaming] = useState<Connector | null>(null)
   const [newName, setNewName] = useState('')

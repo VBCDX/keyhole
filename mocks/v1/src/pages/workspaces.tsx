@@ -6,6 +6,7 @@ import {
   actions,
   agentById,
   autoMatch,
+  canSeeWorkspace,
   isAdmin,
   keyById,
   orgAgents,
@@ -18,6 +19,7 @@ import {
   storeById,
   toolById,
   useDB,
+  visibleEvents,
   wsById,
 } from '../lib/store'
 import type { Key, Workspace } from '../lib/types'
@@ -239,6 +241,7 @@ export function WorkspaceDetail() {
   const w = wsById(d, wsId!)
   const [deleting, setDeleting] = useState(false)
   if (!w) return <div className="text-sm text-zinc-400">This workspace doesn’t exist anymore. <Link to="/workspaces">Back to workspaces</Link></div>
+  if (!canSeeWorkspace(d, w.id)) return <div className="text-sm text-zinc-400">You don’t have access to this workspace. Ask an admin to add you. <Link to="/workspaces">Back to your workspaces</Link></div>
   const base = `/workspaces/${w.id}`
   return (
     <div>
@@ -660,7 +663,7 @@ export function WsAudit() {
   const [params] = useSearchParams()
   return (
     <div className="mt-5 max-w-[1080px]">
-      <AuditLog events={orgEvents(d).filter((e) => e.workspaceId === w.id)} scopeLabel={w.name} hideWorkspaceFilter initialExpand={params.get('event') ?? undefined} />
+      <AuditLog events={visibleEvents(d).filter((e) => e.workspaceId === w.id)} scopeLabel={w.name} hideWorkspaceFilter initialExpand={params.get('event') ?? undefined} />
     </div>
   )
 }

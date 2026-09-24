@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ago, initials, until } from '../lib/format'
-import { actions, isAdmin, me, myRole, org, orgEvents, orgWorkspaces, useDB, useNow } from '../lib/store'
+import { actions, isAdmin, me, myRole, org, useDB, useNow, visibleEvents } from '../lib/store'
 import { AuditLog } from '../components/shared'
 import { KeyholeIcon } from '../components/keyhole'
 import { Avatar, Button, Card, Field, Footer, Input, Modal, PageTitle, Toggle } from '../components/ui'
@@ -13,11 +13,7 @@ import { DeleteOrgDialog } from './orgs'
 export function AuditPage() {
   const d = useDB()
   const [params] = useSearchParams()
-  let events = orgEvents(d)
-  if (myRole(d) === 'user') {
-    const mine = new Set(orgWorkspaces(d).map((w) => w.id))
-    events = events.filter((e) => (e.workspaceId && mine.has(e.workspaceId)) || e.actorId === d.currentUserId)
-  }
+  const events = visibleEvents(d)
   return (
     <div className="max-w-[1080px]">
       <PageTitle>Audit</PageTitle>

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { expiringSoon, plural } from '../lib/format'
-import { actions, orgAgents, orgConnectors, orgEvents, orgKeys, orgStores, orgTools, orgWorkspaces, useDB, useNow } from '../lib/store'
+import { actions, myRole, orgAgents, orgConnectors, orgKeys, orgStores, orgTools, orgWorkspaces, useDB, useNow, visibleEvents } from '../lib/store'
 import { KeyholeIcon } from '../components/keyhole'
 import { LogFeed } from '../components/shared'
 import { Card, CloseX, Dot, cx } from '../components/ui'
@@ -83,11 +83,15 @@ export function Checklist() {
 export function Home() {
   const d = useDB()
   const now = useNow()
-  const events = orgEvents(d)
+  // The `user` role only sees its own workspaces, so the org-wide traffic baseline doesn't apply.
+  const scoped = myRole(d) === 'user'
+  const events = visibleEvents(d)
+  const base = scoped ? { requests: 0, blocked: 0 } : d.statsBase
   const day = events.filter((e) => now - e.at < 86_400_000)
-  const requests = d.statsBase.requests + day.filter((e) => e.type === 'request').length
-  const blocked = d.statsBase.blocked + day.filter((e) => e.severity === 'blocked').length
-  const expiring = orgAgents(d).filter((a) => a.status !== 'revoked' && expiringSoon(a.expiresAt, now)).length
+  const requests = base.requests + day.filter((e) => e.type === 'request').length
+  const blocked = base.blocked + day.filter((e) => e.severity === 'blocked').length
+  const myWs = new Set(orgWorkspaces(d).map((w) => w.id))
+  const expiring = orgAgents(d).filter((a) => a.status !== 'revoked' && expiringSoon(a.expiresAt, now) && (!scoped || a.workspaceIds.some((id) => myWs.has(id)))).length
   const stores = orgStores(d)
   const unhealthyStores = stores.filter((s) => s.health !== 'healthy')
   const connectors = orgConnectors(d)
@@ -101,7 +105,7 @@ export function Home() {
       {showChecklist && <Checklist />}
 
       <div className={cx('flex gap-4', showChecklist ? 'mt-6 max-w-[960px]' : 'mt-5 max-w-[1080px]')}>
-        <Stat label="Requests · 24 h" className="flex-[1.4]">
+        <Stat label={scoped ? 'Requests · 24 h · your workspaces' : 'Requests · 24 h'} className="flex-[1.4]">
           <div className="flex items-end justify-between">
             <div className="mt-1.5 text-[22px] font-semibold">{requests.toLocaleString()}</div>
             {requests > 0 && (

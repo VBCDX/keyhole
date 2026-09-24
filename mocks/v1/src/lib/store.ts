@@ -108,6 +108,22 @@ export const orgWorkspaces = (d: DB) => {
   return all.filter((w) => w.userIds.includes(d.currentUserId))
 }
 export const orgEvents = (d: DB) => d.events.filter((e) => e.orgId === d.currentOrgId)
+/** Whether the current person may open a workspace: admins any in the org, `user` only their own. */
+export const canSeeWorkspace = (d: DB, wsId: string) => orgWorkspaces(d).some((w) => w.id === wsId)
+
+/**
+ * The one activity scope every log and feed uses. Admins see the whole
+ * organization; the `user` role sees their workspaces (which covers their
+ * cabinets), what they did themselves, and their own agents' activity.
+ */
+export function visibleEvents(d: DB) {
+  const all = orgEvents(d)
+  if (myRole(d) !== 'user') return all
+  const mine = new Set(orgWorkspaces(d).map((w) => w.id))
+  const myName = me(d)?.name
+  const myAgents = new Set(d.agents.filter((a) => a.orgId === d.currentOrgId && a.createdBy === myName).map((a) => a.id))
+  return all.filter((e) => (e.workspaceId && mine.has(e.workspaceId)) || e.actorId === d.currentUserId || (e.actorId && myAgents.has(e.actorId)))
+}
 
 export const userById = (d: DB, id: string | null | undefined) => d.users.find((u) => u.id === id)
 export const agentById = (d: DB, id: string) => d.agents.find((a) => a.id === id)

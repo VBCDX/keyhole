@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ago, initials, maskToken, until } from '../lib/format'
-import { actions, agentById, isAdmin, orgAgents, orgEvents, orgWorkspaces, useDB, useNow, userById, wsById } from '../lib/store'
+import { actions, agentById, canSeeWorkspace, isAdmin, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
 import type { Agent } from '../lib/types'
 import { TokenPanel } from '../components/keyhole'
 import { AgentsTable, AuditLog, RevokeAgentDialog, UsersTable, useUserRows } from '../components/shared'
@@ -33,8 +33,8 @@ export function UserDetail() {
   if (!u || !u.roles[d.currentOrgId]) return <div className="text-sm text-zinc-400">This person isn’t in this organization. <Link to="/players/users">Back to users</Link></div>
   const role = u.roles[d.currentOrgId]
   const ws = orgWorkspaces(d).filter((w) => role === 'Owner' || w.userIds.includes(u.id))
-  const cabinets = d.cabinets.filter((c) => c.ownerId === u.id)
-  const events = orgEvents(d).filter((e) => e.actorId === u.id || e.object.includes(u.email) || e.object.includes(u.name))
+  const cabinets = d.cabinets.filter((c) => c.ownerId === u.id && canSeeWorkspace(d, c.workspaceId))
+  const events = visibleEvents(d).filter((e) => e.actorId === u.id || e.object.includes(u.email) || e.object.includes(u.name))
   return (
     <div className="max-w-[1080px]">
       <Breadcrumb items={[{ label: 'Players' }, { label: 'Users', to: '/players/users' }, { label: u.name }]} />
@@ -177,8 +177,8 @@ export function AgentDetail() {
   if (!a) return <div className="text-sm text-zinc-400">This agent doesn’t exist. <Link to="/players/agents">Back to agents</Link></div>
   const admin = isAdmin(d)
   const revoked = a.status === 'revoked'
-  const lockLists = d.cabinets.filter((c) => Array.isArray(c.access) && c.access.some((p) => p.kind === 'agent' && p.id === a.id)).map((c) => c.name)
-  const events = orgEvents(d).filter((e) => e.actorId === a.id || e.object.includes(a.label))
+  const lockLists = d.cabinets.filter((c) => canSeeWorkspace(d, c.workspaceId) && Array.isArray(c.access) && c.access.some((p) => p.kind === 'agent' && p.id === a.id)).map((c) => c.name)
+  const events = visibleEvents(d).filter((e) => e.actorId === a.id || e.object.includes(a.label))
   return (
     <div className="max-w-[1080px]">
       <Breadcrumb items={[{ label: 'Players' }, { label: 'Agents', to: '/players/agents' }, { label: a.label }]} />

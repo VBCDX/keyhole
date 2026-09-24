@@ -10,7 +10,6 @@ import {
   myOrgs,
   org,
   orgAgents,
-  orgEvents,
   orgKeys,
   orgStores,
   orgTools,
@@ -19,6 +18,7 @@ import {
   toolWorkspaces,
   useDB,
   useNow,
+  visibleEvents,
 } from '../lib/store'
 import type { Role, Tool } from '../lib/types'
 import { AgentsTable, AuditLog, ImpactDialog, ListBody, UsersTable, useUserRows } from '../components/shared'
@@ -355,7 +355,7 @@ export function OrgAudit() {
   const d = useDB()
   return (
     <div className="mt-5 max-w-[1080px]">
-      <AuditLog events={orgEvents(d)} scopeLabel={org(d)?.name} />
+      <AuditLog events={visibleEvents(d)} scopeLabel={org(d)?.name} />
     </div>
   )
 }

@@ -257,16 +257,21 @@ export const actions = {
   },
   importEnv(rows: { name: string; length: number }[]) {
     update((d) => {
+      const replaced: string[] = []
       for (const r of rows) {
-        const existing = d.keys.find((k) => k.orgId === d.currentOrgId && k.storeId === 'st_local' && k.name === r.name)
+        const existing = d.keys.find((k) => k.orgId === d.currentOrgId && k.storeId === 'st_local' && !k.cabinetId && k.name === r.name)
         if (existing) {
           existing.length = r.length
           existing.rotatedAt = Date.now()
+          replaced.push(r.name)
         } else {
           d.keys.push({ id: uid('k'), orgId: d.currentOrgId, name: r.name, storeId: 'st_local', length: r.length, createdAt: Date.now(), rotatedAt: null, expiresAt: null, rotationReminderDays: null, notes: 'Imported from .env' })
         }
       }
-      log(d, { object: `Imported ${rows.length} key${rows.length === 1 ? '' : 's'} from .env into Local store` })
+      log(d, {
+        object: `Imported ${rows.length} key${rows.length === 1 ? '' : 's'} from .env into Local store`,
+        detail: replaced.length ? [['Values replaced', replaced.join(', ')]] : undefined,
+      })
     })
   },
   addOpenBao(s: Omit<SecretStore, 'id' | 'orgId' | 'type' | 'health' | 'checkedAt'>, keyNames: string[]) {

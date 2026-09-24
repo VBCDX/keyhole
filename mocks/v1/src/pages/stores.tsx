@@ -206,12 +206,12 @@ export function StoreDetail() {
   const { orgId, storeId } = useParams()
   const [params, setParams] = useSearchParams()
   const s = storeById(d, storeId!)
-  const [adding, setAdding] = useState(params.get('add') === '1')
+  const admin = isAdmin(d)
+  const [adding, setAdding] = useState(params.get('add') === '1' && admin)
   const [importing, setImporting] = useState(false)
   const [replacing, setReplacing] = useState<Key | null>(null)
   const [deleting, setDeleting] = useState<Key | null>(null)
   const [removing, setRemoving] = useState(false)
-  const admin = isAdmin(d)
 
   useEffect(() => {
     if (params.get('add')) {
@@ -237,12 +237,14 @@ export function StoreDetail() {
           <StoreRow s={s} chevron={false} />
         </div>
         {s.type === 'local' ? (
-          <div className="flex gap-2">
-            <Button onClick={() => setImporting(true)}>Import from .env</Button>
-            <Button variant="primary" onClick={() => setAdding(true)}>
-              Add key
-            </Button>
-          </div>
+          admin && (
+            <div className="flex gap-2">
+              <Button onClick={() => setImporting(true)}>Import from .env</Button>
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                Add key
+              </Button>
+            </div>
+          )
         ) : (
           admin && (
             <div className="flex gap-2">
@@ -270,6 +272,8 @@ export function StoreDetail() {
         </div>
       )}
 
+      {s.type === 'local' && !admin && <div className="mt-3 text-xs text-zinc-500">Only admins manage organization keys. Put your own keys in a cabinet.</div>}
+
       {keys.length === 0 ? (
         <div className="mt-4 max-w-[960px] rounded-[10px] border border-edge bg-panel p-10 text-center text-[13px] text-zinc-400">
           {s.type === 'local' ? 'No keys yet. Add one, or import from a .env file.' : 'No keys found under this path yet.'}
@@ -281,6 +285,8 @@ export function StoreDetail() {
               const uses = keyUsage(d, k.id)
               const cab = k.cabinetId ? d.cabinets.find((c) => c.id === k.cabinetId) : null
               const soon = k.expiresAt && k.expiresAt - now < 14 * DAY
+              // Members may only replace values in cabinets they own; everything else is admin-only.
+              const ownCabinetKey = !!cab && cab.ownerId === d.currentUserId
               return (
                 <Row key={k.id} cols={KEY_COLS}>
                   <div className="min-w-0">
@@ -295,11 +301,11 @@ export function StoreDetail() {
                     <LockedDots />
                   </div>
                   <div className="text-right">
-                    {s.type === 'local' && (
+                    {s.type === 'local' && (admin || ownCabinetKey) && (
                       <Menu
                         items={[
                           { label: 'Replace value', onClick: () => setReplacing(k) },
-                          { label: 'Delete key', danger: true, onClick: () => setDeleting(k) },
+                          admin ? { label: 'Delete key', danger: true, onClick: () => setDeleting(k) } : null,
                         ]}
                       />
                     )}
@@ -479,7 +485,8 @@ export function ImportEnvModal({ open, onClose }: { open: boolean; onClose: () =
   const [rows, setRows] = useState<EnvRow[] | null>(null)
   const [drag, setDrag] = useState(false)
   useEffect(() => setRows(null), [open])
-  const existing = new Set(d.keys.filter((k) => k.storeId === 'st_local').map((k) => k.name))
+  // Cabinet keys belong to their cabinet; an import only ever matches organization keys.
+  const existing = new Set(d.keys.filter((k) => k.orgId === d.currentOrgId && k.storeId === 'st_local' && !k.cabinetId).map((k) => k.name))
   const take = (text: string) => setRows(parseEnv(text, existing))
   const readFile = (f: File) => f.text().then(take)
   const sel = rows?.filter((r) => r.selected) ?? []

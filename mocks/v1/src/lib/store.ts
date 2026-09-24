@@ -638,7 +638,9 @@ export const actions = {
   createCabinet(c: { workspaceId: string; name: string; newKeys: { name: string; length: number }[]; pickedKeyIds: string[]; tools: Cabinet['tools']; access: Cabinet['access'] }) {
     const id = uid('cb')
     update((d) => {
-      const keyIds = [...c.pickedKeyIds]
+      // Picked keys must already be exposed in the workspace; anything else is dropped.
+      const exposed = wsById(d, c.workspaceId)?.keyIds ?? []
+      const keyIds = c.pickedKeyIds.filter((k) => exposed.includes(k))
       const nameToId: Record<string, string> = {}
       for (const nk of c.newKeys) {
         const kid = uid('k')
@@ -646,7 +648,8 @@ export const actions = {
         keyIds.push(kid)
         d.keys.push({ id: kid, orgId: d.currentOrgId, name: nk.name, storeId: 'st_local', length: nk.length, createdAt: Date.now(), rotatedAt: null, expiresAt: null, rotationReminderDays: null, notes: 'Cabinet key', cabinetId: id })
       }
-      const tools = c.tools.map((t) => ({ ...t, slotMap: Object.fromEntries(Object.entries(t.slotMap).map(([s, v]) => [s, v && v.startsWith('new:') ? nameToId[v.slice(4)] : v])) }))
+      const fill = (v: string | null) => (!v ? null : v.startsWith('new:') ? (nameToId[v.slice(4)] ?? null) : keyIds.includes(v) ? v : null)
+      const tools = c.tools.map((t) => ({ ...t, slotMap: Object.fromEntries(Object.entries(t.slotMap).map(([s, v]) => [s, fill(v)])) }))
       d.cabinets.push({ id, workspaceId: c.workspaceId, name: c.name, ownerId: d.currentUserId, keyIds, tools, access: c.access, createdAt: Date.now() })
       log(d, { object: `Created cabinet ${c.name}${c.access === 'everyone' ? '' : ' (locked)'}`, workspaceId: c.workspaceId })
     })

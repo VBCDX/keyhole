@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { initials, plural } from '../lib/format'
-import { actions, agentById, isAdmin, keyById, me, orgKeys, orgTools, toolById, useDB, userById } from '../lib/store'
+import { actions, agentById, isAdmin, keyById, me, orgTools, toolById, useDB, userById } from '../lib/store'
 import type { Cabinet, PlayerRef, Workspace } from '../lib/types'
 import { ImpactDialog } from '../components/shared'
 import { SECRET_LINE, SecretField } from '../components/keyhole'
@@ -266,7 +266,8 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
     }
   }, [open]) // eslint-disable-line
 
-  const localKeys = orgKeys(d).filter((k) => k.storeId === 'st_local' && !k.cabinetId)
+  // The workspace's exposed keys are the access boundary: a cabinet can only reuse keys already exposed here.
+  const localKeys = ws.keyIds.map((id) => keyById(d, id)).filter((k): k is NonNullable<typeof k> => !!k && k.storeId === 'st_local' && !k.cabinetId && !k.sourceRemoved)
   const validNew = newKeys.filter((k) => k.name.trim() && k.length)
   const cabinetKeyOptions = [...validNew.map((k) => ({ value: `new:${k.name.trim()}`, label: k.name.trim() })), ...picked.map((id) => ({ value: id, label: keyById(d, id)!.name }))]
   const tool = toolById(d, toolId)
@@ -318,16 +319,18 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
           Add another key
         </button>
         <button type="button" className="text-sm2 text-brass hover:text-brass-light" onClick={() => setPicking(!picking)}>
-          Or pick from the Local store
+          Or pick a key {ws.name} exposes
         </button>
       </div>
       {picking && (
         <div className="-mt-1 flex flex-col gap-2 rounded-lg border border-edge bg-page p-3">
+          <div className="eyebrow-sm">Local keys exposed in {ws.name}</div>
           {localKeys.length ? (
             localKeys.map((k) => <Checkbox key={k.id} checked={picked.includes(k.id)} onChange={(v) => setPicked(v ? [...picked, k.id] : picked.filter((x) => x !== k.id))} label={<span className="font-mono text-sm2">{k.name}</span>} />)
           ) : (
-            <span className="text-xs text-zinc-500">The Local store is empty.</span>
+            <span className="text-xs text-zinc-500">{ws.name} doesn’t expose any Local keys.</span>
           )}
+          <div className="text-xs2 text-zinc-500">Only keys this workspace already exposes. Admins choose those on the Summary tab.</div>
         </div>
       )}
       <Field label="Tool" optional>

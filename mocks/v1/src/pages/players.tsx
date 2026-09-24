@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ago, initials, maskToken, until } from '../lib/format'
-import { actions, agentById, canSeeWorkspace, isAdmin, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
+import { actions, agentById, canSeeWorkspace, isAdmin, isAdminRole, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
 import type { Agent } from '../lib/types'
 import { TokenPanel } from '../components/keyhole'
 import { AgentsTable, AuditLog, RevokeAgentDialog, RotateAgentDialog, SuspendAgentDialog, UsersTable, useUserRows } from '../components/shared'
@@ -32,7 +32,7 @@ export function UserDetail() {
   const u = userById(d, userId)
   if (!u || !u.roles[d.currentOrgId]) return <div className="text-sm text-zinc-400">This person isn’t in this organization. <Link to="/players/users">Back to users</Link></div>
   const role = u.roles[d.currentOrgId]
-  const ws = orgWorkspaces(d).filter((w) => role === 'Owner' || w.userIds.includes(u.id))
+  const ws = orgWorkspaces(d).filter((w) => isAdminRole(role) || w.userIds.includes(u.id))
   const cabinets = d.cabinets.filter((c) => c.ownerId === u.id && canSeeWorkspace(d, c.workspaceId))
   const events = visibleEvents(d).filter((e) => e.actorId === u.id || e.object.includes(u.email) || e.object.includes(u.name))
   return (

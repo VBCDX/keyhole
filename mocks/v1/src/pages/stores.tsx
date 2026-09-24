@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { COMING_SOON_STORES } from '../lib/catalog'
 import { DAY, ago, plural, until } from '../lib/format'
-import { actions, isAdmin, keyUsage, lastUsedForKey, orgConnectors, orgKeys, orgStores, storeById, useDB, useNow } from '../lib/store'
+import { actions, hasWorkspaceAccess, isAdmin, keyUsage, lastUsedForKey, orgConnectors, orgKeys, orgStores, storeById, useDB, useNow } from '../lib/store'
 import type { Key, SecretStore } from '../lib/types'
 import { LockedDots, SECRET_LINE, SecretField } from '../components/keyhole'
-import { ImpactDialog, ListBody } from '../components/shared'
+import { ImpactDialog, ImpactRows, ListBody } from '../components/shared'
 import { Button, Checkbox, Dot, FOCUS_RING, Field, Footer, Input, Menu, Modal, Pill, Row, Select, SlideOver, Table, Textarea, activateOnKey, cx } from '../components/ui'
 
 function storeHealth(d: ReturnType<typeof useDB>, s: SecretStore) {
@@ -160,6 +160,14 @@ function SourceRemovedKeys({ keys }: { keys: Key[] }) {
         <div className="text-sm2 text-zinc-400">
           Its store is gone. Pick a replacement key to fill the same slots — or remove it and leave those slots empty.
         </div>
+        {resolving && (
+          <ImpactRows
+            rows={[
+              ['Slots it fills', keyUsage(d, resolving.id).map((u) => `${u.tool.displayName} · ${u.ws?.name ?? u.cabinet?.name}`).join('; ') || 'None', keyUsage(d, resolving.id).length ? 'amber' : undefined],
+              ['Workspaces exposing it', d.workspaces.filter((w) => w.keyIds.includes(resolving.id)).map((w) => w.name).join(', ') || 'None'],
+            ]}
+          />
+        )}
         <Field label="Replacement key">
           <Select mono value={replacement} onChange={(e) => setReplacement(e.target.value)}>
             <option value="">Choose a key…</option>
@@ -303,7 +311,7 @@ export function StoreDetail() {
               const cab = k.cabinetId ? d.cabinets.find((c) => c.id === k.cabinetId) : null
               const soon = k.expiresAt && k.expiresAt - now < 14 * DAY
               // Members may only replace values in cabinets they own; everything else is admin-only.
-              const ownCabinetKey = !!cab && cab.ownerId === d.currentUserId
+              const ownCabinetKey = !!cab && cab.ownerId === d.currentUserId && hasWorkspaceAccess(d, d.currentUserId, cab.workspaceId)
               return (
                 <Row key={k.id} cols={KEY_COLS}>
                   <div className="min-w-0">

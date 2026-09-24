@@ -9,9 +9,11 @@ import {
   canSeeWorkspace,
   isAdmin,
   filledSlot,
+  isAdminRole,
   keyById,
   liveTool,
   missingSlots,
+  orgAdmins,
   orgAgents,
   orgEvents,
   orgKeys,
@@ -23,11 +25,12 @@ import {
   toolById,
   unexposeImpact,
   useDB,
+  userById,
   visibleEvents,
   wsById,
 } from '../lib/store'
 import type { Key, Workspace } from '../lib/types'
-import { AgentsTable, AuditLog, ImpactDialog, ListBody, UsersTable, useUserRows } from '../components/shared'
+import { AgentsTable, AuditLog, ImpactDialog, ImpactRows, ListBody, UsersTable, useUserRows } from '../components/shared'
 import { CopyChip } from '../components/keyhole'
 import { Breadcrumb, Button, Checkbox, ConnPill, Dot, Field, Footer, Input, Modal, PageTitle, Row, Select, Table, Tabs, Toggle, cx } from '../components/ui'
 import { CabinetsTab } from './cabinets'
@@ -159,9 +162,14 @@ function PlayerPicker({ users, agents, onUsers, onAgents }: { users: string[]; a
     <div className="grid grid-cols-2 gap-4">
       <div className="flex flex-col gap-2">
         <div className="eyebrow-sm">People</div>
-        {people.map((u) => (
-          <Checkbox key={u.id} checked={users.includes(u.id)} onChange={(v) => onUsers(v ? [...users, u.id] : users.filter((x) => x !== u.id))} label={u.name} />
-        ))}
+        {people.map((u) =>
+          // Org admins administer every workspace by default; they can't be unticked here.
+          isAdminRole(u.roles[d.currentOrgId]) ? (
+            <Checkbox key={u.id} checked disabled label={<span>{u.name} <span className="text-xs2 text-zinc-500">· {u.roles[d.currentOrgId]}, admin by default</span></span>} />
+          ) : (
+            <Checkbox key={u.id} checked={users.includes(u.id)} onChange={(v) => onUsers(v ? [...users, u.id] : users.filter((x) => x !== u.id))} label={u.name} />
+          ),
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <div className="eyebrow-sm">Agents</div>
@@ -323,6 +331,13 @@ export function WsSummary() {
   const [pu, setPu] = useState<string[]>([])
   const [pa, setPa] = useState<string[]>([])
   const admin = isAdmin(d)
+  // Keyhole has no per-workspace admin role: the org's Owners and userAdmins are every workspace's admins.
+  const wsAdmins = orgAdmins(d)
+  // Manage access: who would lose access (org admins keep it regardless).
+  const losingIds = w.userIds.filter((id) => !pu.includes(id) && !isAdminRole(userById(d, id)?.roles[d.currentOrgId]))
+  const losingPeople = losingIds.map((id) => userById(d, id)?.name ?? id)
+  const losingAgents = w.agentIds.filter((id) => !pa.includes(id) && agentById(d, id)?.status !== 'revoked').map((id) => agentById(d, id)?.label ?? id)
+  const losingCabinets = d.cabinets.filter((c) => c.workspaceId === w.id && !!c.ownerId && losingIds.includes(c.ownerId)).map((c) => c.name)
   const agents = w.agentIds.map((id) => agentById(d, id)).filter(Boolean) as NonNullable<ReturnType<typeof agentById>>[]
   const impact = unexposeImpact(d, w.id, keys)
   const saveKeys = () => {
@@ -365,7 +380,7 @@ export function WsSummary() {
         <div className="mt-1.5 text-xs2 text-zinc-600">Names only — values are never shown.</div>
       </div>
       <div>
-        <div className="mb-2.5 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between">
           <div className="eyebrow">Users</div>
           {admin && (
             <button
@@ -379,6 +394,10 @@ export function WsSummary() {
               Manage access
             </button>
           )}
+        </div>
+        <div className="mb-2.5 text-xs text-zinc-500">
+          Workspace admins:{' '}
+          <span className="text-zinc-300">{wsAdmins.map((u) => `${u.name} (${u.roles[d.currentOrgId]})`).join(', ')}</span> — org admins, by default.
         </div>
         <UsersTable rows={rows} />
       </div>
@@ -414,13 +433,22 @@ export function WsSummary() {
       />
       <Modal open={editPlayers} onClose={() => setEditPlayers(false)} width={560} title={`Who gets access to “${w.name}”?`}>
         <PlayerPicker users={pu} agents={pa} onUsers={setPu} onAgents={setPa} />
+        {(losingPeople.length > 0 || losingAgents.length > 0) && (
+          <ImpactRows
+            rows={[
+              ['People losing access', losingPeople.join(', ') || 'None', losingPeople.length ? 'amber' : undefined],
+              ['Agents losing access', losingAgents.join(', ') || 'None', losingAgents.length ? 'amber' : undefined],
+              ['Cabinets they created here', losingCabinets.length ? `${losingCabinets.join(', ')} — keep working; admins take over management` : 'None'],
+            ]}
+          />
+        )}
         <Footer>
           <Button size="lg" onClick={() => setEditPlayers(false)}>
             Cancel
           </Button>
           <Button
             size="lg"
-            variant="primary"
+            variant={losingPeople.length || losingAgents.length ? 'danger' : 'primary'}
             onClick={() => {
               actions.setWorkspacePlayers(w.id, pu, pa)
               setEditPlayers(false)
@@ -515,7 +543,10 @@ export function WsTools() {
                               onChange={(e) => actions.updateWorkspaceTool(w.id, t.id, { slotMap: { ...wt.slotMap, [s.name]: e.target.value || null } })}
                               className={cx('rounded-md border bg-page px-2 py-0.5 font-mono text-xs outline-none', k ? 'border-edge text-zinc-300' : 'border-amber-500/40 text-amber-400')}
                             >
-                              <option value="">Missing — pick a key</option>
+                              {/* Emptying a slot is access-reducing, so it happens through Choose keys (with a preview), not here. */}
+                              <option value="" disabled={!!k}>
+                                Missing — pick a key
+                              </option>
                               {slotCandidates(d, w.keyIds, s.name).map((c) => (
                                 <option key={c.id} value={c.id}>
                                   {c.name}

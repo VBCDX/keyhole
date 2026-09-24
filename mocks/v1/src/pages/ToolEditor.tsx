@@ -107,6 +107,7 @@ export function ToolEditor() {
   const [raw, setRaw] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [discarding, setDiscarding] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   const refs = useRef<Record<string, HTMLElement | null>>({})
 
@@ -387,7 +388,7 @@ export function ToolEditor() {
                         <Button variant="primary" onClick={() => setPublishing(true)}>
                           Publish v{t.version}
                         </Button>
-                        {t.published && <Button onClick={() => actions.discardDraft(t.id)}>Discard draft</Button>}
+                        {t.published && <Button onClick={() => setDiscarding(true)}>Discard draft</Button>}
                       </div>
                     )}
                   </>
@@ -449,7 +450,7 @@ export function ToolEditor() {
             size="lg"
             variant="primary"
             onClick={() => {
-              actions.publishTool(t.id)
+              actions.publishTool(t.id, changes)
               setPublishing(false)
             }}
           >
@@ -457,6 +458,18 @@ export function ToolEditor() {
           </Button>
         </Footer>
       </Modal>
+      <ImpactDialog
+        open={discarding}
+        onClose={() => setDiscarding(false)}
+        title={`Discard draft v${t.version}?`}
+        rows={[
+          ['Changes thrown away', changes.join('; ') || 'None', changes.length ? 'amber' : undefined],
+          ['Back to', t.published ? `Published v${t.published.version}` : '—'],
+        ]}
+        body="Workspaces keep using the published version either way. The draft can’t be recovered."
+        confirmLabel="Discard draft"
+        onConfirm={() => actions.discardDraft(t.id)}
+      />
       <ImpactDialog
         open={deleting}
         onClose={() => setDeleting(false)}

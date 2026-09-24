@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ago, clock, expiringSoon, initials, maskToken, until } from '../lib/format'
 import { liveTick } from '../lib/simulate'
-import { actions, agentsCreatedBy, isAdmin, myRole, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
+import { actions, agentsCreatedBy, canManageMember, isAdmin, isAdminRole, isDemotion, isLastOwner, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
 import type { Agent, AuditEvent, Role, User } from '../lib/types'
 import { CopyChip, TokenPanel } from './keyhole'
 import {
@@ -19,6 +19,7 @@ import {
   Modal,
   Row,
   Segmented,
+  Select,
   SkeletonRows,
   StatusInline,
   Table,
@@ -52,6 +53,21 @@ export function ListBody({ cols, what, children, empty, rows = 3 }: { cols: stri
 /* ------------------------------------------------------------------ */
 /* Impact preview — nothing is deleted without one.                   */
 /* ------------------------------------------------------------------ */
+export type ImpactRow = [string, ReactNode, ('amber' | 'red')?]
+/** The key/value box of an impact preview, also used inline in dialogs that reduce access. */
+export function ImpactRows({ rows }: { rows: ImpactRow[] }) {
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[10px] border border-edge bg-rail p-4 text-sm2">
+      {rows.map(([k, v, tone]) => (
+        <div key={k} className="flex justify-between gap-6">
+          <span className="shrink-0 text-zinc-500">{k}</span>
+          <span className={cx('text-right', tone === 'amber' && 'font-semibold text-amber-400', tone === 'red' && 'font-semibold text-red-400')}>{v}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ImpactDialog({
   open,
   onClose,
@@ -62,30 +78,25 @@ export function ImpactDialog({
   onConfirm,
   typeToConfirm,
   secondary,
+  confirmDisabled,
 }: {
   open: boolean
   onClose: () => void
   title: ReactNode
-  rows: [string, ReactNode, ('amber' | 'red')?][]
+  rows: ImpactRow[]
   body?: ReactNode
   confirmLabel: string
   onConfirm: () => void
   typeToConfirm?: string
   secondary?: { label: string; onClick: () => void }
+  confirmDisabled?: boolean
 }) {
   const [typed, setTyped] = useState('')
   useEffect(() => setTyped(''), [open])
-  const ok = !typeToConfirm || typed === typeToConfirm
+  const ok = (!typeToConfirm || typed === typeToConfirm) && !confirmDisabled
   return (
     <Modal open={open} onClose={onClose} width={500} title={title}>
-      <div className="flex flex-col gap-2.5 rounded-[10px] border border-edge bg-rail p-4 text-sm2">
-        {rows.map(([k, v, tone]) => (
-          <div key={k} className="flex justify-between gap-6">
-            <span className="text-zinc-500">{k}</span>
-            <span className={cx('text-right', tone === 'amber' && 'font-semibold text-amber-400', tone === 'red' && 'font-semibold text-red-400')}>{v}</span>
-          </div>
-        ))}
-      </div>
+      <ImpactRows rows={rows} />
       {body && <div className="text-sm2 leading-relaxed text-zinc-400">{body}</div>}
       {typeToConfirm && (
         <Field label={<>Type “{typeToConfirm}” to confirm</>}>
@@ -139,7 +150,8 @@ export function useUserRows(filterWsId?: string): UserRow[] {
     }
     if (!filterWsId) return rows
     const w = wsById(d, filterWsId)
-    return rows.filter((r) => w?.userIds.includes(r.user.id) || r.role === 'Owner')
+    // Org admins are every workspace's admins by default, so they're listed on each one.
+    return rows.filter((r) => w?.userIds.includes(r.user.id) || isAdminRole(r.role))
   }, [d, filterWsId])
 }
 
@@ -152,11 +164,34 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
   const [wsFor, setWsFor] = useState<UserRow | null>(null)
   const [removeFor, setRemoveFor] = useState<UserRow | null>(null)
   const [suspendFor, setSuspendFor] = useState<UserRow | null>(null)
+  const [transferTo, setTransferTo] = useState<User | null>(null)
   const workspaces = orgWorkspaces(d)
-  const wsNames = (u: User, role: Role) => (role === 'Owner' ? 'All' : workspaces.filter((w) => w.userIds.includes(u.id)).map((w) => w.name).join(', ') || '—')
+  const owner = myRole(d) === 'Owner'
+  const wsNames = (u: User, role: Role) => (isAdminRole(role) ? 'All (org admin)' : workspaces.filter((w) => w.userIds.includes(u.id)).map((w) => w.name).join(', ') || '—')
   const invitedWs = (u: User) => d.invites.find((i) => i.email === u.email && i.orgId === d.currentOrgId)?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || '—'
 
-  const cabinetsOwned = removeFor ? d.cabinets.filter((c) => c.ownerId === removeFor.user.id) : []
+  const cabinetsCreated = removeFor ? d.cabinets.filter((c) => c.ownerId === removeFor.user.id && d.workspaces.some((w) => w.id === c.workspaceId && w.orgId === d.currentOrgId)) : []
+  const menuFor = (row: UserRow) => {
+    const { user: u, role } = row
+    if (u.id === d.currentUserId) {
+      // Your own row: only Owners get a menu, to transfer ownership or see why they can't step down.
+      if (role !== 'Owner') return null
+      const last = isLastOwner(d, u.id)
+      return [
+        last ? { label: 'Last Owner — transfer ownership to step down', disabled: true, onClick: () => {} } : { label: 'Change role', onClick: () => setRoleFor(row) },
+        last ? { label: 'Can’t remove the last Owner', disabled: true, onClick: () => {} } : null,
+      ]
+    }
+    if (!canManageMember(d, u.id)) return null
+    return [
+      { label: 'Change role', onClick: () => setRoleFor(row) },
+      isAdminRole(role) ? null : { label: 'Assign workspaces', onClick: () => setWsFor(row) },
+      owner && role !== 'Owner' && u.status === 'active' && !u.locked ? { label: 'Transfer ownership', onClick: () => setTransferTo(u) } : null,
+      u.locked ? { label: u.unlockRequest ? 'Unlock requested' : 'Ask support to unlock', disabled: !!u.unlockRequest, onClick: () => actions.requestUnlock(u.id) } : null,
+      u.status === 'suspended' ? { label: 'Reactivate', onClick: () => actions.setUserSuspended(u.id, false) } : { label: 'Suspend', onClick: () => setSuspendFor(row) },
+      { label: 'Remove', danger: true, onClick: () => setRemoveFor(row) },
+    ]
+  }
 
   return (
     <>
@@ -181,17 +216,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
               <div className="text-zinc-500">{invited ? '—' : u.id === d.currentUserId ? 'Now' : ago(u.lastActive, now).replace(' ago', ' ago')}</div>
               <div className="truncate text-zinc-400">{invited ? invitedWs(u) : wsNames(u, role)}</div>
               <div className="text-right">
-                {admin && !invited && u.id !== d.currentUserId && role !== 'Owner' && (
-                  <Menu
-                    items={[
-                      { label: 'Change role', onClick: () => setRoleFor({ user: u, role, invited }) },
-                      { label: 'Assign workspaces', onClick: () => setWsFor({ user: u, role, invited }) },
-                      u.locked ? { label: u.unlockRequest ? 'Unlock requested' : 'Ask support to unlock', disabled: !!u.unlockRequest, onClick: () => actions.requestUnlock(u.id) } : null,
-                      u.status === 'suspended' ? { label: 'Reactivate', onClick: () => actions.setUserSuspended(u.id, false) } : { label: 'Suspend', onClick: () => setSuspendFor({ user: u, role, invited }) },
-                      { label: 'Remove', danger: true, onClick: () => setRemoveFor({ user: u, role, invited }) },
-                    ]}
-                  />
-                )}
+                {admin && !invited && menuFor({ user: u, role, invited }) && <Menu items={menuFor({ user: u, role, invited })!} />}
               </div>
             </Row>
           ))}
@@ -207,11 +232,12 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
           ['Agents they created', suspendFor ? createdAgentsLabel(agentsCreatedBy(d, suspendFor.user).map((a) => a.label)) : ''],
           ['Last active', ago(suspendFor?.user.lastActive ?? null, now)],
         ]}
-        body="They can’t sign in or use any workspace until you reactivate them. Nothing they own is deleted."
+        body="They can’t sign in or use any workspace until you reactivate them. Nothing they created or did changes: agents, grants, keys and cabinets keep working."
         confirmLabel="Suspend user"
         onConfirm={() => suspendFor && actions.setUserSuspended(suspendFor.user.id, true)}
       />
       <ChangeRoleModal row={roleFor} onClose={() => setRoleFor(null)} />
+      <TransferOwnershipDialog open={!!transferTo} to={transferTo} onClose={() => setTransferTo(null)} />
       <AssignWorkspacesModal row={wsFor} onClose={() => setWsFor(null)} />
       <ImpactDialog
         open={!!removeFor}
@@ -219,12 +245,11 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
         title={`Remove ${removeFor?.user.name}?`}
         rows={[
           ['Workspaces', removeFor ? wsNames(removeFor.user, removeFor.role) : ''],
-          ['Cabinets they own', cabinetsOwned.length ? cabinetsOwned.map((c) => `${c.name} · ${c.keyIds.length} keys, ${c.tools.length} tool${c.tools.length === 1 ? '' : 's'}`).join('; ') : 'None', cabinetsOwned.length ? 'amber' : undefined],
+          ['Cabinets they created', cabinetsCreated.length ? `${cabinetsCreated.map((c) => c.name).join(', ')} — keep working; admins take over management` : 'None'],
           ['Agents they created', removeFor ? createdAgentsLabel(agentsCreatedBy(d, removeFor.user).map((a) => a.label)) : ''],
           ['Last active', ago(removeFor?.user.lastActive ?? null, now)],
         ]}
-        body={`${cabinetsOwned.length ? 'Their cabinet becomes orphaned. Reassign it now, or leave it for an admin to handle.' : 'They lose access to every workspace in this organization.'} Agents they created belong to the organization and keep working — revoke them separately if they should stop.`}
-        secondary={cabinetsOwned.length ? { label: 'Reassign cabinet first', onClick: () => nav(`/workspaces/${cabinetsOwned[0].workspaceId}/cabinets`) } : undefined}
+        body="They lose access to every workspace in this organization. Nothing they created or did changes — tools they granted stay granted, keys and connectors they added stay — and the audit log keeps their name on it."
         confirmLabel="Remove user"
         onConfirm={() => removeFor && actions.removeUser(removeFor.user.id)}
       />
@@ -232,38 +257,110 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
   )
 }
 
+const ROLE_HINT: Record<Role, string> = {
+  Owner: 'Everything a userAdmin can do, plus renaming or deleting the organization and managing other Owners.',
+  userAdmin: 'Administers every workspace: invites people, manages stores, workspaces, agents and tools.',
+  user: 'Sees only the workspaces they’re added to and manages the cabinets they make.',
+}
+
 function ChangeRoleModal({ row, onClose }: { row: UserRow | null; onClose: () => void }) {
+  const d = useDB()
   const [role, setRole] = useState<Role>('user')
   useEffect(() => {
     if (row) setRole(row.role)
   }, [row])
+  const owner = myRole(d) === 'Owner'
+  const demoting = !!row && isDemotion(row.role, role)
+  // Who administers every workspace once this change is made. Rule 1 guarantees an Owner remains.
+  const adminsAfter = orgAdmins(d)
+    .map((u) => ({ u, r: u.id === row?.user.id ? role : u.roles[d.currentOrgId] }))
+    .filter((x) => isAdminRole(x.r))
+  const explicit = row ? orgWorkspaces(d).filter((w) => w.userIds.includes(row.user.id)).map((w) => w.name) : []
   return (
-    <Modal open={!!row} onClose={onClose} title={`Change role for ${row?.user.name}`} width={440}>
+    <Modal open={!!row} onClose={onClose} title={`Change role for ${row?.user.name}`} width={480}>
       <Segmented<Role>
         value={role}
         onChange={setRole}
         options={[
           { value: 'user', label: 'user' },
           { value: 'userAdmin', label: 'userAdmin' },
+          ...(owner ? [{ value: 'Owner' as Role, label: 'Owner' }] : []),
         ]}
       />
-      <div className="text-xs text-zinc-500">{role === 'userAdmin' ? 'Can invite people, manage stores, workspaces, agents and tools.' : 'Sees the workspaces they’re given and controls the cabinets they make.'}</div>
+      <div className="text-xs text-zinc-500">{ROLE_HINT[role]}</div>
+      {demoting && (
+        <ImpactRows
+          rows={[
+            ['Role', `${row!.role} → ${role}`, 'amber'],
+            ['Workspaces they can use', role === 'user' ? explicit.join(', ') || 'None — add them on a workspace' : 'All (org admin)', role === 'user' ? 'amber' : undefined],
+            ['Workspace admins after this', `${adminsAfter.map((x) => `${x.u.name} (${x.r})`).join(', ')} — every workspace keeps an Owner`],
+            ['Agents they created', 'Unaffected'],
+          ]}
+        />
+      )}
       <Footer>
         <Button size="lg" onClick={onClose}>
           Cancel
         </Button>
         <Button
           size="lg"
-          variant="primary"
+          variant={demoting ? 'danger' : 'primary'}
+          disabled={!row || role === row.role}
           onClick={() => {
             if (row) actions.changeRole(row.user.id, role)
             onClose()
           }}
         >
-          Change role
+          {demoting ? `Demote to ${role}` : 'Change role'}
         </Button>
       </Footer>
     </Modal>
+  )
+}
+
+/** Hands the organization to another member; the current Owner becomes a userAdmin. Owners only. */
+export function TransferOwnershipDialog({ open, to, onClose }: { open: boolean; to?: User | null; onClose: () => void }) {
+  const d = useDB()
+  const [picked, setPicked] = useState('')
+  const close = () => {
+    setPicked('')
+    onClose()
+  }
+  const candidates = d.users.filter((u) => u.id !== d.currentUserId && u.roles[d.currentOrgId] && u.status === 'active' && !u.locked)
+  const target = to ?? candidates.find((u) => u.id === picked)
+  const role = target?.roles[d.currentOrgId]
+  return (
+    <ImpactDialog
+      open={open}
+      onClose={close}
+      title={`Transfer ownership of ${org(d)?.name}?`}
+      rows={[
+        ['New Owner', target ? `${target.name} · ${role} → Owner` : 'Pick someone below'],
+        ['You', 'Owner → userAdmin', 'amber'],
+        ['You keep', 'Admin of every workspace'],
+        ['You lose', 'Renaming or deleting the organization, managing Owners', 'amber'],
+      ]}
+      body={
+        <div className="flex flex-col gap-3">
+          {!to && (
+            <Field label="New Owner">
+              <Select value={picked} onChange={(e) => setPicked(e.target.value)}>
+                <option value="">Pick a member…</option>
+                {candidates.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} · {u.roles[d.currentOrgId]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <span>Only the new Owner can give ownership back. The change is recorded in the audit log.</span>
+        </div>
+      }
+      confirmLabel="Transfer ownership"
+      confirmDisabled={!target}
+      onConfirm={() => target && actions.transferOwnership(target.id)}
+    />
   )
 }
 
@@ -274,20 +371,30 @@ function AssignWorkspacesModal({ row, onClose }: { row: UserRow | null; onClose:
   useEffect(() => {
     if (row) setSel(workspaces.filter((w) => w.userIds.includes(row.user.id)).map((w) => w.id))
   }, [row]) // eslint-disable-line
+  const losing = row ? workspaces.filter((w) => w.userIds.includes(row.user.id) && !sel.includes(w.id)) : []
+  const theirCabinets = d.cabinets.filter((c) => c.ownerId === row?.user.id && losing.some((w) => w.id === c.workspaceId)).map((c) => c.name)
   return (
-    <Modal open={!!row} onClose={onClose} title={`Workspaces for ${row?.user.name}`} width={440}>
+    <Modal open={!!row} onClose={onClose} title={`Workspaces for ${row?.user.name}`} width={460}>
       <div className="flex flex-col gap-2 rounded-lg border border-edge bg-page p-3">
         {workspaces.map((w) => (
           <Checkbox key={w.id} checked={sel.includes(w.id)} onChange={(v) => setSel(v ? [...sel, w.id] : sel.filter((x) => x !== w.id))} label={w.name} />
         ))}
       </div>
+      {losing.length > 0 && (
+        <ImpactRows
+          rows={[
+            ['Loses access to', losing.map((w) => w.name).join(', '), 'amber'],
+            ['Cabinets they created there', theirCabinets.length ? `${theirCabinets.join(', ')} — keep working; admins take over management` : 'None'],
+          ]}
+        />
+      )}
       <Footer>
         <Button size="lg" onClick={onClose}>
           Cancel
         </Button>
         <Button
           size="lg"
-          variant="primary"
+          variant={losing.length ? 'danger' : 'primary'}
           onClick={() => {
             if (row) actions.setUserWorkspaces(row.user.id, sel)
             onClose()
@@ -410,7 +517,7 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
 }
 
 /** "billing-agent, docs-agent (keep working)" — agents belong to the organization. */
-export const createdAgentsLabel = (labels: string[]) => (labels.length ? `${labels.join(', ')} (keep working)` : 'None')
+export const createdAgentsLabel = (labels: string[]) => (labels.length ? `${labels.join(', ')} — unaffected; agents belong to the organization` : 'None')
 
 /** Rotating starts a 10-minute clock for a running agent, so it gets a preview first. */
 export function RotateAgentDialog({ agent, onClose, onRotated }: { agent: Agent | null; onClose: () => void; onRotated: (agent: Agent, token: string) => void }) {
@@ -709,7 +816,7 @@ export function AuditLog({ events, scopeLabel, hideWorkspaceFilter, initialExpan
       </div>
       <div className="mt-2.5 text-xs2 text-zinc-600">
         Logs kept 90 days on this plan.
-        {role === 'user' && ' You see your workspaces, your cabinets, and your own tokens’ activity.'}
+        {role === 'user' && ' You see activity in your workspaces and your own actions.'}
       </div>
     </div>
   )

@@ -21,7 +21,7 @@ import {
   visibleEvents,
 } from '../lib/store'
 import type { Invite, Role, Tool } from '../lib/types'
-import { AgentsTable, AuditLog, ImpactDialog, ListBody, UsersTable, useUserRows } from '../components/shared'
+import { AgentsTable, AuditLog, ImpactDialog, ListBody, TransferOwnershipDialog, UsersTable, useUserRows } from '../components/shared'
 import { Breadcrumb, Button, Card, Checkbox, Dot, Field, Footer, Input, Modal, PageTitle, Pill, Row, Segmented, Select, Table, Tabs } from '../components/ui'
 import { WorkspacesTable } from './workspaces'
 
@@ -102,7 +102,8 @@ export function OrgOverview() {
   const nav = useNavigate()
   const now = useNow()
   const o = org(d)!
-  const owner = d.users.find((u) => u.roles[o.id] === 'Owner')
+  const owners = d.users.filter((u) => u.roles[o.id] === 'Owner')
+  const [transferring, setTransferring] = useState(false)
   const role = me(d).roles[o.id]
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(o.name)
@@ -133,8 +134,8 @@ export function OrgOverview() {
           <Dot health={bad.length ? 'error' : unverified.length ? 'degraded' : 'healthy'} />
           {bad.length ? `${plural(bad.length, 'store')} need attention` : unverified.length ? <span className="text-amber-400">{plural(unverified.length, 'store')} without certificate verification</span> : `All ${plural(stores.length, 'store')} healthy`}
         </span>
-        <span className="text-zinc-500">Owner</span>
-        <span>{owner?.name}</span>
+        <span className="text-zinc-500">{owners.length === 1 ? 'Owner' : 'Owners'}</span>
+        <span>{owners.map((u) => u.name).join(', ')}</span>
         <span className="text-zinc-500">Created</span>
         <span>{ago(o.createdAt, now)}</span>
         <span className="text-zinc-500">Your role</span>
@@ -143,6 +144,7 @@ export function OrgOverview() {
       {role === 'Owner' && (
         <div className="mt-4 flex gap-2">
           <Button onClick={() => setRenaming(true)}>Rename organization</Button>
+          <Button onClick={() => setTransferring(true)}>Transfer ownership</Button>
           <Button variant="danger" onClick={() => setDeleting(true)}>
             Delete organization
           </Button>
@@ -170,6 +172,7 @@ export function OrgOverview() {
         </Footer>
       </Modal>
       <DeleteOrgDialog open={deleting} onClose={() => setDeleting(false)} onDeleted={() => nav('/')} />
+      <TransferOwnershipDialog open={transferring} onClose={() => setTransferring(false)} />
     </div>
   )
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { initials, plural } from '../lib/format'
-import { actions, agentById, isAdmin, keyById, liveTool, me, orgTools, toolById, useDB, userById } from '../lib/store'
+import { actions, agentById, hasWorkspaceAccess, isAdmin, keyById, liveTool, me, orgTools, toolById, useDB, userById, workspacePeople } from '../lib/store'
 import type { Cabinet, PlayerRef, Workspace } from '../lib/types'
-import { ImpactDialog } from '../components/shared'
+import { ImpactDialog, ImpactRows } from '../components/shared'
 import { SECRET_LINE, SecretField } from '../components/keyhole'
 import { Avatar, Button, Checkbox, Dot, Field, Footer, Input, Modal, Pill, Radio, Select } from '../components/ui'
 import { useWorkspace } from './workspaces'
@@ -45,8 +45,11 @@ export function CabinetsTab() {
       ) : (
         <div className="mt-4 grid grid-cols-3 gap-4">
           {cabinets.map((c) => {
-            const owner = userById(d, c.ownerId)
-            const mine = c.ownerId === d.currentUserId
+            // The creator manages a cabinet while they can use the workspace. Once they can't, it keeps
+            // working exactly as before and management falls to the workspace admins (the org admins).
+            const creator = userById(d, c.ownerId)
+            const creatorHere = hasWorkspaceAccess(d, c.ownerId, w.id)
+            const mine = creatorHere && c.ownerId === d.currentUserId
             return (
               <div key={c.id} className="flex flex-col gap-3 rounded-[10px] border border-edge bg-panel p-[18px]">
                 <div className="flex items-center gap-2">
@@ -57,29 +60,34 @@ export function CabinetsTab() {
                       Locked
                     </Pill>
                   )}
-                  {!owner && <Pill tone="amber">Orphaned</Pill>}
                 </div>
-                {owner ? (
+                {creator && creatorHere ? (
                   <div className="flex items-center gap-2">
-                    <Avatar initials={initials(owner.name)} />
-                    <span className="text-xs text-zinc-500">{mine ? `${owner.name} (you)` : owner.name}</span>
+                    <Avatar initials={initials(creator.name)} />
+                    <span className="text-xs text-zinc-500">{mine ? `${creator.name} (you)` : creator.name}</span>
                   </div>
                 ) : (
-                  <div className="text-xs text-zinc-500">Owner left the organization</div>
+                  <div className="text-xs text-zinc-500">
+                    {creator && <div>Created by {creator.name}</div>}
+                    Creator left — still working; admins manage it
+                  </div>
                 )}
                 <div className="text-xs text-zinc-400">
                   {plural(c.keyIds.length, 'key')} · {plural(c.tools.length, 'tool')} · {lockSummary(c)}
                 </div>
-                {!owner && admin ? (
+                {!creatorHere && admin ? (
                   <div className="mt-auto flex gap-3">
                     <button className="text-sm2 text-brass hover:text-brass-light" onClick={() => setReassign(c)}>
                       Reassign
+                    </button>
+                    <button className="text-sm2 text-brass hover:text-brass-light" onClick={() => setLockFor(c)}>
+                      Change lock
                     </button>
                     <button className="text-sm2 text-red-400 hover:text-red-300" onClick={() => setDeleting(c)}>
                       Delete
                     </button>
                   </div>
-                ) : mine || (admin && owner) ? (
+                ) : mine || admin ? (
                   <div className="mt-auto flex gap-3">
                     {mine && (
                       <button className="text-sm2 text-brass hover:text-brass-light" onClick={() => setLockFor(c)}>
@@ -103,9 +111,9 @@ export function CabinetsTab() {
         <Field label="New owner">
           <Select value={newOwner} onChange={(e) => setNewOwner(e.target.value)}>
             <option value="">Pick a person on this workspace…</option>
-            {w.userIds.map((id) => (
-              <option key={id} value={id}>
-                {userById(d, id)?.name}
+            {workspacePeople(d, w).map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
               </option>
             ))}
           </Select>
@@ -149,6 +157,12 @@ export function CabinetsTab() {
   )
 }
 
+/** Everyone who can currently use the workspace: its people (members plus org admins) and active agents. */
+const workspacePlayers = (d: ReturnType<typeof useDB>, ws: Workspace): PlayerRef[] => [
+  ...workspacePeople(d, ws).map((u) => ({ kind: 'user' as const, id: u.id })),
+  ...ws.agentIds.filter((id) => agentById(d, id)?.status === 'active').map((id) => ({ kind: 'agent' as const, id })),
+]
+
 /* ------------------------------------------------------------------ */
 /* Access chooser — "Everyone" or "Only these players" (people + agents) */
 /* ------------------------------------------------------------------ */
@@ -156,7 +170,7 @@ function AccessPicker({ ws, value, onChange }: { ws: Workspace; value: 'everyone
   const d = useDB()
   const list = value === 'everyone' ? [] : value
   const options: (PlayerRef & { label: string })[] = [
-    ...ws.userIds.map((id) => ({ kind: 'user' as const, id, label: userById(d, id)?.name ?? id })),
+    ...workspacePeople(d, ws).map((u) => ({ kind: 'user' as const, id: u.id, label: u.name })),
     ...ws.agentIds.filter((id) => agentById(d, id)?.status === 'active').map((id) => ({ kind: 'agent' as const, id, label: agentById(d, id)!.label })),
   ].filter((o) => !list.some((p) => p.kind === o.kind && p.id === o.id))
   const label = (p: PlayerRef) => (p.kind === 'user' ? userById(d, p.id)?.name : agentById(d, p.id)?.label)
@@ -213,20 +227,27 @@ function AccessPicker({ ws, value, onChange }: { ws: Workspace; value: 'everyone
 }
 
 function ChangeLockModal({ cabinet, onClose, ws }: { cabinet: Cabinet | null; onClose: () => void; ws: Workspace }) {
+  const d = useDB()
   const [access, setAccess] = useState<Cabinet['access']>('everyone')
   useEffect(() => {
     if (cabinet) setAccess(cabinet.access)
   }, [cabinet])
+  // Narrowing the lock list takes the cabinet away from someone, so the change is previewed.
+  const name = (p: PlayerRef) => (p.kind === 'user' ? userById(d, p.id)?.name : agentById(d, p.id)?.label) ?? p.id
+  const before = cabinet ? (cabinet.access === 'everyone' ? workspacePlayers(d, ws) : cabinet.access) : []
+  const after = access === 'everyone' ? workspacePlayers(d, ws) : access
+  const losing = before.filter((p) => !after.some((x) => x.kind === p.kind && x.id === p.id))
   return (
     <Modal open={!!cabinet} onClose={onClose} width={520} title={`Who can use ${cabinet?.name}?`}>
       <AccessPicker ws={ws} value={access} onChange={setAccess} />
+      {losing.length > 0 && <ImpactRows rows={[['Lose use of this cabinet', losing.map(name).join(', '), 'amber']]} />}
       <Footer>
         <Button size="lg" onClick={onClose}>
           Cancel
         </Button>
         <Button
           size="lg"
-          variant="primary"
+          variant={losing.length ? 'danger' : 'primary'}
           disabled={Array.isArray(access) && !access.length}
           onClick={() => {
             actions.setCabinetAccess(cabinet!.id, access)

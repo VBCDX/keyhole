@@ -95,6 +95,39 @@ export const isAdmin = (d: DB) => {
   return r === 'Owner' || r === 'userAdmin'
 }
 export const org = (d: DB, id = d.currentOrgId) => d.orgs.find((o) => o.id === id)
+
+/* Permission model (README › Permission model). Roles are checked when an action happens. */
+const RANK: Record<Role, number> = { user: 0, userAdmin: 1, Owner: 2 }
+export const isAdminRole = (r: Role | null | undefined) => r === 'Owner' || r === 'userAdmin'
+/** Owners and userAdmins: they administer every workspace in the organization (rule 1). */
+export const orgAdmins = (d: DB) => d.users.filter((u) => isAdminRole(u.roles[d.currentOrgId]))
+export const orgOwners = (d: DB) => d.users.filter((u) => u.roles[d.currentOrgId] === 'Owner')
+export const isLastOwner = (d: DB, userId: string) => {
+  const owners = orgOwners(d)
+  return owners.length === 1 && owners[0].id === userId
+}
+export const isDemotion = (from: Role, to: Role) => RANK[to] < RANK[from]
+/**
+ * Whether the current person may change this member's role, suspend or remove them:
+ * admins manage members, only Owners manage Owners, and the last Owner is never removed or demoted.
+ */
+export function canManageMember(d: DB, userId: string) {
+  const r = d.users.find((u) => u.id === userId)?.roles[d.currentOrgId]
+  if (!isAdmin(d) || !r || userId === d.currentUserId) return false
+  return r !== 'Owner' || myRole(d) === 'Owner'
+}
+/**
+ * Whether a person can use a workspace right now. Org admins are every workspace's admins by default
+ * (rule 2), so they don't need to be listed on it.
+ */
+export function hasWorkspaceAccess(d: DB, userId: string | null | undefined, wsId: string) {
+  const u = d.users.find((x) => x.id === userId)
+  const w = d.workspaces.find((x) => x.id === wsId)
+  const r = w && u?.roles[w.orgId]
+  return !!r && (isAdminRole(r) || w.userIds.includes(u.id))
+}
+/** Everyone who can use a workspace: its members plus the org admins. */
+export const workspacePeople = (d: DB, w: Workspace) => d.users.filter((u) => hasWorkspaceAccess(d, u.id, w.id))
 export const myOrgs = (d: DB) => d.orgs.filter((o) => me(d)?.roles[o.id])
 export const orgUsers = (d: DB, orgId = d.currentOrgId) =>
   d.users.filter((u) => u.roles[orgId] || d.invites.some((i) => i.orgId === orgId && i.email === u.email))
@@ -117,15 +150,14 @@ export const canSeeWorkspace = (d: DB, wsId: string) => orgWorkspaces(d).some((w
 /**
  * The one activity scope every log and feed uses. Admins see the whole
  * organization; the `user` role sees their workspaces (which covers their
- * cabinets), what they did themselves, and their own agents' activity.
+ * cabinets) and what they did themselves. Creating an agent doesn't make it
+ * yours (rule 3), so "created by" never widens what someone sees.
  */
 export function visibleEvents(d: DB) {
   const all = orgEvents(d)
   if (myRole(d) !== 'user') return all
   const mine = new Set(orgWorkspaces(d).map((w) => w.id))
-  const myName = me(d)?.name
-  const myAgents = new Set(d.agents.filter((a) => a.orgId === d.currentOrgId && a.createdBy === myName).map((a) => a.id))
-  return all.filter((e) => (e.workspaceId && mine.has(e.workspaceId)) || e.actorId === d.currentUserId || (e.actorId && myAgents.has(e.actorId)))
+  return all.filter((e) => (e.workspaceId && mine.has(e.workspaceId)) || e.actorId === d.currentUserId)
 }
 
 export const userById = (d: DB, id: string | null | undefined) => d.users.find((u) => u.id === id)
@@ -152,7 +184,7 @@ export const keyUsage = (d: DB, keyId: string) => {
   return uses
 }
 
-/** Agents a person created that still work. They belong to the organization, not to the person. */
+/** Agents a person created that still work. "Created by" is for observability only: agents belong to the organization. */
 export const agentsCreatedBy = (d: DB, u: User, orgIds = [d.currentOrgId]) =>
   d.agents.filter((a) => orgIds.includes(a.orgId) && a.createdBy === u.name && a.status !== 'revoked')
 
@@ -417,6 +449,7 @@ export const actions = {
     update((d) => {
       const t = toolById(d, id)
       if (!t?.published) return
+      if (t.status === 'draft') log(d, { object: `Discarded draft v${t.version} of ${t.displayName}`, detail: [['Version', `draft v${t.version} → v${t.published.version}`]] })
       const { version, ...snap } = t.published
       Object.assign(t, structuredClone(snap))
       t.version = version
@@ -424,7 +457,7 @@ export const actions = {
       t.updatedAt = Date.now()
     })
   },
-  publishTool(id: string) {
+  publishTool(id: string, changes: string[] = []) {
     update((d) => {
       const t = toolById(d, id)
       if (!t) return
@@ -444,7 +477,10 @@ export const actions = {
       const { internalName, displayName, description, baseUrl, actions: acts, slots, perMinute, timeoutMs } = t
       t.published = structuredClone({ internalName, displayName, description, baseUrl, actions: acts, slots, perMinute, timeoutMs, version: t.version })
       t.updatedAt = Date.now()
-      log(d, { object: `Published ${t.displayName} v${t.version}` })
+      log(d, {
+        object: `Published ${t.displayName} v${t.version}`,
+        detail: [['Version', before ? `v${before.version} → v${t.version}` : `v${t.version} (first version)`], ...(changes.length ? [['Changes', changes.join('; ')] as [string, string]] : [])],
+      })
     })
   },
   deleteTool(id: string) {
@@ -549,8 +585,9 @@ export const actions = {
     update((d) => {
       const w = wsById(d, wsId)
       if (!w) return
+      if (w[kind] === on) return
       w[kind] = on
-      log(d, { object: `Turned ${kind.toUpperCase()} ${on ? 'on' : 'off'} for ${w.name}`, workspaceId: wsId })
+      log(d, { object: `Turned ${kind.toUpperCase()} ${on ? 'on' : 'off'} for ${w.name}`, workspaceId: wsId, detail: [[kind.toUpperCase(), on ? 'Off → On' : 'On → Off']] })
     })
   },
   setWorkspacePlayers(wsId: string, userIds: string[], agentIds: string[]) {
@@ -613,7 +650,7 @@ export const actions = {
       }
       d.agents.push(agent)
       for (const w of d.workspaces) if (a.workspaceIds.includes(w.id) && !w.agentIds.includes(id)) w.agentIds.push(id)
-      log(d, { object: `Created agent ${a.label}` })
+      log(d, { object: `Created agent ${a.label}`, detail: [['Workspaces', a.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None']] })
     })
     return { id, token }
   },
@@ -640,9 +677,9 @@ export const actions = {
   setAgentStatus(id: string, status: 'active' | 'suspended') {
     update((d) => {
       const a = agentById(d, id)
-      if (!a || a.status === 'revoked') return
+      if (!a || a.status === 'revoked' || a.status === status) return
+      log(d, { object: `${status === 'suspended' ? 'Suspended' : 'Resumed'} ${a.label}`, detail: [['Status', `${a.status} → ${status}`]] })
       a.status = status
-      log(d, { object: `${status === 'suspended' ? 'Suspended' : 'Resumed'} ${a.label}` })
     })
   },
   revokeAgent(id: string) {
@@ -735,9 +772,13 @@ export const actions = {
   changeRole(userId: string, role: Role) {
     update((d) => {
       const u = userById(d, userId)
-      if (!u) return
+      // An Owner may also step down themselves, as long as another Owner remains.
+      const selfOwner = userId === d.currentUserId && myRole(d) === 'Owner'
+      if (!u || (!canManageMember(d, userId) && !selfOwner)) return
       const before = u.roles[d.currentOrgId]
       if (before === role) return
+      // Only Owners make Owners, and the last Owner can't be demoted (transfer ownership instead).
+      if ((role === 'Owner' && myRole(d) !== 'Owner') || (before === 'Owner' && isLastOwner(d, userId))) return
       u.roles[d.currentOrgId] = role
       log(d, { object: `Changed ${u.name}'s role to ${role}`, detail: [['Role', `${before} → ${role}`]] })
     })
@@ -745,9 +786,29 @@ export const actions = {
   setUserSuspended(userId: string, suspended: boolean) {
     update((d) => {
       const u = userById(d, userId)
-      if (!u) return
-      u.status = suspended ? 'suspended' : 'active'
-      log(d, { object: `${suspended ? 'Suspended' : 'Reactivated'} ${u.name}` })
+      if (!u || !canManageMember(d, userId) || (suspended && isLastOwner(d, userId))) return
+      const next = suspended ? 'suspended' : 'active'
+      if (u.status === next) return
+      log(d, { object: `${suspended ? 'Suspended' : 'Reactivated'} ${u.name}`, detail: [['Status', `${u.status} → ${next}`]] })
+      u.status = next
+    })
+  },
+  /** The current Owner hands ownership to another member and becomes a userAdmin. */
+  transferOwnership(toUserId: string) {
+    update((d) => {
+      const from = me(d)
+      const to = userById(d, toUserId)
+      const before = to?.roles[d.currentOrgId]
+      if (!from || myRole(d) !== 'Owner' || !to || !before || to.id === from.id || to.status !== 'active' || to.locked) return
+      to.roles[d.currentOrgId] = 'Owner'
+      from.roles[d.currentOrgId] = 'userAdmin'
+      log(d, {
+        object: `Transferred ownership of ${org(d)?.name} to ${to.name}`,
+        detail: [
+          [to.name, `${before} → Owner`],
+          [from.name, 'Owner → userAdmin'],
+        ],
+      })
     })
   },
   setUserWorkspaces(userId: string, wsIds: string[]) {
@@ -767,18 +828,28 @@ export const actions = {
       }
     })
   },
+  /**
+   * Removing someone only stops what they can do next (rule 4). Nothing they created or did changes:
+   * agents keep working, grants and keys stay, cabinets keep their keys, tools and lock list (admins
+   * take over managing them), and the audit log keeps their name. Their Keyhole account stays too.
+   */
   removeUser(userId: string) {
     update((d) => {
       const u = userById(d, userId)
-      if (!u) return
+      if (!u || !canManageMember(d, userId) || isLastOwner(d, userId)) return
+      const role = u.roles[d.currentOrgId]
+      const lost = d.workspaces.filter((w) => w.orgId === d.currentOrgId && w.userIds.includes(userId)).map((w) => w.name)
       delete u.roles[d.currentOrgId]
-      for (const w of d.workspaces) w.userIds = w.userIds.filter((x) => x !== userId)
-      for (const c of d.cabinets) {
-        if (c.ownerId === userId) c.ownerId = null
-        if (Array.isArray(c.access)) c.access = c.access.filter((p) => !(p.kind === 'user' && p.id === userId))
-      }
-      if (!Object.keys(u.roles).length) d.users = d.users.filter((x) => x.id !== userId)
-      log(d, { object: `Removed ${u.name} from the organization` })
+      for (const w of d.workspaces) if (w.orgId === d.currentOrgId) w.userIds = w.userIds.filter((x) => x !== userId)
+      log(d, {
+        object: `Removed ${u.name} from the organization`,
+        detail: [
+          ['Role', `${role} → removed`],
+          ['Workspaces', isAdminRole(role) ? 'All (as an org admin)' : lost.join(', ') || 'None'],
+          ['Agents they created', 'Unaffected'],
+          ['Cabinets they created', 'Keep working; admins manage them'],
+        ],
+      })
     })
   },
 
@@ -817,8 +888,9 @@ export const actions = {
     update((d) => {
       const c = d.cabinets.find((x) => x.id === id)
       if (!c) return
+      const before = userById(d, c.ownerId)?.name ?? 'Nobody'
       c.ownerId = ownerId
-      log(d, { object: `Reassigned ${c.name} to ${userById(d, ownerId)?.name}`, workspaceId: c.workspaceId })
+      log(d, { object: `Reassigned ${c.name} to ${userById(d, ownerId)?.name}`, workspaceId: c.workspaceId, detail: [['Managed by', `${before} → ${userById(d, ownerId)?.name}`]] })
     })
   },
   deleteCabinet(id: string) {
@@ -836,6 +908,8 @@ export const actions = {
     const id = uid('cn')
     update((d) => {
       d.connectors.push({ id, orgId: d.currentOrgId, name: c.name, workspaceId: c.workspaceId, version: '1.4.2', health: 'healthy', lastSeen: Date.now(), ip: `10.2.14.${20 + Math.floor(Math.random() * 60)}`, enrolledBy: me(d).name.replace(/(\w+) (\w).*/, '$1 $2.'), enrolledAt: Date.now() })
+      // The person who issued the enrollment token is attributed; the heartbeat is the connector's own.
+      log(d, { object: `Enrolled connector ${c.name} in ${wsById(d, c.workspaceId)?.name ?? 'a workspace'}`, workspaceId: c.workspaceId })
       log(d, { type: 'connection', severity: 'ok', actor: c.name, actorKind: 'connector', object: 'Connector enrolled', workspaceId: c.workspaceId, result: 'First heartbeat' })
     })
     return id
@@ -843,7 +917,9 @@ export const actions = {
   renameConnector(id: string, name: string) {
     update((d) => {
       const c = d.connectors.find((x) => x.id === id)
-      if (c && name.trim()) c.name = name.trim()
+      if (!c || !name.trim() || name.trim() === c.name) return
+      log(d, { object: `Renamed connector ${c.name} → ${name.trim()}`, workspaceId: c.workspaceId })
+      c.name = name.trim()
     })
   },
   revokeConnector(id: string) {

@@ -372,7 +372,7 @@ export function SupportConsole() {
             {confirm === 'lock' && (
               <div className="flex justify-between gap-6">
                 <span className="text-zinc-500">Agents they created</span>
-                <span className="text-right">{agentCount ? `${agentCount} · keep working (they belong to the organization)` : 'None'}</span>
+                <span className="text-right">{agentCount ? `${agentCount} — unaffected; agents belong to the organization` : 'None'}</span>
               </div>
             )}
           </div>

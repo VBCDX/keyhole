@@ -51,6 +51,10 @@ export interface SecretStore {
   auth?: 'approle' | 'kubernetes' | 'token'
   path?: string
   cacheSeconds?: number
+  /** File name of the uploaded CA certificate (the certificate itself isn't kept in the mock). */
+  certName?: string | null
+  /** TLS certificate verification turned off. Traffic to the vault can be intercepted. */
+  skipVerify?: boolean
 }
 
 export interface Key {

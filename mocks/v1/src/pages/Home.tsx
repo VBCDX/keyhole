@@ -98,6 +98,7 @@ export function Home() {
   const expiring = orgAgents(d).filter((a) => a.status !== 'revoked' && expiringSoon(a.expiresAt, now) && (!scoped || a.workspaceIds.some((id) => myWs.has(id)))).length
   const stores = orgStores(d)
   const unhealthyStores = stores.filter((s) => s.health !== 'healthy')
+  const unverified = stores.filter((s) => s.health === 'healthy' && s.skipVerify)
   const connectors = orgConnectors(d)
   const badConn = connectors.filter((c) => c.health !== 'healthy')
   const traffic = events.filter((e) => ['request', 'blocked', 'error', 'verification'].includes(e.type))
@@ -131,9 +132,9 @@ export function Home() {
         </Stat>
         <Stat label={stores.length > 1 ? 'Stores' : 'Store health'}>
           <Link to={`/orgs/${d.currentOrgId}/stores`} className="mt-3 flex items-center gap-2">
-            <Dot health={unhealthyStores.length ? 'error' : 'healthy'} />
-            <span className={cx('text-[13px]', unhealthyStores.length ? 'text-red-400' : 'text-zinc-300')}>
-              {stores.length === 1 && !unhealthyStores.length ? 'Local store healthy' : unhealthyStores.length ? `${unhealthyStores.length} unhealthy` : `${stores.length} healthy`}
+            <Dot health={unhealthyStores.length ? 'error' : unverified.length ? 'degraded' : 'healthy'} />
+            <span className={cx('text-[13px]', unhealthyStores.length ? 'text-red-400' : unverified.length ? 'text-amber-400' : 'text-zinc-300')}>
+              {unhealthyStores.length ? `${unhealthyStores.length} unhealthy` : unverified.length ? `${unverified.length} with unverified TLS` : stores.length === 1 ? 'Local store healthy' : `${stores.length} healthy`}
             </span>
           </Link>
         </Stat>

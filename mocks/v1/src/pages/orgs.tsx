@@ -109,6 +109,7 @@ export function OrgOverview() {
   const [deleting, setDeleting] = useState(false)
   const stores = orgStores(d)
   const bad = stores.filter((s) => s.health !== 'healthy')
+  const unverified = stores.filter((s) => s.health === 'healthy' && s.skipVerify)
   const counts: [string, number, string][] = [
     ['Workspaces', orgWorkspaces(d).length, 'workspaces'],
     ['Members', d.users.filter((u) => u.roles[o.id]).length, 'members'],
@@ -129,8 +130,8 @@ export function OrgOverview() {
       <Card className="mt-4 grid grid-cols-[160px_1fr] gap-x-3 gap-y-2.5 p-5 text-[13px]">
         <span className="text-zinc-500">Health</span>
         <span className="flex items-center gap-2">
-          <Dot health={bad.length ? 'error' : 'healthy'} />
-          {bad.length ? `${plural(bad.length, 'store')} need attention` : `All ${plural(stores.length, 'store')} healthy`}
+          <Dot health={bad.length ? 'error' : unverified.length ? 'degraded' : 'healthy'} />
+          {bad.length ? `${plural(bad.length, 'store')} need attention` : unverified.length ? <span className="text-amber-400">{plural(unverified.length, 'store')} without certificate verification</span> : `All ${plural(stores.length, 'store')} healthy`}
         </span>
         <span className="text-zinc-500">Owner</span>
         <span>{owner?.name}</span>

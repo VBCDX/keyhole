@@ -332,9 +332,26 @@ export const actions = {
       d.stores.push({ ...s, id, orgId: d.currentOrgId, type: 'openbao', health: 'healthy', checkedAt: Date.now() })
       for (const n of keyNames)
         d.keys.push({ id: uid('k'), orgId: d.currentOrgId, name: n, storeId: id, length: 40, createdAt: Date.now(), rotatedAt: null, expiresAt: null, rotationReminderDays: null, notes: '' })
-      log(d, { object: `Connected OpenBao store ${s.name}`, result: 'Healthy' })
+      log(d, {
+        object: `Connected OpenBao store ${s.name}`,
+        severity: s.skipVerify ? 'warn' : 'info',
+        result: s.skipVerify ? 'Healthy · TLS not verified' : 'Healthy',
+        detail: [['Certificate', s.skipVerify ? 'Not verified — certificate verification skipped' : (s.certName ?? '—')]],
+      })
     })
     return id
+  },
+  /** Saves edits made while re-testing a store, with a before → after for each change. */
+  updateOpenBao(id: string, patch: Partial<SecretStore>, changes: [string, string][]) {
+    update((d) => {
+      const s = storeById(d, id)
+      if (!s) return
+      Object.assign(s, patch)
+      s.health = 'healthy'
+      s.checkedAt = Date.now()
+      if (changes.length)
+        log(d, { object: `Updated OpenBao store ${s.name}`, severity: s.skipVerify ? 'warn' : 'info', result: s.skipVerify ? 'Healthy · TLS not verified' : 'Healthy', detail: changes })
+    })
   },
   removeStore(id: string) {
     update((d) => {

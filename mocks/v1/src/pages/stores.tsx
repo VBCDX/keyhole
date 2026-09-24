@@ -14,6 +14,8 @@ function storeHealth(d: ReturnType<typeof useDB>, s: SecretStore) {
   if (s.health === 'unreachable') return { dot: 'error' as const, text: 'Can’t reach', tone: 'text-red-400' }
   if (s.health === 'denied') return { dot: 'error' as const, text: 'Not allowed', tone: 'text-red-400' }
   if (conn?.health === 'offline') return { dot: 'degraded' as const, text: `Connector ${conn.name} offline`, tone: 'text-amber-400' }
+  // Reachable, but anyone on the path could read the traffic — never shown as plain healthy.
+  if (s.skipVerify) return { dot: 'degraded' as const, text: 'Unverified TLS', tone: 'text-amber-400' }
   return { dot: 'healthy' as const, text: '', tone: '' }
 }
 
@@ -269,6 +271,19 @@ export function StoreDetail() {
           <span className="font-mono text-xs">{s.path}</span>
           <span className="text-zinc-500">Cache values for</span>
           <span>{s.cacheSeconds} seconds</span>
+          <span className="text-zinc-500">Certificate</span>
+          {s.skipVerify ? (
+            <span className="flex items-center gap-3">
+              <span className="font-semibold text-red-400">Not verified — traffic can be intercepted</span>
+              {admin && (
+                <button type="button" className="text-brass hover:text-brass-light" onClick={() => nav(`/orgs/${orgId}/stores/connect-openbao?edit=${s.id}&step=4`)}>
+                  Upload certificate
+                </button>
+              )}
+            </span>
+          ) : (
+            <span className="font-mono text-xs">{s.certName ?? '—'}</span>
+          )}
         </div>
       )}
 

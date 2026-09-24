@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { EGRESS_IPS } from '../lib/catalog'
-import { actions, org, orgConnectors, storeById, update, useDB } from '../lib/store'
+import { actions, org, orgConnectors, storeById, useDB } from '../lib/store'
 import { EnrollPanel } from '../components/EnrollPanel'
 import { CopyChip, KeyholeIcon, SECRET_LINE, SecretField } from '../components/keyhole'
 import { Breadcrumb, Button, Callout, Dot, Field, Footer, Input, OptionCard, Pill, Segmented, Select, SlideOver, Toggle, cx } from '../components/ui'
 
 const STEPS = ['Basics', 'How Keyhole reaches it', 'How Keyhole signs in', 'What Keyhole may read', 'Certificate', 'Test connection']
 type Outcome = 'sealed' | 'denied' | 'unreachable' | 'ok'
+const AUTH_LABEL = { approle: 'AppRole', kubernetes: 'Kubernetes', token: 'Token' } as const
 
 export function OpenBaoWizard() {
   const d = useDB()
@@ -16,7 +17,7 @@ export function OpenBaoWizard() {
   const [params] = useSearchParams()
   const editing = params.get('edit') ? storeById(d, params.get('edit')!) : null
 
-  const [step, setStep] = useState(editing ? 5 : 0)
+  const [step, setStep] = useState(editing ? Math.min(5, Number(params.get('step') ?? 5)) : 0)
   const [maxStep, setMaxStep] = useState(editing ? 5 : 0)
   const [name, setName] = useState(editing?.name ?? 'Payments vault')
   const [address, setAddress] = useState(editing?.address ?? 'https://bao.acme.internal:8200')
@@ -29,14 +30,20 @@ export function OpenBaoWizard() {
   const [secretIdLen, setSecretIdLen] = useState(editing ? 20 : 0)
   const [k8sRole, setK8sRole] = useState('keyhole-reader')
   const [tokenLen, setTokenLen] = useState(0)
+  /** In edit mode: new sign-in credentials were pasted (their values are never known here). */
+  const [credsReplaced, setCredsReplaced] = useState(false)
+  const secretLen = (set: (n: number) => void) => (n: number) => {
+    set(n)
+    setCredsReplaced(true)
+  }
   const [path, setPath] = useState(editing?.path ?? 'secret/data/payments/')
   const [cache, setCache] = useState(String(editing?.cacheSeconds ?? 60))
-  const [cert, setCert] = useState<string | null>(editing ? 'vault-ca.pem' : null)
-  const [showSkip, setShowSkip] = useState(false)
-  const [skipVerify, setSkipVerify] = useState(false)
+  const [cert, setCert] = useState<string | null>(editing?.certName ?? null)
+  const [showSkip, setShowSkip] = useState(!!editing?.skipVerify)
+  const [skipVerify, setSkipVerify] = useState(!!editing?.skipVerify)
   const [attempts, setAttempts] = useState(0)
   const [testing, setTesting] = useState(false)
-  const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const [result, setResult] = useState<{ outcome: Outcome; config: string } | null>(null)
   const [showPolicy, setShowPolicy] = useState(false)
 
   const go = (n: number) => {
@@ -45,10 +52,15 @@ export function OpenBaoWizard() {
   }
 
   const authOk = auth === 'approle' ? roleIdLen > 0 && secretIdLen > 0 : auth === 'kubernetes' ? !!k8sRole.trim() : tokenLen > 0
+  // Kubernetes sign-in uses the connector's service account, so it can't work over the public route.
+  const k8sPublic = auth === 'kubernetes' && route === 'public'
+  // A test result only counts for the exact settings it was run with; any edit asks for a new test.
+  const config = JSON.stringify([name.trim(), address, route, connectorId, auth, k8sRole, path, cache, cert, skipVerify, credsReplaced])
+  const outcome = result && result.config === config ? result.outcome : null
   const canContinue = [
     !!name.trim() && /^https?:\/\/\S+$/.test(address),
-    route === 'public' || !!connectorId,
-    authOk,
+    route === 'public' ? !(k8sPublic && maxStep >= 2) : !!connectorId,
+    authOk && !k8sPublic,
     !!path.trim() && Number(cache) >= 0,
     !!cert || skipVerify,
     outcome === 'ok',
@@ -56,7 +68,7 @@ export function OpenBaoWizard() {
 
   const runTest = () => {
     setTesting(true)
-    setOutcome(null)
+    setResult(null)
     window.setTimeout(() => {
       const chosen = connectors.find((c) => c.id === connectorId)
       let o: Outcome
@@ -66,7 +78,7 @@ export function OpenBaoWizard() {
       else if (attempts === 0 && !editing) o = 'sealed'
       else o = 'ok'
       setAttempts((a) => a + 1)
-      setOutcome(o)
+      setResult({ outcome: o, config })
       setTesting(false)
     }, 1300)
   }
@@ -74,19 +86,34 @@ export function OpenBaoWizard() {
   const seg = path.replace(/\/$/, '').split('/').pop() || 'app'
   const keyNames = [`${seg}/api_key`, `${seg}/webhook_secret`, `${seg}/refund_key`, `${seg}/ledger_token`]
 
+  const settings = { name: name.trim(), address, route: route === 'public' ? 'public' : connectorId, auth, path, cacheSeconds: Number(cache), certName: skipVerify ? null : cert, skipVerify }
+  const routeLabel = (r?: string) => (r === 'public' ? 'Internet' : `Connector ${connectors.find((c) => c.id === r)?.name ?? '(revoked)'}`)
+  const certLabel = (c?: string | null, skip?: boolean) => (skip ? 'Not verified' : (c ?? '—'))
+  // Edit mode: what the tested settings change about the saved store.
+  const changes: [string, string][] = !editing
+    ? []
+    : (
+        [
+          ['Name', editing.name, settings.name],
+          ['Vault address', editing.address, address],
+          ['Route', routeLabel(editing.route), routeLabel(settings.route)],
+          ['Signs in with', AUTH_LABEL[editing.auth ?? 'approle'], AUTH_LABEL[auth]],
+          ['Reads from', editing.path, path],
+          ['Cache', `${editing.cacheSeconds} s`, `${settings.cacheSeconds} s`],
+          ['Certificate', certLabel(editing.certName, editing.skipVerify), certLabel(settings.certName, skipVerify)],
+        ] as [string, string | undefined, string][]
+      )
+        .filter(([, a, b]) => a !== b)
+        .map(([k, a, b]): [string, string] => [k, `${a ?? '—'} → ${b}`])
+        .concat(credsReplaced ? [['Sign-in credentials', 'Replaced']] : [])
+
   const finish = () => {
     if (editing) {
-      update((dd) => {
-        const s = storeById(dd, editing.id)
-        if (s) {
-          s.health = 'healthy'
-          s.checkedAt = Date.now()
-        }
-      })
+      actions.updateOpenBao(editing.id, settings, changes)
       nav(`/orgs/${orgId}/stores/${editing.id}`)
       return
     }
-    actions.addOpenBao({ name: name.trim(), address, route: route === 'public' ? 'public' : connectorId, auth, path, cacheSeconds: Number(cache) }, keyNames)
+    actions.addOpenBao(settings, keyNames)
     nav(`/orgs/${orgId}/stores`)
   }
 
@@ -137,6 +164,7 @@ export function OpenBaoWizard() {
                   </div>
                 )}
               </OptionCard>
+              {route === 'public' && k8sPublic && maxStep >= 2 && <Callout tone="amber">Kubernetes sign-in only works through a Keyhole connector. Pick a connector here, or choose another sign-in method on the next step.</Callout>}
               <OptionCard name="route" checked={route === 'connector'} onSelect={() => setRoute('connector')} title="Through a Keyhole connector">
                 {route === 'connector' ? (
                   <>
@@ -196,10 +224,10 @@ export function OpenBaoWizard() {
               {auth === 'approle' && (
                 <>
                   <Field label="Role ID">
-                    <SecretField onLength={setRoleIdLen} placeholder={roleIdLen ? '••••••••••••••••' : 'Paste the role ID'} />
+                    <SecretField onLength={secretLen(setRoleIdLen)} placeholder={roleIdLen ? '••••••••••••••••' : 'Paste the role ID'} />
                   </Field>
                   <Field label="Secret ID" hint={SECRET_LINE}>
-                    <SecretField onLength={setSecretIdLen} placeholder={secretIdLen ? '••••••••••••••••••••' : 'Paste the secret ID'} />
+                    <SecretField onLength={secretLen(setSecretIdLen)} placeholder={secretIdLen ? '••••••••••••••••••••' : 'Paste the secret ID'} />
                   </Field>
                 </>
               )}
@@ -208,13 +236,29 @@ export function OpenBaoWizard() {
                   <Field label="Role" hint="The OpenBao Kubernetes auth role Keyhole signs in as.">
                     <Input mono value={k8sRole} onChange={(e) => setK8sRole(e.target.value)} />
                   </Field>
-                  <Callout tone="neutral">Keyhole signs in with the connector’s service-account token, so this works only through a Keyhole connector running in your cluster.</Callout>
+                  {k8sPublic ? (
+                    <Callout tone="amber">
+                      Keyhole signs in with the connector’s service-account token, so this works only through a Keyhole connector running in your cluster. This store is set to reach the vault over the internet.{' '}
+                      <button
+                        type="button"
+                        className="text-brass hover:text-brass-light"
+                        onClick={() => {
+                          setRoute('connector')
+                          go(1)
+                        }}
+                      >
+                        Use a connector instead
+                      </button>
+                    </Callout>
+                  ) : (
+                    <Callout tone="neutral">Keyhole signs in with the connector’s service-account token, so this works only through a Keyhole connector running in your cluster.</Callout>
+                  )}
                 </>
               )}
               {auth === 'token' && (
                 <>
                   <Field label="Token" hint={SECRET_LINE}>
-                    <SecretField onLength={setTokenLen} placeholder="Paste the token" />
+                    <SecretField onLength={secretLen(setTokenLen)} placeholder="Paste the token" />
                   </Field>
                   <Callout tone="amber">Static tokens are discouraged — prefer AppRole.</Callout>
                 </>
@@ -241,7 +285,17 @@ export function OpenBaoWizard() {
             <>
               {title}
               <label className="cursor-pointer rounded-[10px] border border-dashed border-zinc-700 p-[22px] text-center hover:border-zinc-500">
-                <input type="file" accept=".pem,.crt,.cer" className="sr-only" onChange={(e) => e.target.files?.[0] && setCert(e.target.files[0].name)} />
+                <input
+                  type="file"
+                  accept=".pem,.crt,.cer"
+                  className="sr-only"
+                  onChange={(e) => {
+                    if (!e.target.files?.[0]) return
+                    setCert(e.target.files[0].name)
+                    // A certificate turns verification back on.
+                    setSkipVerify(false)
+                  }}
+                />
                 {cert ? (
                   <>
                     <div className="font-mono text-[13px] text-zinc-200">{cert}</div>
@@ -296,9 +350,23 @@ export function OpenBaoWizard() {
                       </div>
                     </div>
                     <Button variant="primary" className="ml-auto" onClick={finish}>
-                      Finish
+                      {!editing ? 'Finish' : changes.length ? 'Save changes' : 'Done'}
                     </Button>
                   </div>
+                  {editing && changes.length > 0 && (
+                    <div className="rounded-[10px] border border-edge bg-rail p-4 text-sm2">
+                      <div className="eyebrow-sm">Saving changes to {editing.name}</div>
+                      <div className="mt-2.5 grid grid-cols-[150px_1fr] gap-x-3 gap-y-1.5">
+                        {changes.map(([k, v]) => (
+                          <Fragment key={k}>
+                            <span className="text-zinc-500">{k}</span>
+                            <span className={cx(k === 'Certificate' && skipVerify && 'text-red-400')}>{v}</span>
+                          </Fragment>
+                        ))}
+                      </div>
+                      <div className="mt-2.5 text-xs text-zinc-500">Nothing changes until you save. The change is recorded in the audit log.</div>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2.5 rounded-[10px] border border-edge bg-rail px-4 py-3.5">
                     <Dot health="healthy" />
                     <span className="text-md font-semibold">{name}</span>
@@ -338,7 +406,7 @@ export function OpenBaoWizard() {
 
           {step < 5 && (
             <Footer className={cx('mt-2', step === 0 && 'border-t-0 pt-0')}>
-              <Button size="lg" onClick={() => (step === 0 ? nav(`/orgs/${orgId}/stores`) : go(step - 1))}>
+              <Button size="lg" onClick={() => (step === 0 ? nav(editing ? `/orgs/${orgId}/stores/${editing.id}` : `/orgs/${orgId}/stores`) : go(step - 1))}>
                 {step === 0 ? 'Cancel' : 'Back'}
               </Button>
               <Button size="lg" variant="primary" disabled={!canContinue} onClick={() => go(step + 1)}>

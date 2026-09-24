@@ -28,7 +28,8 @@ export function Checklist() {
     { t: 'Publish the tool', sub: 'New tools start as drafts. Agents can only use a published version', done: tools.some((t) => t.published), to: toPublish ? `/tools/${toPublish.id}?section=publish` : '/tools' },
     { t: 'Create a workspace and attach the tool', sub: '', done: !!wsWithTool, to: ws[0] ? `/workspaces/${ws[0].id}/tools` : '/workspaces?new=1' },
     { t: 'Create an agent', sub: '', done: orgAgents(d).length > 0, to: '/players/agents?new=1' },
-    { t: 'Turn on MCP or HTTPS and download the config', sub: '', done: !!connected && !!d.configDownloadedAt, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
+    // A call routed through a connector lands without any download, so a first call also completes this step.
+    { t: 'Turn on MCP or HTTPS and download the config', sub: '', done: (!!connected && !!d.configDownloadedAt) || !!d.firstCallAt, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
     { t: 'Make your first call', sub: 'We wait here — this checks off when the first request lands', done: !!d.firstCallAt, to: target ? `/workspaces/${target.id}/connect` : '/workspaces' },
   ]
   const waitStep = steps.length - 1

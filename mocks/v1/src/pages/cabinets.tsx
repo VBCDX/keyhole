@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { initials, plural } from '../lib/format'
-import { actions, agentById, hasWorkspaceAccess, isAdmin, keyById, liveTool, me, orgTools, toolById, useDB, userById, workspacePeople } from '../lib/store'
+import { actions, agentById, hasWorkspaceAccess, isAdmin, isAdminRole, keyById, liveTool, me, orgTools, toolById, useDB, userById, workspacePeople } from '../lib/store'
 import type { Cabinet, PlayerRef, Workspace } from '../lib/types'
 import { ImpactDialog, ImpactRows } from '../components/shared'
 import { SECRET_LINE, SecretField } from '../components/keyhole'
@@ -45,11 +45,15 @@ export function CabinetsTab() {
       ) : (
         <div className="mt-4 grid grid-cols-3 gap-4">
           {cabinets.map((c) => {
-            // The creator manages a cabinet while they can use the workspace. Once they can't, it keeps
-            // working exactly as before and management falls to the workspace admins (the org admins).
-            const creator = userById(d, c.ownerId)
-            const creatorHere = hasWorkspaceAccess(d, c.ownerId, w.id)
-            const mine = creatorHere && c.ownerId === d.currentUserId
+            // Creating a cabinet grants nothing (rule 3): its manager manages it. When there's no manager who
+            // can use the workspace, it keeps working exactly as before and the org admins manage it.
+            const creator = userById(d, c.createdBy)
+            const manager = userById(d, c.managedBy)
+            const managerHere = hasWorkspaceAccess(d, c.managedBy, w.id)
+            const mine = managerHere && c.managedBy === d.currentUserId
+            const creatorRole = creator?.roles[w.orgId]
+            const creatorStillHere = !!creatorRole && (isAdminRole(creatorRole) || w.userIds.includes(creator!.id))
+            const why = !manager ? (creatorStillHere ? 'Manager left' : 'Creator left') : manager.locked ? 'Manager locked' : 'Manager suspended'
             return (
               <div key={c.id} className="flex flex-col gap-3 rounded-[10px] border border-edge bg-panel p-[18px]">
                 <div className="flex items-center gap-2">
@@ -61,21 +65,21 @@ export function CabinetsTab() {
                     </Pill>
                   )}
                 </div>
-                {creator && creatorHere ? (
-                  <div className="flex items-center gap-2">
-                    <Avatar initials={initials(creator.name)} />
-                    <span className="text-xs text-zinc-500">{mine ? `${creator.name} (you)` : creator.name}</span>
-                  </div>
-                ) : (
-                  <div className="text-xs text-zinc-500">
-                    {creator && <div>Created by {creator.name}</div>}
-                    Creator left — still working; admins manage it
-                  </div>
-                )}
+                <div className="flex flex-col gap-1.5 text-xs text-zinc-500">
+                  {creator && <div>Created by {creator.name}</div>}
+                  {manager && managerHere ? (
+                    <div className="flex items-center gap-2">
+                      <Avatar initials={initials(manager.name)} />
+                      <span>Managed by {mine ? `${manager.name} (you)` : manager.name}</span>
+                    </div>
+                  ) : (
+                    <div>{why} — still working; admins manage it</div>
+                  )}
+                </div>
                 <div className="text-xs text-zinc-400">
                   {plural(c.keyIds.length, 'key')} · {plural(c.tools.length, 'tool')} · {lockSummary(c)}
                 </div>
-                {!creatorHere && admin ? (
+                {!managerHere && admin ? (
                   <div className="mt-auto flex gap-3">
                     <button className="text-sm2 text-brass hover:text-brass-light" onClick={() => setReassign(c)}>
                       Reassign
@@ -107,8 +111,9 @@ export function CabinetsTab() {
 
       <NewCabinetModal open={creating} onClose={() => setCreating(false)} ws={w} />
       <ChangeLockModal cabinet={lockFor} onClose={() => setLockFor(null)} ws={w} />
-      <Modal open={!!reassign} onClose={() => setReassign(null)} title={`Reassign ${reassign?.name}`} width={440}>
-        <Field label="New owner">
+      <Modal open={!!reassign} onClose={() => setReassign(null)} title={`Who manages ${reassign?.name}?`} width={440}>
+        <div className="-mt-2 text-xs text-zinc-500">The manager changes its keys, tools and lock list. “Created by” doesn’t change.</div>
+        <Field label="New manager">
           <Select value={newOwner} onChange={(e) => setNewOwner(e.target.value)}>
             <option value="">Pick a person on this workspace…</option>
             {workspacePeople(d, w).map((u) => (

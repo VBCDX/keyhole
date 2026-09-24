@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ago, clock, expiringSoon, initials, maskToken, until } from '../lib/format'
 import { liveTick } from '../lib/simulate'
-import { actions, agentsCreatedBy, canManageMember, isAdmin, isAdminRole, isDemotion, isLastOwner, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
+import { actions, agentsCreatedBy, canManageMember, isActive, isAdmin, isAdminRole, isDemotion, isLastOwner, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
 import type { Agent, AuditEvent, Role, User } from '../lib/types'
 import { CopyChip, TokenPanel } from './keyhole'
 import {
@@ -170,7 +170,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
   const wsNames = (u: User, role: Role) => (isAdminRole(role) ? 'All (org admin)' : workspaces.filter((w) => w.userIds.includes(u.id)).map((w) => w.name).join(', ') || '—')
   const invitedWs = (u: User) => d.invites.find((i) => i.email === u.email && i.orgId === d.currentOrgId)?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || '—'
 
-  const cabinetsCreated = removeFor ? d.cabinets.filter((c) => c.ownerId === removeFor.user.id && d.workspaces.some((w) => w.id === c.workspaceId && w.orgId === d.currentOrgId)) : []
+  const cabinetsManaged = removeFor ? d.cabinets.filter((c) => c.managedBy === removeFor.user.id && d.workspaces.some((w) => w.id === c.workspaceId && w.orgId === d.currentOrgId)) : []
   const menuFor = (row: UserRow) => {
     const { user: u, role } = row
     if (u.id === d.currentUserId) {
@@ -245,7 +245,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
         title={`Remove ${removeFor?.user.name}?`}
         rows={[
           ['Workspaces', removeFor ? wsNames(removeFor.user, removeFor.role) : ''],
-          ['Cabinets they created', cabinetsCreated.length ? `${cabinetsCreated.map((c) => c.name).join(', ')} — keep working; admins take over management` : 'None'],
+          ['Cabinets they manage', cabinetsManaged.length ? `${cabinetsManaged.map((c) => c.name).join(', ')} — keep working; admins take over management` : 'None'],
           ['Agents they created', removeFor ? createdAgentsLabel(agentsCreatedBy(d, removeFor.user).map((a) => a.label)) : ''],
           ['Last active', ago(removeFor?.user.lastActive ?? null, now)],
         ]}
@@ -260,7 +260,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
 const ROLE_HINT: Record<Role, string> = {
   Owner: 'Everything a userAdmin can do, plus renaming or deleting the organization and managing other Owners.',
   userAdmin: 'Administers every workspace: invites people, manages stores, workspaces, agents and tools.',
-  user: 'Sees only the workspaces they’re added to and manages the cabinets they make.',
+  user: 'Sees only the workspaces they’re added to and manages the cabinets assigned to them.',
 }
 
 function ChangeRoleModal({ row, onClose }: { row: UserRow | null; onClose: () => void }) {
@@ -271,10 +271,11 @@ function ChangeRoleModal({ row, onClose }: { row: UserRow | null; onClose: () =>
   }, [row])
   const owner = myRole(d) === 'Owner'
   const demoting = !!row && isDemotion(row.role, role)
-  // Who administers every workspace once this change is made. Rule 1 guarantees an Owner remains.
+  // Who administers every workspace once this change is made: active admins only. Rule 1 keeps an active Owner.
   const adminsAfter = orgAdmins(d)
     .map((u) => ({ u, r: u.id === row?.user.id ? role : u.roles[d.currentOrgId] }))
     .filter((x) => isAdminRole(x.r))
+  const ownerAfter = adminsAfter.some((x) => x.r === 'Owner')
   const explicit = row ? orgWorkspaces(d).filter((w) => w.userIds.includes(row.user.id)).map((w) => w.name) : []
   return (
     <Modal open={!!row} onClose={onClose} title={`Change role for ${row?.user.name}`} width={480}>
@@ -293,7 +294,11 @@ function ChangeRoleModal({ row, onClose }: { row: UserRow | null; onClose: () =>
           rows={[
             ['Role', `${row!.role} → ${role}`, 'amber'],
             ['Workspaces they can use', role === 'user' ? explicit.join(', ') || 'None — add them on a workspace' : 'All (org admin)', role === 'user' ? 'amber' : undefined],
-            ['Workspace admins after this', `${adminsAfter.map((x) => `${x.u.name} (${x.r})`).join(', ')} — every workspace keeps an Owner`],
+            [
+              'Workspace admins after this',
+              `${adminsAfter.map((x) => `${x.u.name} (${x.r})`).join(', ') || 'None'} — ${ownerAfter ? 'every workspace keeps an active Owner' : 'no active Owner until Keyhole support unlocks one'}`,
+              ownerAfter ? undefined : 'amber',
+            ],
             ['Agents they created', 'Unaffected'],
           ]}
         />
@@ -326,7 +331,8 @@ export function TransferOwnershipDialog({ open, to, onClose }: { open: boolean; 
     setPicked('')
     onClose()
   }
-  const candidates = d.users.filter((u) => u.id !== d.currentUserId && u.roles[d.currentOrgId] && u.status === 'active' && !u.locked)
+  // Existing Owners already have ownership; transferring to them would only demote you.
+  const candidates = d.users.filter((u) => u.id !== d.currentUserId && u.roles[d.currentOrgId] && u.roles[d.currentOrgId] !== 'Owner' && isActive(u))
   const target = to ?? candidates.find((u) => u.id === picked)
   const role = target?.roles[d.currentOrgId]
   return (
@@ -354,7 +360,7 @@ export function TransferOwnershipDialog({ open, to, onClose }: { open: boolean; 
               </Select>
             </Field>
           )}
-          <span>Only the new Owner can give ownership back. The change is recorded in the audit log.</span>
+          <span>You can’t undo this yourself: after it, only an Owner can make you an Owner again. The change is recorded in the audit log.</span>
         </div>
       }
       confirmLabel="Transfer ownership"
@@ -372,7 +378,7 @@ function AssignWorkspacesModal({ row, onClose }: { row: UserRow | null; onClose:
     if (row) setSel(workspaces.filter((w) => w.userIds.includes(row.user.id)).map((w) => w.id))
   }, [row]) // eslint-disable-line
   const losing = row ? workspaces.filter((w) => w.userIds.includes(row.user.id) && !sel.includes(w.id)) : []
-  const theirCabinets = d.cabinets.filter((c) => c.ownerId === row?.user.id && losing.some((w) => w.id === c.workspaceId)).map((c) => c.name)
+  const theirCabinets = d.cabinets.filter((c) => c.managedBy === row?.user.id && losing.some((w) => w.id === c.workspaceId)).map((c) => c.name)
   return (
     <Modal open={!!row} onClose={onClose} title={`Workspaces for ${row?.user.name}`} width={460}>
       <div className="flex flex-col gap-2 rounded-lg border border-edge bg-page p-3">
@@ -384,7 +390,7 @@ function AssignWorkspacesModal({ row, onClose }: { row: UserRow | null; onClose:
         <ImpactRows
           rows={[
             ['Loses access to', losing.map((w) => w.name).join(', '), 'amber'],
-            ['Cabinets they created there', theirCabinets.length ? `${theirCabinets.join(', ')} — keep working; admins take over management` : 'None'],
+            ['Cabinets they manage there', theirCabinets.length ? `${theirCabinets.join(', ')} — keep working; admins take over management` : 'None'],
           ]}
         />
       )}

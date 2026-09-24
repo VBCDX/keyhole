@@ -230,9 +230,9 @@ export function populatedDB(): DB {
       { id: 'ag_oldci', orgId: 'org_acme', label: 'old-ci', tokenLast4: 'Pw9a', status: 'revoked', createdAt: now - 120 * DAY, createdBy: 'Ravi Mehta', expiresAt: null, lastUsedAt: now - 30 * DAY, workspaceIds: ['ws_sandbox'], rateLimit: null },
     ],
     cabinets: [
-      { id: 'cb_mia', workspaceId: 'ws_prod', name: "Mia's billing set", ownerId: 'u_mia', keyIds: ['k_mia1', 'k_mia2'], tools: [{ toolId: 't_stripe', slotMap: { stripe_secret: 'k_mia1' } }], access: [{ kind: 'user', id: 'u_mia' }, { kind: 'agent', id: 'ag_billing' }], createdAt: now - 3 * HOUR },
-      { id: 'cb_team', workspaceId: 'ws_prod', name: 'Team sandbox', ownerId: 'u_ravi', keyIds: ['k_gh'], tools: [{ toolId: 't_github', slotMap: { github_token: 'k_gh' } }, { toolId: 't_stripe', slotMap: { stripe_secret: null } }], access: 'everyone', createdAt: now - 10 * DAY },
-      { id: 'cb_legacy', workspaceId: 'ws_prod', name: 'Legacy imports', ownerId: null, keyIds: ['k_legacy_c'], tools: [], access: 'everyone', createdAt: now - 90 * DAY },
+      { id: 'cb_mia', workspaceId: 'ws_prod', name: "Mia's billing set", createdBy: 'u_mia', managedBy: 'u_mia', keyIds: ['k_mia1', 'k_mia2'], tools: [{ toolId: 't_stripe', slotMap: { stripe_secret: 'k_mia1' } }], access: [{ kind: 'user', id: 'u_mia' }, { kind: 'agent', id: 'ag_billing' }], createdAt: now - 3 * HOUR },
+      { id: 'cb_team', workspaceId: 'ws_prod', name: 'Team sandbox', createdBy: 'u_ravi', managedBy: 'u_ravi', keyIds: ['k_gh'], tools: [{ toolId: 't_github', slotMap: { github_token: 'k_gh' } }, { toolId: 't_stripe', slotMap: { stripe_secret: null } }], access: 'everyone', createdAt: now - 10 * DAY },
+      { id: 'cb_legacy', workspaceId: 'ws_prod', name: 'Legacy imports', createdBy: null, managedBy: null, keyIds: ['k_legacy_c'], tools: [], access: 'everyone', createdAt: now - 90 * DAY },
     ],
     connectors: [
       { id: 'cn_edge01', orgId: 'org_acme', name: 'edge-01', workspaceId: 'ws_prod', version: '1.4.2', health: 'healthy', lastSeen: now - 20_000, ip: '10.2.14.7', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },

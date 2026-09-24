@@ -3,7 +3,9 @@ import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router-
 import { ago, plural, until } from '../lib/format'
 import {
   actions,
+  activeOwners,
   autoMatch,
+  isActive,
   isAdmin,
   keyById,
   me,
@@ -22,7 +24,7 @@ import {
 } from '../lib/store'
 import type { Invite, Role, Tool } from '../lib/types'
 import { AgentsTable, AuditLog, ImpactDialog, ListBody, TransferOwnershipDialog, UsersTable, useUserRows } from '../components/shared'
-import { Breadcrumb, Button, Card, Checkbox, Dot, Field, Footer, Input, Modal, PageTitle, Pill, Row, Segmented, Select, Table, Tabs } from '../components/ui'
+import { Breadcrumb, Button, Callout, Card, Checkbox, Dot, Field, Footer, Input, Modal, PageTitle, Pill, Row, Segmented, Select, Table, Tabs } from '../components/ui'
 import { WorkspacesTable } from './workspaces'
 
 /* ------------------------------------------------------------------ */
@@ -103,6 +105,7 @@ export function OrgOverview() {
   const now = useNow()
   const o = org(d)!
   const owners = d.users.filter((u) => u.roles[o.id] === 'Owner')
+  const inactiveOwners = owners.filter((u) => !isActive(u))
   const [transferring, setTransferring] = useState(false)
   const role = me(d).roles[o.id]
   const [renaming, setRenaming] = useState(false)
@@ -128,6 +131,12 @@ export function OrgOverview() {
           </Link>
         ))}
       </div>
+      {!activeOwners(d).length && (
+        <Callout tone="amber" className="mt-4">
+          No active Owner: {inactiveOwners.map((u) => `${u.name} (${u.locked ? 'locked by Keyhole support' : 'suspended'})`).join(', ')}. Admins can keep running workspaces, but Owner-only actions — managing Owners, transferring
+          ownership, renaming or deleting the organization — wait until {inactiveOwners.some((u) => u.locked) ? 'Keyhole support unlocks the account' : 'an Owner is active again'}.
+        </Callout>
+      )}
       <Card className="mt-4 grid grid-cols-[160px_1fr] gap-x-3 gap-y-2.5 p-5 text-[13px]">
         <span className="text-zinc-500">Health</span>
         <span className="flex items-center gap-2">
@@ -135,7 +144,7 @@ export function OrgOverview() {
           {bad.length ? `${plural(bad.length, 'store')} need attention` : unverified.length ? <span className="text-amber-400">{plural(unverified.length, 'store')} without certificate verification</span> : `All ${plural(stores.length, 'store')} healthy`}
         </span>
         <span className="text-zinc-500">{owners.length === 1 ? 'Owner' : 'Owners'}</span>
-        <span>{owners.map((u) => u.name).join(', ')}</span>
+        <span>{owners.map((u) => (isActive(u) ? u.name : `${u.name} (${u.locked ? 'locked' : 'suspended'})`)).join(', ')}</span>
         <span className="text-zinc-500">Created</span>
         <span>{ago(o.createdAt, now)}</span>
         <span className="text-zinc-500">Your role</span>

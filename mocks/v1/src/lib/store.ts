@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { CATALOG } from './catalog'
-import { DAY, newToken, plural, trackingCode, uid } from './format'
+import { DAY, maskToken, newToken, plural, trackingCode, uid } from './format'
 import { freshDB, populatedDB } from './seed'
 import type {
   Agent,
@@ -19,7 +19,7 @@ import type {
 } from './types'
 
 const LS_KEY = 'keyhole-mocks-v1'
-const VERSION = 4
+const VERSION = 5
 
 function load(): DB {
   try {
@@ -100,12 +100,17 @@ export const org = (d: DB, id = d.currentOrgId) => d.orgs.find((o) => o.id === i
 const RANK: Record<Role, number> = { user: 0, userAdmin: 1, Owner: 2 }
 export const isAdminRole = (r: Role | null | undefined) => r === 'Owner' || r === 'userAdmin'
 /** Owners and userAdmins: they administer every workspace in the organization (rule 1). */
-export const orgAdmins = (d: DB) => d.users.filter((u) => isAdminRole(u.roles[d.currentOrgId]))
-export const orgOwners = (d: DB) => d.users.filter((u) => u.roles[d.currentOrgId] === 'Owner')
-export const isLastOwner = (d: DB, userId: string) => {
-  const owners = orgOwners(d)
-  return owners.length === 1 && owners[0].id === userId
-}
+/** Suspended or support-locked people can't act, so they never count towards rules 1 and 2. */
+export const isActive = (u: User | undefined) => !!u && u.status === 'active' && !u.locked
+/** Active Owners and userAdmins: they administer every workspace in the organization (rule 1). */
+export const orgAdmins = (d: DB) => d.users.filter((u) => isAdminRole(u.roles[d.currentOrgId]) && isActive(u))
+export const activeOwners = (d: DB) => d.users.filter((u) => u.roles[d.currentOrgId] === 'Owner' && isActive(u))
+/**
+ * An Owner with no other active Owner beside them. Demoting, suspending or removing them would leave
+ * the organization with nobody able to manage Owners, so it's blocked (transfer ownership instead).
+ */
+export const isLastOwner = (d: DB, userId: string) =>
+  d.users.find((u) => u.id === userId)?.roles[d.currentOrgId] === 'Owner' && !activeOwners(d).some((u) => u.id !== userId)
 export const isDemotion = (from: Role, to: Role) => RANK[to] < RANK[from]
 /**
  * Whether the current person may change this member's role, suspend or remove them:
@@ -124,7 +129,28 @@ export function hasWorkspaceAccess(d: DB, userId: string | null | undefined, wsI
   const u = d.users.find((x) => x.id === userId)
   const w = d.workspaces.find((x) => x.id === wsId)
   const r = w && u?.roles[w.orgId]
-  return !!r && (isAdminRole(r) || w.userIds.includes(u.id))
+  return !!r && isActive(u) && (isAdminRole(r) || w.userIds.includes(u!.id))
+}
+/** Membership regardless of status: suspension pauses a person, it doesn't take their place away. */
+function isMember(d: DB, userId: string, w: Workspace) {
+  const r = d.users.find((u) => u.id === userId)?.roles[w.orgId]
+  return !!r && (isAdminRole(r) || w.userIds.includes(userId))
+}
+/**
+ * A manager who is no longer a member of a cabinet's workspace stops managing it: the cabinet keeps working
+ * and org admins manage it. Being added back later doesn't restore management — an admin reassigns it.
+ * Returns the cabinets released, for the log.
+ */
+function settleCabinetManagement(d: DB) {
+  const released: string[] = []
+  for (const c of d.cabinets) {
+    const w = d.workspaces.find((x) => x.id === c.workspaceId)
+    if (c.managedBy && w && !isMember(d, c.managedBy, w)) {
+      c.managedBy = null
+      released.push(c.name)
+    }
+  }
+  return released
 }
 /** Everyone who can use a workspace: its members plus the org admins. */
 export const workspacePeople = (d: DB, w: Workspace) => d.users.filter((u) => hasWorkspaceAccess(d, u.id, w.id))
@@ -545,9 +571,15 @@ export const actions = {
       const t = toolById(d, toolId)
       if (!w || !t) return
       const existing = w.tools.find((x) => x.toolId === toolId)
+      const keyName = (id: string | null | undefined) => (id ? (keyById(d, id)?.name ?? id) : 'Missing')
+      const detail: [string, string][] = [
+        ['Access', existing ? 'Granted (unchanged)' : 'Not granted → granted'],
+        ['Version', `v${(liveTool(t) ?? t).version}`],
+        ...Object.keys(slotMap).map((s): [string, string] => [s, existing ? `${keyName(existing.slotMap[s])} → ${keyName(slotMap[s])}` : `→ ${keyName(slotMap[s])}`]),
+      ]
       if (existing) existing.slotMap = slotMap
       else w.tools.push({ toolId, slotMap, enabled: true, perMinute: (liveTool(t) ?? t).perMinute })
-      log(d, { object: `Granted ${t.displayName} to ${w.name}`, workspaceId: wsId })
+      log(d, { object: `Granted ${t.displayName} to ${w.name}`, workspaceId: wsId, detail })
     })
   },
   updateWorkspaceTool(wsId: string, toolId: string, patch: Partial<{ enabled: boolean; perMinute: number; slotMap: Record<string, string | null> }>) {
@@ -603,6 +635,8 @@ export const actions = {
       }
       w.userIds = userIds
       w.agentIds = agentIds
+      const released = settleCabinetManagement(d)
+      if (released.length) log(d, { object: `Admins now manage ${released.join(', ')}`, workspaceId: wsId, detail: [['Managed by', 'Former member → org admins']] })
       for (const a of d.agents) {
         const has = a.workspaceIds.includes(wsId)
         if (agentIds.includes(a.id) && !has) a.workspaceIds.push(wsId)
@@ -685,9 +719,9 @@ export const actions = {
   revokeAgent(id: string) {
     update((d) => {
       const a = agentById(d, id)
-      if (!a) return
+      if (!a || a.status === 'revoked') return
+      log(d, { object: `Revoked token for ${a.label}`, detail: [['Status', `${a.status} → revoked`], ['Token', maskToken(a.tokenLast4)]] })
       a.status = 'revoked'
-      log(d, { object: `Revoked token for ${a.label}` })
     })
     // The agent doesn't know yet — its next attempt shows up blocked.
     setTimeout(() => {
@@ -780,7 +814,8 @@ export const actions = {
       // Only Owners make Owners, and the last Owner can't be demoted (transfer ownership instead).
       if ((role === 'Owner' && myRole(d) !== 'Owner') || (before === 'Owner' && isLastOwner(d, userId))) return
       u.roles[d.currentOrgId] = role
-      log(d, { object: `Changed ${u.name}'s role to ${role}`, detail: [['Role', `${before} → ${role}`]] })
+      const released = settleCabinetManagement(d)
+      log(d, { object: `Changed ${u.name}'s role to ${role}`, detail: [['Role', `${before} → ${role}`], ...(released.length ? [['Cabinets now managed by admins', released.join(', ')] as [string, string]] : [])] })
     })
   },
   setUserSuspended(userId: string, suspended: boolean) {
@@ -799,7 +834,7 @@ export const actions = {
       const from = me(d)
       const to = userById(d, toUserId)
       const before = to?.roles[d.currentOrgId]
-      if (!from || myRole(d) !== 'Owner' || !to || !before || to.id === from.id || to.status !== 'active' || to.locked) return
+      if (!from || myRole(d) !== 'Owner' || !to || !before || before === 'Owner' || to.id === from.id || !isActive(to)) return
       to.roles[d.currentOrgId] = 'Owner'
       from.roles[d.currentOrgId] = 'userAdmin'
       log(d, {
@@ -819,11 +854,16 @@ export const actions = {
         const has = w.userIds.includes(userId)
         if (wsIds.includes(w.id) && !has) {
           w.userIds.push(userId)
-          log(d, { object: `Added ${name} to ${w.name}`, workspaceId: w.id })
+          log(d, { object: `Added ${name} to ${w.name}`, workspaceId: w.id, detail: [['Access', 'None → member']] })
         }
         if (!wsIds.includes(w.id) && has) {
           w.userIds = w.userIds.filter((x) => x !== userId)
-          log(d, { object: `Removed ${name} from ${w.name}`, workspaceId: w.id })
+          const released = settleCabinetManagement(d)
+          log(d, {
+            object: `Removed ${name} from ${w.name}`,
+            workspaceId: w.id,
+            detail: [['Access', 'Member → none'], ...(released.length ? [['Cabinets now managed by admins', released.join(', ')] as [string, string]] : [])],
+          })
         }
       }
     })
@@ -841,13 +881,14 @@ export const actions = {
       const lost = d.workspaces.filter((w) => w.orgId === d.currentOrgId && w.userIds.includes(userId)).map((w) => w.name)
       delete u.roles[d.currentOrgId]
       for (const w of d.workspaces) if (w.orgId === d.currentOrgId) w.userIds = w.userIds.filter((x) => x !== userId)
+      const released = settleCabinetManagement(d)
       log(d, {
         object: `Removed ${u.name} from the organization`,
         detail: [
           ['Role', `${role} → removed`],
           ['Workspaces', isAdminRole(role) ? 'All (as an org admin)' : lost.join(', ') || 'None'],
           ['Agents they created', 'Unaffected'],
-          ['Cabinets they created', 'Keep working; admins manage them'],
+          ['Cabinets they managed', released.length ? `${released.join(', ')} — keep working; admins manage them` : 'None'],
         ],
       })
     })
@@ -869,7 +910,7 @@ export const actions = {
       }
       const fill = (v: string | null) => (!v ? null : v.startsWith('new:') ? (nameToId[v.slice(4)] ?? null) : keyIds.includes(v) ? v : null)
       const tools = c.tools.filter((t) => liveTool(toolById(d, t.toolId))).map((t) => ({ ...t, slotMap: Object.fromEntries(Object.entries(t.slotMap).map(([s, v]) => [s, fill(v)])) }))
-      d.cabinets.push({ id, workspaceId: c.workspaceId, name: c.name, ownerId: d.currentUserId, keyIds, tools, access: c.access, createdAt: Date.now() })
+      d.cabinets.push({ id, workspaceId: c.workspaceId, name: c.name, createdBy: d.currentUserId, managedBy: d.currentUserId, keyIds, tools, access: c.access, createdAt: Date.now() })
       log(d, { object: `Created cabinet ${c.name}${c.access === 'everyone' ? '' : ' (locked)'}`, workspaceId: c.workspaceId })
     })
     return id
@@ -884,13 +925,14 @@ export const actions = {
       log(d, { object: `Changed lock on ${c.name}`, workspaceId: c.workspaceId, detail })
     })
   },
-  reassignCabinet(id: string, ownerId: string) {
+  /** Hands management to someone else. "Created by" never changes. */
+  reassignCabinet(id: string, managerId: string) {
     update((d) => {
       const c = d.cabinets.find((x) => x.id === id)
       if (!c) return
-      const before = userById(d, c.ownerId)?.name ?? 'Nobody'
-      c.ownerId = ownerId
-      log(d, { object: `Reassigned ${c.name} to ${userById(d, ownerId)?.name}`, workspaceId: c.workspaceId, detail: [['Managed by', `${before} → ${userById(d, ownerId)?.name}`]] })
+      const before = userById(d, c.managedBy)?.name ?? 'Org admins'
+      c.managedBy = managerId
+      log(d, { object: `${userById(d, managerId)?.name} now manages ${c.name}`, workspaceId: c.workspaceId, detail: [['Managed by', `${before} → ${userById(d, managerId)?.name}`]] })
     })
   },
   deleteCabinet(id: string) {

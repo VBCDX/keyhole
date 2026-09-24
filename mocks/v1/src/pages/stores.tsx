@@ -310,8 +310,8 @@ export function StoreDetail() {
               const uses = keyUsage(d, k.id)
               const cab = k.cabinetId ? d.cabinets.find((c) => c.id === k.cabinetId) : null
               const soon = k.expiresAt && k.expiresAt - now < 14 * DAY
-              // Members may only replace values in cabinets they own; everything else is admin-only.
-              const ownCabinetKey = !!cab && cab.ownerId === d.currentUserId && hasWorkspaceAccess(d, d.currentUserId, cab.workspaceId)
+              // Members may only replace values in cabinets they manage; everything else is admin-only.
+              const ownCabinetKey = !!cab && cab.managedBy === d.currentUserId && hasWorkspaceAccess(d, d.currentUserId, cab.workspaceId)
               return (
                 <Row key={k.id} cols={KEY_COLS}>
                   <div className="min-w-0">

@@ -37,6 +37,19 @@ function Locked() {
   )
 }
 
+/** Suspension takes effect immediately (rule 5): a suspended person can't use the app until reactivated. */
+function Suspended() {
+  return (
+    <div className="flex h-full items-center justify-center bg-page text-zinc-100">
+      <div className="flex w-[420px] flex-col items-center gap-3 text-center">
+        <KeyholeIcon size={28} state="error" />
+        <div className="text-[15px] font-semibold">This account is suspended</div>
+        <div className="text-sm2 leading-relaxed text-zinc-400">An admin of your organization suspended it. Ask them to reactivate it — everything you set up is still there.</div>
+      </div>
+    </div>
+  )
+}
+
 function Routed() {
   const d = useDB()
   if (d.currentUserId === 'support')
@@ -47,6 +60,7 @@ function Routed() {
     )
   const u = me(d)
   if (u?.locked) return <Locked />
+  if (u?.status === 'suspended') return <Suspended />
   if (!u || !Object.keys(u.roles).length || !d.orgs.some((o) => o.id === d.currentOrgId)) return <NoOrgShell />
   return (
     <Routes>

@@ -33,7 +33,7 @@ export function UserDetail() {
   if (!u || !u.roles[d.currentOrgId]) return <div className="text-sm text-zinc-400">This person isn’t in this organization. <Link to="/players/users">Back to users</Link></div>
   const role = u.roles[d.currentOrgId]
   const ws = orgWorkspaces(d).filter((w) => isAdminRole(role) || w.userIds.includes(u.id))
-  const cabinets = d.cabinets.filter((c) => c.ownerId === u.id && canSeeWorkspace(d, c.workspaceId))
+  const cabinets = d.cabinets.filter((c) => c.createdBy === u.id && canSeeWorkspace(d, c.workspaceId))
   const events = visibleEvents(d).filter((e) => e.actorId === u.id || e.object.includes(u.email) || e.object.includes(u.name))
   return (
     <div className="max-w-[1080px]">
@@ -76,7 +76,7 @@ export function UserDetail() {
           </div>
         </Card>
         <Card className="p-5">
-          <div className="eyebrow">Cabinets they own</div>
+          <div className="eyebrow">Cabinets they created</div>
           <div className="mt-3 flex flex-col gap-1.5">
             {cabinets.length ? cabinets.map((c) => (
               <Link key={c.id} to={`/workspaces/${c.workspaceId}/cabinets`} className="text-[13px] text-zinc-300 hover:text-white">

@@ -389,12 +389,27 @@ export function ErrorBox({ what, onRetry }: { what: string; onRetry: () => void 
 /* ------------------------------------------------------------------ */
 /* Overlays                                                            */
 /* ------------------------------------------------------------------ */
-function useEscape(onClose: () => void) {
+/**
+ * Open overlays, oldest first. Escape only ever reaches the topmost one, so a
+ * preview stacked on a modal closes itself and leaves the modal (and its focus) alone.
+ */
+const escapeStack: { current: () => void }[] = []
+if (typeof window !== 'undefined')
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !e.defaultPrevented) escapeStack[escapeStack.length - 1]?.current()
+  })
+
+function useEscape(open: boolean, onClose: () => void) {
+  const latest = useRef(onClose)
   useEffect(() => {
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
-  }, [onClose])
+    latest.current = onClose
+  })
+  useEffect(() => {
+    if (!open) return
+    const entry = { current: () => latest.current() }
+    escapeStack.push(entry)
+    return () => void escapeStack.splice(escapeStack.indexOf(entry), 1)
+  }, [open])
 }
 
 /** The last focus move, so a dialog knows what opened it even when autoFocus got there first. */
@@ -446,7 +461,8 @@ export function CloseX({ onClick }: { onClick: () => void }) {
 export function Modal({ open, onClose, width = 480, children, title, dismissable = true }: { open: boolean; onClose: () => void; width?: number; children: ReactNode; title?: ReactNode; dismissable?: boolean }) {
   const id = useId()
   const ref = useRef<HTMLDivElement>(null)
-  useEscape(dismissable ? onClose : () => {})
+  // A non-dismissable modal still takes the top slot, so Escape doesn't close what's under it.
+  useEscape(open, dismissable ? onClose : () => {})
   const trap = useFocusTrap(ref, open)
   if (!open) return null
   return createPortal(
@@ -470,7 +486,7 @@ export function Modal({ open, onClose, width = 480, children, title, dismissable
 export function SlideOver({ open, onClose, width = 480, title, children, footer }: { open: boolean; onClose: () => void; width?: number; title: ReactNode; children: ReactNode; footer?: ReactNode }) {
   const id = useId()
   const ref = useRef<HTMLElement>(null)
-  useEscape(onClose)
+  useEscape(open, onClose)
   const trap = useFocusTrap(ref, open)
   if (!open) return null
   return createPortal(

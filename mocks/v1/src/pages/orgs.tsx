@@ -419,8 +419,8 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
   const [sel, setSel] = useState<string[]>([])
   const [fixing, setFixing] = useState<{ wsId: string; slot: string } | null>(null)
   const [fixKey, setFixKey] = useState('')
-  const [done, setDone] = useState<number | null>(null)
-  /** Explicit slot fills chosen via "Expose a key" when the key's name differs from the slot. */
+  const [done, setDone] = useState<string[] | null>(null)
+  /** Explicit slot fills chosen via "Expose a key", keyed `${wsId}:${slot}`. Nothing is written until Grant. */
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   useEffect(() => {
     if (toolId !== null) {
@@ -428,19 +428,33 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
       setOverrides({})
       setDone(null)
       setFixing(null)
-      const t = tools.find((x) => x.id === toolId)
-      setSel(t ? toolWorkspaces(d, t.id).map((w) => w.id) : [])
+      setSel([])
     }
   }, [toolId]) // eslint-disable-line
   const draft: Tool | undefined = tools.find((t) => t.id === picked)
   // Grants use the published version; a draft can't be granted until it's published.
   const tool = draft?.published ? { ...draft.published, id: draft.id } : undefined
+  const existing = (wsId: string) => workspaces.find((w) => w.id === wsId)?.tools.find((x) => x.toolId === tool?.id)
   const slotState = (wsId: string) => {
     const w = workspaces.find((x) => x.id === wsId)!
-    return tool!.slots.map((s) => ({ slot: s.name, keyId: overrides[`${wsId}:${s.name}`] ?? autoMatch(d, w.keyIds, s.name) }))
+    return tool!.slots.map((s) => {
+      const staged = overrides[`${wsId}:${s.name}`]
+      return { slot: s.name, keyId: staged ?? autoMatch(d, w.keyIds, s.name), staged: staged && !w.keyIds.includes(staged) ? staged : null }
+    })
   }
-  const ready = sel.filter((id) => slotState(id).every((s) => s.keyId))
+  const ready = sel.filter((id) => !existing(id) && slotState(id).every((s) => s.keyId))
   const missing = sel.filter((id) => !ready.includes(id))
+  const keyLabel = (id: string | null | undefined) => (id ? (keyById(d, id)?.name ?? '—') : 'Missing')
+
+  const grant = () => {
+    for (const id of ready) {
+      const st = slotState(id)
+      // Exposures staged in this dialog are applied together with the grant, never before.
+      for (const s of st) if (s.staged) actions.exposeKey(id, s.staged)
+      actions.grantTool(id, tool!.id, Object.fromEntries(st.map((s) => [s.slot, s.keyId])))
+    }
+    setDone(ready)
+  }
 
   return (
     <Modal open={toolId !== null} onClose={onClose} width={560} title={tool ? `Grant “${tool.displayName}” to workspaces` : 'Attach tool'}>
@@ -464,21 +478,21 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
         </>
       ) : done !== null ? (
         <>
-          {sel.map((id) => {
+          {done.map((id) => {
             const w = workspaces.find((x) => x.id === id)!
-            const st = slotState(id)
+            const wt = existing(id)
             return (
               <div key={id} className="flex items-center gap-2.5 rounded-[10px] border border-edge bg-rail px-3.5 py-3">
                 <Checkbox checked />
                 <span className="text-[13px] font-medium">{w.name}</span>
                 <span className="ml-auto inline-flex items-center gap-1.5 text-xs2 text-zinc-500">
-                  <Dot health={st.every((s) => s.keyId) ? 'healthy' : 'degraded'} size={6} />
-                  {st.map((s) => (s.keyId ? `${keyById(d, s.keyId)?.name} · ${storeById(d, keyById(d, s.keyId)!.storeId)?.name}` : `Missing ${s.slot}`)).join(', ')}
+                  <Dot health="healthy" size={6} />
+                  {tool.slots.map((s) => `${s.name} → ${keyLabel(wt?.slotMap[s.name])}`).join(', ') || 'No slots needed'}
                 </span>
               </div>
             )
           })}
-          <div className="rounded-lg border border-green-500/30 bg-green-500/[0.06] px-3.5 py-2.5 text-sm2 text-green-400">Granted to {plural(done, 'workspace')}.</div>
+          <div className="rounded-lg border border-green-500/30 bg-green-500/[0.06] px-3.5 py-2.5 text-sm2 text-green-400">Granted to {plural(done.length, 'workspace')}.</div>
           <Footer>
             <Button size="lg" variant="primary" onClick={onClose}>
               Done
@@ -490,9 +504,23 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
           <div className="-mt-2 text-xs text-zinc-500">Key slots: {tool.slots.map((s) => s.name).join(', ') || 'none'}. Each workspace fills them with a key it exposes.</div>
           <div className="flex flex-col gap-2.5">
             {workspaces.map((w) => {
+              const wt = existing(w.id)
+              if (wt)
+                return (
+                  <div key={w.id} className="rounded-[10px] border border-edge bg-rail px-3.5 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <Checkbox checked disabled label={<span className="font-medium text-zinc-100">{w.name}</span>} />
+                      <span className="ml-auto text-xs2 text-zinc-500">
+                        Already granted{tool.slots.length ? ' · ' : ''}
+                        <span className="font-mono">{tool.slots.map((s) => `${s.name} → ${keyLabel(wt.slotMap[s.name])}`).join(', ')}</span>
+                      </span>
+                    </div>
+                  </div>
+                )
               const checked = sel.includes(w.id)
               const st = slotState(w.id)
               const miss = st.filter((s) => !s.keyId)
+              const staged = st.filter((s) => s.staged)
               return (
                 <div key={w.id} className="rounded-[10px] border border-edge bg-rail px-3.5 py-3">
                   <div className="flex items-center gap-2.5">
@@ -504,6 +532,23 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
                       </span>
                     )}
                   </div>
+                  {checked &&
+                    staged.map((s) => (
+                      <div key={s.slot} className="mt-2 ml-6 text-xs text-zinc-400">
+                        Exposes <span className="font-mono text-xs2">{keyLabel(s.staged)}</span> in {w.name} for <span className="font-mono text-xs2">{s.slot}</span> when you grant.{' '}
+                        <button
+                          type="button"
+                          className="text-brass hover:text-brass-light"
+                          onClick={() => {
+                            const next = { ...overrides }
+                            delete next[`${w.id}:${s.slot}`]
+                            setOverrides(next)
+                          }}
+                        >
+                          Undo
+                        </button>
+                      </div>
+                    ))}
                   {checked &&
                     miss.map((m) => (
                       <div key={m.slot} className="mt-2 ml-6 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-400">
@@ -531,15 +576,13 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
                               variant="primary"
                               disabled={!fixKey}
                               onClick={() => {
-                                const k = keyById(d, fixKey)!
-                                actions.exposeKey(w.id, fixKey)
-                                // Name-based matching: if the exposed key has a different name, the slot is filled explicitly on grant.
-                                if (k.name !== m.slot) setOverrides({ ...overrides, [`${w.id}:${m.slot}`]: fixKey })
+                                // Staged only: the key is exposed together with the grant, or not at all.
+                                setOverrides({ ...overrides, [`${w.id}:${m.slot}`]: fixKey })
                                 setFixing(null)
                                 setFixKey('')
                               }}
                             >
-                              Expose
+                              Use this key
                             </Button>
                           </span>
                         ) : (
@@ -548,7 +591,7 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
                             className="text-brass hover:text-brass-light"
                             onClick={() => {
                               setFixing({ wsId: w.id, slot: m.slot })
-                              setFixKey(orgKeys(d).find((k) => k.name === m.slot)?.id ?? '')
+                              setFixKey(orgKeys(d).find((k) => k.name === m.slot && !k.cabinetId)?.id ?? '')
                             }}
                           >
                             Expose a key
@@ -561,23 +604,12 @@ function AttachToolModal({ toolId, onClose }: { toolId: string | null; onClose: 
             })}
           </div>
           {missing.length > 0 && <div className="text-xs text-zinc-500">{missing.map((id) => workspaces.find((w) => w.id === id)?.name).join(', ')} won’t be granted until {missing.length === 1 ? 'its slot is' : 'their slots are'} filled.</div>}
+          {workspaces.some((w) => existing(w.id)) && <div className="text-xs text-zinc-500">Workspaces that already have it aren’t changed here. To remap or remove it, use that workspace’s Tools tab.</div>}
           <Footer>
             <Button size="lg" onClick={onClose}>
               Cancel
             </Button>
-            <Button
-              size="lg"
-              variant="primary"
-              disabled={!ready.length}
-              onClick={() => {
-                for (const id of ready) {
-                  const map = Object.fromEntries(slotState(id).map((s) => [s.slot, s.keyId]))
-                  actions.grantTool(id, tool.id, map)
-                }
-                setSel(ready)
-                setDone(ready.length)
-              }}
-            >
+            <Button size="lg" variant="primary" disabled={!ready.length} onClick={grant}>
               {ready.length ? `Grant to ${plural(ready.length, 'workspace')}` : 'Grant'}
             </Button>
           </Footer>

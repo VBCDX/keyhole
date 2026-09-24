@@ -33,7 +33,7 @@ A **Prototype controls** pill sits at the bottom left. It isn't part of the prod
 | 2 · OpenBao, public | Organizations › Stores › Add store › OpenBao. The first test finds the vault **Sealed**, and *Test again* passes. A path outside `secret/` gives **Not allowed**. An address containing `unreachable` gives **Can't reach**. |
 | 3 · OpenBao via connector | Same wizard, step 2 › *Through a Keyhole connector* › *Enroll a new connector* › Generate token. The heartbeat arrives in about 6 s and the new connector is picked. |
 | 4 · Invite + locked cabinet | Members › Invite user. View as Sam › Accept. Workspace › Cabinets › New cabinet › Only these players (people + agents). |
-| 5 · Grant with missing slot | Organizations › Tools › Grant, then tick Staging: *Missing: `stripe_secret`* › Expose a key › Grant |
+| 5 · Grant with missing slot | Organizations › Tools › Grant, then tick Staging: *Missing: `stripe_secret`* › Expose a key › Use this key › Grant. The exposure is staged and only applied on Grant; Production shows as already granted with its current mapping. |
 | 6 · Revoke | Players › Agents › billing-agent › Revoke token. Its next attempt appears in the log as blocked about 4 s later. |
 | 7 · Live debugging | Audit › Live. ops-agent streams red rows. Expand one › *Open the tool's actions* › add `GET /v1/payouts` › Publish › back to Live, and the rows turn green. |
 | 8 · Support lock | View as Keyhole support › search `mia` › Lock account. View as Dana › Audit shows the support action. |

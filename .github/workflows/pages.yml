@@ -1,0 +1,59 @@
+name: Deploy mocks to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ['mocks/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build every mocks/<version> app
+        run: |
+          mkdir -p _site/mocks
+          for dir in mocks/*/; do
+            v=$(basename "$dir")
+            [ -f "$dir/package.json" ] || continue
+            echo "::group::Building mocks/$v"
+            (cd "$dir" && npm ci && npm run build)
+            cp -r "$dir/dist" "_site/mocks/$v"
+            echo "::endgroup::"
+          done
+          # Root page: link to each mock version.
+          {
+            echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            echo '<title>Keyhole mocks</title>'
+            echo '<style>body{margin:0;background:#09090b;color:#f4f4f5;font:14px/1.6 Inter,system-ui,sans-serif;padding:56px}a{color:#c9a24b}h1{font-size:18px;font-weight:600}</style>'
+            echo '<h1>Keyhole mocks</h1><ul>'
+            for d in _site/mocks/*/; do v=$(basename "$d"); echo "<li><a href=\"mocks/$v/\">mocks/$v</a></li>"; done
+            echo '</ul>'
+          } > _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}mocks/v1/
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

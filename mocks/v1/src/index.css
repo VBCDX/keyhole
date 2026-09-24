@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/*
+ * Keyhole design tokens — taken directly from the Claude Design canvases.
+ * Zinc scale for neutrals, plus a few in-between surfaces the mocks use.
+ * Brass is reserved for "a credential is near" (plus the nav logo).
+ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-canvas: #050507;
+  --color-page: #09090b;
+  --color-rail: #0b0b0d;
+  --color-panel: #111113;
+  --color-line: #1f1f23;
+  --color-edge: #26262b;
+  --color-chip: #34343a;
+  --color-avatar: #3b3b41;
+  --color-secret-bg: #0d0c09;
+
+  --color-brass: #c9a24b;
+  --color-brass-light: #e0be6a;
+  --color-brass-pale: #f0d791;
+  --color-brass-ink: #1a1405;
+
+  --color-support-bg: #0a0c10;
+  --color-support-rail: #0d1017;
+  --color-support-line: #1e2530;
+  --color-support-edge: #2b3648;
+
+  --text-2xs: 11px;
+  --text-xs2: 11.5px;
+  --text-sm2: 12.5px;
+  --text-md: 13.5px;
+
+  --animate-khpulse: khpulse 2.2s ease-in-out infinite;
+  --animate-khpulse-fast: khpulse 1.4s ease-in-out infinite;
+  --animate-kh-turn: khturn 700ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  --animate-copied: khcopied 1.2s ease-out both;
+  --animate-row-in: khrowin 400ms ease-out both;
+}
+
+@keyframes khpulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+/* The keyhole "turns" like a lock engaging. */
+@keyframes khturn {
+  0% { transform: rotate(-90deg) scale(0.85); opacity: 0.4; }
+  100% { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+@keyframes khcopied {
+  0% { opacity: 0; transform: translateY(2px); }
+  15%, 75% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; }
+}
+@keyframes khrowin {
+  from { background-color: rgba(201, 162, 75, 0.08); }
+  to { background-color: transparent; }
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--color-page);
+    color: #f4f4f5;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--color-brass); text-decoration: none; }
+  a:hover { color: var(--color-brass-light); }
+  button { cursor: pointer; font-family: inherit; }
+  button:disabled { cursor: not-allowed; }
+  ::selection { background: rgba(201, 162, 75, 0.3); }
+  input, textarea, select { font-family: inherit; }
+  :focus-visible { outline: 2px solid #52525b; outline-offset: 1px; }
+}
+
+@layer components {
+  /* "Hidden on purpose" — letter-spaced monospace for masked secrets and token prefixes. */
+  .masked { font-family: var(--font-mono); letter-spacing: 0.18em; }
+  .masked-token { font-family: var(--font-mono); letter-spacing: 0.08em; }
+  .th { @apply text-2xs font-semibold uppercase tracking-[0.06em] text-zinc-500; }
+  .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500; }
+  .eyebrow-sm { @apply text-2xs font-semibold uppercase tracking-[0.08em] text-zinc-600; }
+  .skeleton { @apply rounded bg-line animate-pulse; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

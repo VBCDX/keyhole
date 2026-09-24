@@ -1,18 +1,30 @@
 import { Fragment, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { EGRESS_IPS } from '../lib/catalog'
-import { actions, org, orgConnectors, storeById, useDB } from '../lib/store'
+import { actions, isAdmin, org, orgConnectors, storeById, useDB } from '../lib/store'
 import { EnrollPanel } from '../components/EnrollPanel'
 import { CopyChip, KeyholeIcon, SECRET_LINE, SecretField } from '../components/keyhole'
 import { Breadcrumb, Button, Callout, Dot, Field, Footer, Input, OptionCard, Pill, Segmented, Select, SlideOver, Toggle, cx } from '../components/ui'
 
 const STEPS = ['Basics', 'How Keyhole reaches it', 'How Keyhole signs in', 'What Keyhole may read', 'Certificate', 'Test connection']
-type Outcome = 'sealed' | 'denied' | 'unreachable' | 'ok'
+type Outcome = 'sealed' | 'denied' | 'unreachable' | 'needsConnector' | 'ok'
 const AUTH_LABEL = { approle: 'AppRole', kubernetes: 'Kubernetes', token: 'Token' } as const
 
 /** Keyed by the store being edited, so switching between editing and connecting starts fresh. */
 export function OpenBaoWizard() {
+  const d = useDB()
+  const { orgId } = useParams()
   const [params] = useSearchParams()
+  // Stores are credential sources: connecting or changing one is admin-only, however the page was reached.
+  if (!isAdmin(d))
+    return (
+      <div>
+        <Breadcrumb items={[{ label: 'Organizations', to: '/orgs' }, { label: org(d)?.name ?? '', to: `/orgs/${orgId}/overview` }, { label: 'Stores', to: `/orgs/${orgId}/stores` }]} />
+        <div className="mt-6 text-sm text-zinc-400">
+          Only admins manage stores. <Link to={`/orgs/${orgId}/stores`}>Back to stores</Link>
+        </div>
+      </div>
+    )
   return <Wizard key={params.get('edit') ?? 'new'} />
 }
 
@@ -71,14 +83,26 @@ function Wizard() {
     !!cert || skipVerify,
     outcome === 'ok',
   ][step]
+  // The step list lets people jump ahead, so the test and Finish/Save re-check every earlier step.
+  const missingInfo: (string | null)[] = [
+    !name.trim() || !/^https?:\/\/\S+$/.test(address) ? 'Add a name and a vault address that starts with https://.' : null,
+    route === 'connector' && !connectorId ? 'Pick a connector.' : null,
+    !authOk ? (auth === 'token' ? 'Paste a token.' : auth === 'approle' ? 'Paste the role ID and secret ID.' : 'Enter the Kubernetes role.') : null,
+    !path.trim() || !(Number(cache) >= 0) ? 'Add a secrets path and a cache time.' : null,
+    !cert && !skipVerify ? 'Upload the vault’s certificate, or skip verification.' : null,
+  ]
+  const incomplete = missingInfo.findIndex(Boolean)
+  const canSave = incomplete === -1 && !k8sPublic && outcome === 'ok'
 
   const runTest = () => {
+    if (incomplete !== -1) return
     setTesting(true)
     setResult(null)
     window.setTimeout(() => {
       const chosen = connectors.find((c) => c.id === connectorId)
       let o: Outcome
-      if (/unreachable|\.invalid/.test(address) || (route === 'connector' && chosen?.health === 'offline')) o = 'unreachable'
+      if (k8sPublic) o = 'needsConnector'
+      else if (/unreachable|\.invalid/.test(address) || (route === 'connector' && chosen?.health === 'offline')) o = 'unreachable'
       else if (!path.startsWith('secret/')) o = 'denied'
       // Flow 2: the first try finds the vault sealed; after unsealing, it passes.
       else if (attempts === 0 && !editing) o = 'sealed'
@@ -114,6 +138,7 @@ function Wizard() {
         .concat(credsReplaced ? [['Sign-in credentials', 'Replaced']] : [])
 
   const finish = () => {
+    if (!canSave) return
     if (editing) {
       actions.updateOpenBao(editing.id, settings, changes)
       nav(`/orgs/${orgId}/stores/${editing.id}`)
@@ -355,7 +380,7 @@ function Wizard() {
                         Read {editing ? d.keys.filter((k) => k.storeId === editing.id).length : keyNames.length} keys under <span className="font-mono text-xs2">{path}</span> · 96 ms
                       </div>
                     </div>
-                    <Button variant="primary" className="ml-auto" onClick={finish}>
+                    <Button variant="primary" className="ml-auto" disabled={!canSave} onClick={finish}>
                       {!editing ? 'Finish' : changes.length ? 'Save changes' : 'Done'}
                     </Button>
                   </div>
@@ -382,6 +407,13 @@ function Wizard() {
                 </>
               ) : outcome ? (
                 <FailureCard outcome={outcome} path={path} showPolicy={showPolicy} onPolicy={() => setShowPolicy(!showPolicy)} onConnector={() => { setRoute('connector'); go(1) }} />
+              ) : incomplete !== -1 ? (
+                <Callout tone="amber">
+                  {STEPS[incomplete]} isn’t finished: {missingInfo[incomplete]}{' '}
+                  <button type="button" className="text-brass hover:text-brass-light" onClick={() => go(incomplete)}>
+                    Go to step {incomplete + 1}
+                  </button>
+                </Callout>
               ) : (
                 <div className="rounded-[10px] border border-edge bg-rail p-[18px] text-sm2 text-zinc-400">Keyhole signs in with the details you gave and tries to read one key under the path. Nothing is stored until you finish.</div>
               )}
@@ -390,7 +422,7 @@ function Wizard() {
                   <Button size="lg" onClick={() => go(4)} disabled={testing}>
                     Back
                   </Button>
-                  <Button size="lg" variant="primary" onClick={runTest} disabled={testing}>
+                  <Button size="lg" variant="primary" onClick={runTest} disabled={testing || incomplete !== -1}>
                     {outcome ? 'Test again' : 'Test connection'}
                   </Button>
                 </Footer>
@@ -437,6 +469,7 @@ function Wizard() {
 }
 
 const FAIL = {
+  needsConnector: { title: 'Needs a connector', short: 'Kubernetes sign-in only works through a Keyhole connector in your cluster.' },
   sealed: { title: 'Sealed', short: 'Your OpenBao is sealed — unseal it and try again.' },
   denied: { title: 'Not allowed', short: "This login can't read that path — here's an example policy to fix it." },
   unreachable: { title: "Can't reach", short: 'No route to that address — check it, or connect through a Keyhole connector.' },
@@ -473,6 +506,15 @@ function FailureCard({ outcome, path, showPolicy, onPolicy, onConnector }: { out
               </div>
             )}
           </>
+        )}
+        {outcome === 'needsConnector' && (
+          <div className="mt-1 text-sm2 leading-relaxed text-zinc-300">
+            Keyhole signs in with the connector’s service-account token, so Kubernetes sign-in can’t work over the internet.{' '}
+            <button type="button" onClick={onConnector} className="text-brass hover:text-brass-light">
+              Use a connector instead
+            </button>
+            , or pick another sign-in method.
+          </div>
         )}
         {outcome === 'unreachable' && (
           <div className="mt-1 text-sm2 leading-relaxed text-zinc-300">

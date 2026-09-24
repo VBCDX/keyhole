@@ -329,6 +329,7 @@ export const actions = {
   addOpenBao(s: Omit<SecretStore, 'id' | 'orgId' | 'type' | 'health' | 'checkedAt'>, keyNames: string[]) {
     const id = uid('st')
     update((d) => {
+      if (!isAdmin(d)) return
       d.stores.push({ ...s, id, orgId: d.currentOrgId, type: 'openbao', health: 'healthy', checkedAt: Date.now() })
       for (const n of keyNames)
         d.keys.push({ id: uid('k'), orgId: d.currentOrgId, name: n, storeId: id, length: 40, createdAt: Date.now(), rotatedAt: null, expiresAt: null, rotationReminderDays: null, notes: '' })
@@ -345,7 +346,7 @@ export const actions = {
   updateOpenBao(id: string, patch: Partial<SecretStore>, changes: [string, string][]) {
     update((d) => {
       const s = storeById(d, id)
-      if (!s) return
+      if (!s || !isAdmin(d)) return
       Object.assign(s, patch)
       s.health = 'healthy'
       s.checkedAt = Date.now()

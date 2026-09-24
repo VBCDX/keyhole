@@ -86,7 +86,7 @@ function Wizard() {
   // The step list lets people jump ahead, so the test and Finish/Save re-check every earlier step.
   const missingInfo: (string | null)[] = [
     !name.trim() || !/^https?:\/\/\S+$/.test(address) ? 'Add a name and a vault address that starts with https://.' : null,
-    route === 'connector' && !connectorId ? 'Pick a connector.' : null,
+    route === 'connector' && !connectorId ? 'Pick a connector.' : route === 'connector' && !connectors.some((c) => c.id === connectorId) ? 'Its connector was revoked — pick another route.' : null,
     !authOk ? (auth === 'token' ? 'Paste a token.' : auth === 'approle' ? 'Paste the role ID and secret ID.' : 'Enter the Kubernetes role.') : null,
     !path.trim() || !(Number(cache) >= 0) ? 'Add a secrets path and a cache time.' : null,
     !cert && !skipVerify ? 'Upload the vault’s certificate, or skip verification.' : null,
@@ -102,7 +102,7 @@ function Wizard() {
       const chosen = connectors.find((c) => c.id === connectorId)
       let o: Outcome
       if (k8sPublic) o = 'needsConnector'
-      else if (/unreachable|\.invalid/.test(address) || (route === 'connector' && chosen?.health === 'offline')) o = 'unreachable'
+      else if (/unreachable|\.invalid/.test(address) || (route === 'connector' && (!chosen || chosen.health === 'offline'))) o = 'unreachable'
       else if (!path.startsWith('secret/')) o = 'denied'
       // Flow 2: the first try finds the vault sealed; after unsealing, it passes.
       else if (attempts === 0 && !editing) o = 'sealed'

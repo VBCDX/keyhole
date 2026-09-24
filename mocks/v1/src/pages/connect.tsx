@@ -61,7 +61,6 @@ function VerifyCard({ v, w, last }: { v: Verify; w: Workspace; last?: AuditEvent
   const now = useNow()
   if (v.state === 'success' && v.event) {
     const e = v.event
-    const a = e.actorId ? agentById(d, e.actorId) : null
     const req = orgEvents(d).find((x) => x.type === 'request' && x.workspaceId === w.id && x.actorId === e.actorId && Math.abs(x.at - e.at) < 2000)
     const action = req?.detail?.find(([k]) => k === 'Action')?.[1]
     return (
@@ -71,7 +70,8 @@ function VerifyCard({ v, w, last }: { v: Verify; w: Workspace; last?: AuditEvent
           <div className="text-sm font-semibold text-green-400">First request verified</div>
           <div className="mt-3 grid grid-cols-[110px_1fr] gap-x-3 gap-y-1.5 text-sm2">
             <span className="text-zinc-500">Agent</span>
-            <span>{a?.label ?? e.actor}</span>
+            {/* The name at the time of the call: history isn't rewritten by later renames or revocations. */}
+            <span>{e.actor}</span>
             <span className="text-zinc-500">Tool</span>
             <span>
               {req?.object ?? '—'}

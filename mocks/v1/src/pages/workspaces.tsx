@@ -9,9 +9,11 @@ import {
   canSeeWorkspace,
   isAdmin,
   filledSlot,
+  isAdminRole,
   keyById,
   liveTool,
   missingSlots,
+  orgAdmins,
   orgAgents,
   orgEvents,
   orgKeys,
@@ -23,11 +25,12 @@ import {
   toolById,
   unexposeImpact,
   useDB,
+  userById,
   visibleEvents,
   wsById,
 } from '../lib/store'
 import type { Key, Workspace } from '../lib/types'
-import { AgentsTable, AuditLog, ImpactDialog, ListBody, UsersTable, useUserRows } from '../components/shared'
+import { AgentsTable, AuditLog, ImpactDialog, ImpactRows, ListBody, UsersTable, useUserRows } from '../components/shared'
 import { CopyChip } from '../components/keyhole'
 import { Breadcrumb, Button, Checkbox, ConnPill, Dot, Field, Footer, Input, Modal, PageTitle, Row, Select, Table, Tabs, Toggle, cx } from '../components/ui'
 import { CabinetsTab } from './cabinets'
@@ -159,9 +162,14 @@ function PlayerPicker({ users, agents, onUsers, onAgents }: { users: string[]; a
     <div className="grid grid-cols-2 gap-4">
       <div className="flex flex-col gap-2">
         <div className="eyebrow-sm">People</div>
-        {people.map((u) => (
-          <Checkbox key={u.id} checked={users.includes(u.id)} onChange={(v) => onUsers(v ? [...users, u.id] : users.filter((x) => x !== u.id))} label={u.name} />
-        ))}
+        {people.map((u) =>
+          // Org admins administer every workspace by default; they can't be unticked here.
+          isAdminRole(u.roles[d.currentOrgId]) ? (
+            <Checkbox key={u.id} checked disabled label={<span>{u.name} <span className="text-xs2 text-zinc-500">· {u.roles[d.currentOrgId]}, admin by default</span></span>} />
+          ) : (
+            <Checkbox key={u.id} checked={users.includes(u.id)} onChange={(v) => onUsers(v ? [...users, u.id] : users.filter((x) => x !== u.id))} label={u.name} />
+          ),
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <div className="eyebrow-sm">Agents</div>
@@ -323,6 +331,13 @@ export function WsSummary() {
   const [pu, setPu] = useState<string[]>([])
   const [pa, setPa] = useState<string[]>([])
   const admin = isAdmin(d)
+  // Keyhole has no per-workspace admin role: the org's Owners and userAdmins are every workspace's admins.
+  const wsAdmins = orgAdmins(d)
+  // Manage access: who would lose access (org admins keep it regardless).
+  const losingIds = w.userIds.filter((id) => !pu.includes(id) && !isAdminRole(userById(d, id)?.roles[d.currentOrgId]))
+  const losingPeople = losingIds.map((id) => userById(d, id)?.name ?? id)
+  const losingAgents = w.agentIds.filter((id) => !pa.includes(id) && agentById(d, id)?.status !== 'revoked').map((id) => agentById(d, id)?.label ?? id)
+  const losingCabinets = d.cabinets.filter((c) => c.workspaceId === w.id && !!c.managedBy && losingIds.includes(c.managedBy)).map((c) => c.name)
   const agents = w.agentIds.map((id) => agentById(d, id)).filter(Boolean) as NonNullable<ReturnType<typeof agentById>>[]
   const impact = unexposeImpact(d, w.id, keys)
   const saveKeys = () => {
@@ -365,7 +380,7 @@ export function WsSummary() {
         <div className="mt-1.5 text-xs2 text-zinc-600">Names only — values are never shown.</div>
       </div>
       <div>
-        <div className="mb-2.5 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between">
           <div className="eyebrow">Users</div>
           {admin && (
             <button
@@ -379,6 +394,10 @@ export function WsSummary() {
               Manage access
             </button>
           )}
+        </div>
+        <div className="mb-2.5 text-xs text-zinc-500">
+          Workspace admins:{' '}
+          <span className="text-zinc-300">{wsAdmins.map((u) => `${u.name} (${u.roles[d.currentOrgId]})`).join(', ')}</span> — org admins, by default.
         </div>
         <UsersTable rows={rows} />
       </div>
@@ -414,13 +433,22 @@ export function WsSummary() {
       />
       <Modal open={editPlayers} onClose={() => setEditPlayers(false)} width={560} title={`Who gets access to “${w.name}”?`}>
         <PlayerPicker users={pu} agents={pa} onUsers={setPu} onAgents={setPa} />
+        {(losingPeople.length > 0 || losingAgents.length > 0) && (
+          <ImpactRows
+            rows={[
+              ['People losing access', losingPeople.join(', ') || 'None', losingPeople.length ? 'amber' : undefined],
+              ['Agents losing access', losingAgents.join(', ') || 'None', losingAgents.length ? 'amber' : undefined],
+              ['Cabinets they manage here', losingCabinets.length ? `${losingCabinets.join(', ')} — keep working; admins take over management` : 'None'],
+            ]}
+          />
+        )}
         <Footer>
           <Button size="lg" onClick={() => setEditPlayers(false)}>
             Cancel
           </Button>
           <Button
             size="lg"
-            variant="primary"
+            variant={losingPeople.length || losingAgents.length ? 'danger' : 'primary'}
             onClick={() => {
               actions.setWorkspacePlayers(w.id, pu, pa)
               setEditPlayers(false)
@@ -447,6 +475,10 @@ export function WsTools() {
   const [results, setResults] = useState<Record<string, ReturnType<typeof testCall>>>({})
   const [removing, setRemoving] = useState<string | null>(null)
   const [turningOff, setTurningOff] = useState<string | null>(null)
+  /** A slot change that takes a key away (remap or clear), waiting for its preview. */
+  const [slotChange, setSlotChange] = useState<{ toolId: string; slot: string; from: string; to: string | null } | null>(null)
+  /** A lower rate limit, waiting for its preview. Raising it applies straight away. */
+  const [limitChange, setLimitChange] = useState<{ toolId: string; from: number; to: number } | null>(null)
   const available = orgTools(d).filter((t) => !w.tools.some((x) => x.toolId === t.id))
   const activeAgents = w.agentIds.filter((id) => agentById(d, id)?.status === 'active').length
   const lastCalled = (toolId: string | null) => {
@@ -512,10 +544,15 @@ export function WsTools() {
                             <select
                               aria-label={`Key for ${s.name}`}
                               value={k?.id ?? ''}
-                              onChange={(e) => actions.updateWorkspaceTool(w.id, t.id, { slotMap: { ...wt.slotMap, [s.name]: e.target.value || null } })}
+                              onChange={(e) => {
+                                const to = e.target.value || null
+                                // Filling an empty slot only adds access; replacing or clearing a key is previewed.
+                                if (k) setSlotChange({ toolId: t.id, slot: s.name, from: k.id, to })
+                                else actions.updateWorkspaceTool(w.id, t.id, { slotMap: { ...wt.slotMap, [s.name]: to } })
+                              }}
                               className={cx('rounded-md border bg-page px-2 py-0.5 font-mono text-xs outline-none', k ? 'border-edge text-zinc-300' : 'border-amber-500/40 text-amber-400')}
                             >
-                              <option value="">Missing — pick a key</option>
+                              <option value="">{k ? 'Clear this slot' : 'Missing — pick a key'}</option>
                               {slotCandidates(d, w.keyIds, s.name).map((c) => (
                                 <option key={c.id} value={c.id}>
                                   {c.name}
@@ -534,7 +571,7 @@ export function WsTools() {
                     <Toggle on={wt.enabled} onChange={(v) => (v ? actions.updateWorkspaceTool(w.id, t.id, { enabled: true }) : setTurningOff(t.id))} label={`Turn ${t.displayName} on or off`} disabled={!admin} />
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                    <LimitInput key={wt.perMinute} value={wt.perMinute} disabled={!admin} onCommit={(n) => actions.updateWorkspaceTool(w.id, t.id, { perMinute: n })} />
+                    <LimitInput key={wt.perMinute} value={wt.perMinute} disabled={!admin} onCommit={(n) => (n < wt.perMinute ? setLimitChange({ toolId: t.id, from: wt.perMinute, to: n }) : actions.updateWorkspaceTool(w.id, t.id, { perMinute: n }))} />
                     /min
                   </div>
                   <div>
@@ -608,6 +645,36 @@ export function WsTools() {
         confirmLabel="Turn off"
         onConfirm={() => turningOff && actions.updateWorkspaceTool(w.id, turningOff, { enabled: false })}
       />
+      <ImpactDialog
+        open={!!slotChange}
+        onClose={() => setSlotChange(null)}
+        title={slotChange?.to ? `Use a different key for ${slotChange.slot}?` : `Clear ${slotChange?.slot} in ${w.name}?`}
+        rows={[
+          ['Tool', slotChange ? (toolById(d, slotChange.toolId)?.displayName ?? '') : ''],
+          [slotChange?.slot ?? 'Slot', slotChange ? `${keyById(d, slotChange.from)?.name} → ${slotChange.to ? keyById(d, slotChange.to)?.name : 'Missing'}` : '', 'amber'],
+          ['Agents that can call it', plural(activeAgents, 'agent')],
+          ['Last called', lastCalled(slotChange?.toolId ?? null)],
+        ]}
+        body={slotChange?.to ? 'The next call through this slot uses the new key.' : 'Calls through this tool fail until a key fills the slot again. The key itself stays exposed and in its store.'}
+        confirmLabel={slotChange?.to ? 'Use this key' : 'Clear slot'}
+        onConfirm={() => {
+          const wt = slotChange && w.tools.find((x) => x.toolId === slotChange.toolId)
+          if (slotChange && wt) actions.updateWorkspaceTool(w.id, slotChange.toolId, { slotMap: { ...wt.slotMap, [slotChange.slot]: slotChange.to } })
+        }}
+      />
+      <ImpactDialog
+        open={!!limitChange}
+        onClose={() => setLimitChange(null)}
+        title={`Lower the ${limitChange ? toolById(d, limitChange.toolId)?.displayName : ''} limit in ${w.name}?`}
+        rows={[
+          ['Calls per minute', limitChange ? `${limitChange.from} → ${limitChange.to}` : '', 'amber'],
+          ['Agents that can call it', plural(activeAgents, 'agent')],
+          ['Last called', lastCalled(limitChange?.toolId ?? null)],
+        ]}
+        body="Calls over the new limit are refused from the next minute, and each refusal is logged."
+        confirmLabel="Lower limit"
+        onConfirm={() => limitChange && actions.updateWorkspaceTool(w.id, limitChange.toolId, { perMinute: limitChange.to })}
+      />
     </div>
   )
 }
@@ -617,7 +684,8 @@ function LimitInput({ value, disabled, onCommit }: { value: number; disabled: bo
   const [v, setV] = useState(String(value))
   const commit = () => {
     const n = Math.max(1, Math.round(Number(v)) || 1)
-    setV(String(n))
+    // Show the saved value until the change lands; a lowered limit waits for its preview.
+    setV(String(value))
     if (n !== value) onCommit(n)
   }
   return (

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { EGRESS_IPS } from '../lib/catalog'
 import { actions, isAdmin, org, orgConnectors, storeById, useDB } from '../lib/store'
 import { EnrollPanel } from '../components/EnrollPanel'
+import { NoAccess } from '../components/shared'
 import { CopyChip, KeyholeIcon, SECRET_LINE, SecretField } from '../components/keyhole'
 import { Breadcrumb, Button, Callout, Dot, Field, Footer, Input, OptionCard, Pill, Segmented, Select, SlideOver, Toggle, cx } from '../components/ui'
 
@@ -15,6 +16,14 @@ export function OpenBaoWizard() {
   const d = useDB()
   const { orgId } = useParams()
   const [params] = useSearchParams()
+  // Editing is limited to this organization's own stores.
+  const editing = params.get('edit') ? storeById(d, params.get('edit')!) : null
+  if (editing && editing.orgId !== d.currentOrgId)
+    return (
+      <div className="mt-6">
+        <NoAccess what="store" to={`/orgs/${d.currentOrgId}/stores`} back="Back to stores" />
+      </div>
+    )
   // Stores are credential sources: connecting or changing one is admin-only, however the page was reached.
   if (!isAdmin(d))
     return (

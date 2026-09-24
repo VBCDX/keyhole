@@ -16,6 +16,7 @@ export function DemoPanel() {
     { id: 'u_ravi', label: 'Ravi Mehta', sub: 'userAdmin' },
     { id: 'u_mia', label: 'Mia Chen', sub: 'user' },
     { id: 'u_sam', label: 'Sam Ortiz', sub: 'invited' },
+    { id: 'u_noor', label: 'Noor Haddad', sub: 'Owner (Northwind)' },
     { id: 'support', label: 'Keyhole support', sub: 'superAdmin' },
   ].filter((p) => p.id === 'support' || d.users.some((u) => u.id === p.id))
 

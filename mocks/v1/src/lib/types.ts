@@ -1,5 +1,6 @@
 export type Role = 'Owner' | 'userAdmin' | 'user'
-export type UserStatus = 'active' | 'suspended' | 'invited'
+/** Account-level: has the person ever signed in. Suspension is per organization (see User.suspended). */
+export type UserStatus = 'active' | 'invited'
 
 export interface Org {
   id: string
@@ -14,6 +15,11 @@ export interface User {
   /** Role per organization id. A person can belong to several organizations. */
   roles: Record<string, Role>
   status: UserStatus
+  /**
+   * Organizations that suspended this membership (orgId → true). Suspension belongs to one
+   * membership: it never affects the person's other organizations. Support locks are account-wide.
+   */
+  suspended?: Record<string, true>
   /** Set by Keyhole support; blocks sign-in. */
   locked: boolean
   lockedAt?: number
@@ -167,7 +173,10 @@ export interface Cabinet {
   id: string
   workspaceId: string
   name: string
-  ownerId: string | null
+  /** Who made it. Kept for audit and observability only (rule 3): it grants nothing. */
+  createdBy: string | null
+  /** Who manages it. Starts as the creator; when they can no longer use the workspace, org admins manage it. */
+  managedBy: string | null
   keyIds: string[]
   tools: { toolId: string; slotMap: Record<string, string | null> }[]
   access: 'everyone' | PlayerRef[]

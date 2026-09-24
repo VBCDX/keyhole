@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ago, initials, until } from '../lib/format'
-import { actions, agentsCreatedBy, isAdmin, me, myRole, org, useDB, useNow, visibleEvents } from '../lib/store'
+import { actions, agentsCreatedBy, isActive, isAdmin, isSuspended, me, myRole, org, useDB, useNow, visibleEvents } from '../lib/store'
 import { AuditLog } from '../components/shared'
 import { KeyholeIcon } from '../components/keyhole'
 import { Avatar, Button, Card, Field, Footer, Input, Modal, PageTitle, Toggle } from '../components/ui'
@@ -264,6 +264,12 @@ export function SupportConsole() {
   const pendingInvite = u ? d.invites.find((i) => i.email === u.email) : null
   // Support sees membership, never contents: a count of agents, not their names.
   const agentCount = u ? agentsCreatedBy(d, u, Object.keys(u.roles)).length : 0
+  // Support may lock anyone, even an org's only active Owner, because support can unlock. The preview says what waits.
+  const othersActive = (orgId: string, roles: string[]) => d.users.some((x) => x.id !== u?.id && roles.includes(x.roles[orgId] ?? '') && isActive(x, orgId))
+  const userOrgs = u ? Object.keys(u.roles) : []
+  const suspendedIn = userOrgs.filter((id) => isSuspended(u, id)).map((id) => d.orgs.find((o) => o.id === id)?.name)
+  const ownerPaused = userOrgs.filter((id) => u!.roles[id] === 'Owner' && !othersActive(id, ['Owner'])).map((id) => d.orgs.find((o) => o.id === id)?.name)
+  const noAdminLeft = userOrgs.filter((id) => ['Owner', 'userAdmin'].includes(u!.roles[id]) && !othersActive(id, ['Owner', 'userAdmin'])).map((id) => d.orgs.find((o) => o.id === id)?.name)
   const ask = (c: NonNullable<typeof confirm>) => {
     setReason('')
     setConfirm(c)
@@ -311,7 +317,7 @@ export function SupportConsole() {
               <div>
                 <div className="text-md font-semibold">{u.email}</div>
                 <div className={`text-xs ${u.locked ? 'text-amber-500' : 'text-slate-400'}`}>
-                  {u.locked ? `Locked · ${new Date(u.lockedAt!).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} today` : u.status === 'invited' ? 'Invited · hasn’t signed in' : 'Active'}
+                  {u.locked ? `Locked · ${new Date(u.lockedAt!).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} today` : u.status === 'invited' ? 'Invited · hasn’t signed in' : suspendedIn.length ? `Active · suspended in ${suspendedIn.join(', ')}` : 'Active'}
                 </div>
               </div>
             </div>
@@ -369,10 +375,18 @@ export function SupportConsole() {
               <span className="text-zinc-500">Organizations notified</span>
               <span className="text-right">{orgNames.join(', ') || '—'}</span>
             </div>
+            {confirm === 'lock' && ownerPaused.length > 0 && (
+              <div className="flex justify-between gap-6">
+                <span className="text-zinc-500">Only active Owner of</span>
+                <span className="text-right font-semibold text-amber-400">
+                  {ownerPaused.join(', ')} — {noAdminLeft.length ? 'no admin there can act' : 'Owner-only actions wait'} until you unlock
+                </span>
+              </div>
+            )}
             {confirm === 'lock' && (
               <div className="flex justify-between gap-6">
                 <span className="text-zinc-500">Agents they created</span>
-                <span className="text-right">{agentCount ? `${agentCount} · keep working (they belong to the organization)` : 'None'}</span>
+                <span className="text-right">{agentCount ? `${agentCount} — unaffected; agents belong to the organization` : 'None'}</span>
               </div>
             )}
           </div>

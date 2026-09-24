@@ -1,5 +1,7 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { me, useDB } from './lib/store'
+import { useEffect } from 'react'
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { actions, isSuspended, me, myOrgs, org, recordOrgFromPath, useDB } from './lib/store'
+import { Button } from './components/ui'
 import { AppShell } from './components/AppShell'
 import { DemoPanel } from './components/DemoPanel'
 import { KeyholeIcon } from './components/keyhole'
@@ -37,8 +39,62 @@ function Locked() {
   )
 }
 
+/**
+ * Suspension takes effect immediately (rule 5), but only in the organization that suspended you:
+ * your other organizations stay one click away.
+ */
+function Suspended() {
+  const d = useDB()
+  const u = me(d)
+  const here = org(d)
+  const nav = useNavigate()
+  const others = myOrgs(d).filter((o) => !isSuspended(u, o.id))
+  return (
+    <div className="flex h-full items-center justify-center bg-page text-zinc-100">
+      <div className="flex w-[420px] flex-col items-center gap-3 text-center">
+        <KeyholeIcon size={28} state="error" />
+        <div className="text-[15px] font-semibold">You’re suspended in {here?.name}</div>
+        <div className="text-sm2 leading-relaxed text-zinc-400">An admin of {here?.name} suspended your membership. Ask them to reactivate it — everything you set up there is still in place.</div>
+        {others.length > 0 && (
+          <div className="mt-2 flex flex-col items-center gap-2">
+            <div className="text-xs text-zinc-500">Your other organizations aren’t affected:</div>
+            {others.map((o) => (
+              <Button
+                key={o.id}
+                onClick={() => {
+                  actions.setOrg(o.id)
+                  nav('/')
+                }}
+              >
+                Open {o.name}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The last path Routed resolved a record organization for (module state: it only gates one render). */
+let switchedForPath: string | null = null
+
 function Routed() {
   const d = useDB()
+  // Records belong to one organization. A link to a record in another organization the viewer belongs to
+  // switches to it first, so that organization's suspension gate and role checks apply. Pages show
+  // "no access" for records in organizations the viewer isn't in.
+  // Only a navigation triggers the switch: choosing another org (switcher, suspended screen) while the old
+  // URL is still showing mustn't be undone before the new URL arrives.
+  const { pathname } = useLocation()
+  const recordOrg = d.currentUserId === 'support' ? null : recordOrgFromPath(d, pathname)
+  const switchTo = recordOrg && recordOrg !== d.currentOrgId && me(d)?.roles[recordOrg] ? recordOrg : null
+  useEffect(() => {
+    if (switchedForPath === pathname) return
+    switchedForPath = pathname
+    if (switchTo) actions.setOrg(switchTo)
+  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (switchTo && switchedForPath !== pathname) return null
   if (d.currentUserId === 'support')
     return (
       <Routes>
@@ -47,6 +103,7 @@ function Routed() {
     )
   const u = me(d)
   if (u?.locked) return <Locked />
+  if (u && isSuspended(u, d.currentOrgId)) return <Suspended />
   if (!u || !Object.keys(u.roles).length || !d.orgs.some((o) => o.id === d.currentOrgId)) return <NoOrgShell />
   return (
     <Routes>

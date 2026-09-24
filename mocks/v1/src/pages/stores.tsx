@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { COMING_SOON_STORES } from '../lib/catalog'
 import { DAY, ago, plural, until } from '../lib/format'
-import { actions, isAdmin, keyUsage, lastUsedForKey, orgConnectors, orgKeys, orgStores, storeById, useDB, useNow } from '../lib/store'
+import { actions, hasWorkspaceAccess, isAdmin, keyUsage, lastUsedForKey, orgConnectors, orgKeys, orgStores, storeById, useDB, useNow } from '../lib/store'
 import type { Key, SecretStore } from '../lib/types'
 import { LockedDots, SECRET_LINE, SecretField } from '../components/keyhole'
-import { ImpactDialog, ListBody } from '../components/shared'
+import { ImpactDialog, ImpactRows, ListBody, NoAccess } from '../components/shared'
 import { Button, Checkbox, Dot, FOCUS_RING, Field, Footer, Input, Menu, Modal, Pill, Row, Select, SlideOver, Table, Textarea, activateOnKey, cx } from '../components/ui'
 
 function storeHealth(d: ReturnType<typeof useDB>, s: SecretStore) {
@@ -160,6 +160,14 @@ function SourceRemovedKeys({ keys }: { keys: Key[] }) {
         <div className="text-sm2 text-zinc-400">
           Its store is gone. Pick a replacement key to fill the same slots — or remove it and leave those slots empty.
         </div>
+        {resolving && (
+          <ImpactRows
+            rows={[
+              ['Slots it fills', keyUsage(d, resolving.id).map((u) => `${u.tool.displayName} · ${u.ws?.name ?? u.cabinet?.name}`).join('; ') || 'None', keyUsage(d, resolving.id).length ? 'amber' : undefined],
+              ['Workspaces exposing it', d.workspaces.filter((w) => w.keyIds.includes(resolving.id)).map((w) => w.name).join(', ') || 'None'],
+            ]}
+          />
+        )}
         <Field label="Replacement key">
           <Select mono value={replacement} onChange={(e) => setReplacement(e.target.value)}>
             <option value="">Choose a key…</option>
@@ -225,6 +233,13 @@ export function StoreDetail() {
   }, []) // eslint-disable-line
 
   if (!s) return <div className="mt-6 text-sm text-zinc-400">This store no longer exists. <Link to={`/orgs/${orgId}/stores`}>Back to stores</Link></div>
+  // Nested under /orgs/:orgId, so the store must belong to that (current) organization.
+  if (s.orgId !== d.currentOrgId)
+    return (
+      <div className="mt-6">
+        <NoAccess what="store" to={`/orgs/${d.currentOrgId}/stores`} back="Back to stores" />
+      </div>
+    )
   const keys = d.keys.filter((k) => k.storeId === s.id)
   const route = s.route === 'public' ? 'Reachable from the internet' : s.route ? `Through connector ${orgConnectors(d).find((c) => c.id === s.route)?.name ?? '(revoked)'}` : ''
 
@@ -302,8 +317,8 @@ export function StoreDetail() {
               const uses = keyUsage(d, k.id)
               const cab = k.cabinetId ? d.cabinets.find((c) => c.id === k.cabinetId) : null
               const soon = k.expiresAt && k.expiresAt - now < 14 * DAY
-              // Members may only replace values in cabinets they own; everything else is admin-only.
-              const ownCabinetKey = !!cab && cab.ownerId === d.currentUserId
+              // Members may only replace values in cabinets they manage; everything else is admin-only.
+              const ownCabinetKey = !!cab && cab.managedBy === d.currentUserId && hasWorkspaceAccess(d, d.currentUserId, cab.workspaceId)
               return (
                 <Row key={k.id} cols={KEY_COLS}>
                   <div className="min-w-0">

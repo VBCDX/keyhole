@@ -533,14 +533,20 @@ export function Menu({ items, label = 'Actions' }: { items: ({ label: string; on
             <button
               key={it!.label}
               type="button"
-              disabled={it!.disabled}
+              // aria-disabled rather than disabled: the item stays reachable by Tab, so its label
+              // (often the reason it's unavailable) is still read out.
+              aria-disabled={it!.disabled || undefined}
               onClick={() => {
+                if (it!.disabled) return
                 // Park focus on the trigger so a dialog opened from here can hand it back.
                 trigger.current?.focus()
                 setOpen(false)
                 it!.onClick()
               }}
-              className={cx('block w-full rounded-md px-3 py-1.5 text-left text-[13px] disabled:opacity-40', it!.danger ? 'text-red-400 hover:bg-red-500/10' : 'text-zinc-300 hover:bg-line')}
+              className={cx(
+                'block w-full rounded-md px-3 py-1.5 text-left text-[13px] aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent',
+                it!.danger ? 'text-red-400 hover:bg-red-500/10' : 'text-zinc-300 hover:bg-line',
+              )}
             >
               {it!.label}
             </button>

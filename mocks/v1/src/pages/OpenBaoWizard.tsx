@@ -10,7 +10,13 @@ const STEPS = ['Basics', 'How Keyhole reaches it', 'How Keyhole signs in', 'What
 type Outcome = 'sealed' | 'denied' | 'unreachable' | 'ok'
 const AUTH_LABEL = { approle: 'AppRole', kubernetes: 'Kubernetes', token: 'Token' } as const
 
+/** Keyed by the store being edited, so switching between editing and connecting starts fresh. */
 export function OpenBaoWizard() {
+  const [params] = useSearchParams()
+  return <Wizard key={params.get('edit') ?? 'new'} />
+}
+
+function Wizard() {
   const d = useDB()
   const nav = useNavigate()
   const { orgId } = useParams()

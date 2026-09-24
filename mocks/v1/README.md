@@ -38,13 +38,17 @@ A **Prototype controls** pill sits at the bottom left. It isn't part of the prod
 | 7 · Live debugging | Audit › Live. ops-agent streams red rows. Expand one › *Open the tool's actions* › add `GET /v1/payouts` › Publish › back to Live, and the rows turn green. |
 | 8 · Support lock | View as Keyhole support › search `mia` › Lock account (a reason or ticket ID is required). View as Dana › Audit shows the support action and its reason; Players › Users › Mia › *Ask support to unlock*, which support then sees on Mia's record. |
 
+State persists in `localStorage` (`keyhole-mocks-v1`). Resetting the scenario clears it.
+
 ## Ground rules the prototype enforces
 
 - Secret values are never rendered. Paste fields are password inputs, and after saving only dots remain.
   The app only ever learns a value's length.
 - Full agent tokens appear once, in the brass one-time panel. They're kept in memory only for this
   browser session, so a config download can include them. Everywhere else they're masked as `kh_live_••••6TpE`.
-- Every delete or revoke opens an impact preview. Organization, store, and workspace deletes require typing the name.
+- Anything destructive or access-reducing opens an impact preview first: deletes, revokes, removals, suspensions,
+  demotions, narrowing who can use a workspace or cabinet, swapping or clearing a key slot, and lowering a limit.
+  Organization, store, and workspace deletes require typing the name.
 - One activity-log component and one Users/Agents table design, reused everywhere.
 - Agents only ever get a tool's published version. New and catalog tools start as drafts that can't be granted
   or called. Workspace Tools tabs, test calls and traffic follow the published version until the next publish.
@@ -72,5 +76,3 @@ Keyhole and Dispatch follow the same permission rules. Where a rule plays out di
    - Each admin change logs who made it (human, agent or support) and its before and after values.
    - Anything destructive or access-reducing shows an impact preview first.
    - Organization, store and workspace deletions require typing the name to confirm.
-
-State persists in `localStorage` (`keyhole-mocks-v1`). Resetting the scenario clears it.

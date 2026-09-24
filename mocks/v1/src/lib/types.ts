@@ -1,5 +1,6 @@
 export type Role = 'Owner' | 'userAdmin' | 'user'
-export type UserStatus = 'active' | 'suspended' | 'invited'
+/** Account-level: has the person ever signed in. Suspension is per organization (see User.suspended). */
+export type UserStatus = 'active' | 'invited'
 
 export interface Org {
   id: string
@@ -14,6 +15,11 @@ export interface User {
   /** Role per organization id. A person can belong to several organizations. */
   roles: Record<string, Role>
   status: UserStatus
+  /**
+   * Organizations that suspended this membership (orgId → true). Suspension belongs to one
+   * membership: it never affects the person's other organizations. Support locks are account-wide.
+   */
+  suspended?: Record<string, true>
   /** Set by Keyhole support; blocks sign-in. */
   locked: boolean
   lockedAt?: number

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ago, clock, expiringSoon, initials, maskToken, until } from '../lib/format'
 import { liveTick } from '../lib/simulate'
-import { actions, agentsCreatedBy, canManageMember, isActive, isAdmin, isAdminRole, isDemotion, isLastOwner, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
+import { actions, agentsCreatedBy, canManageMember, isActive, isSuspended, isAdmin, isAdminRole, isDemotion, isLastOwner, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
 import type { Agent, AuditEvent, Role, User } from '../lib/types'
 import { CopyChip, TokenPanel } from './keyhole'
 import {
@@ -186,9 +186,9 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
     return [
       { label: 'Change role', onClick: () => setRoleFor(row) },
       isAdminRole(role) ? null : { label: 'Assign workspaces', onClick: () => setWsFor(row) },
-      owner && role !== 'Owner' && u.status === 'active' && !u.locked ? { label: 'Transfer ownership', onClick: () => setTransferTo(u) } : null,
+      owner && role !== 'Owner' && isActive(u, d.currentOrgId) ? { label: 'Transfer ownership', onClick: () => setTransferTo(u) } : null,
       u.locked ? { label: u.unlockRequest ? 'Unlock requested' : 'Ask support to unlock', disabled: !!u.unlockRequest, onClick: () => actions.requestUnlock(u.id) } : null,
-      u.status === 'suspended' ? { label: 'Reactivate', onClick: () => actions.setUserSuspended(u.id, false) } : { label: 'Suspend', onClick: () => setSuspendFor(row) },
+      isSuspended(u, d.currentOrgId) ? { label: 'Reactivate', onClick: () => actions.setUserSuspended(u.id, false) } : { label: 'Suspend', onClick: () => setSuspendFor(row) },
       { label: 'Remove', danger: true, onClick: () => setRemoveFor(row) },
     ]
   }
@@ -207,7 +207,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
                   <StatusInline tone="amber">Locked</StatusInline>
                 ) : invited ? (
                   <StatusInline tone="gray">Invited</StatusInline>
-                ) : u.status === 'suspended' ? (
+                ) : isSuspended(u, d.currentOrgId) ? (
                   <StatusInline tone="amber">Suspended</StatusInline>
                 ) : (
                   <StatusInline tone="green">Active</StatusInline>
@@ -232,7 +232,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
           ['Agents they created', suspendFor ? createdAgentsLabel(agentsCreatedBy(d, suspendFor.user).map((a) => a.label)) : ''],
           ['Last active', ago(suspendFor?.user.lastActive ?? null, now)],
         ]}
-        body="They can’t sign in or use any workspace until you reactivate them. Nothing they created or did changes: agents, grants, keys and cabinets keep working."
+        body="They can’t use this organization until you reactivate them; their other organizations aren’t affected. Nothing they created or did changes: agents, grants, keys and cabinets keep working."
         confirmLabel="Suspend user"
         onConfirm={() => suspendFor && actions.setUserSuspended(suspendFor.user.id, true)}
       />
@@ -277,6 +277,11 @@ function ChangeRoleModal({ row, onClose }: { row: UserRow | null; onClose: () =>
     .filter((x) => isAdminRole(x.r))
   const ownerAfter = adminsAfter.some((x) => x.r === 'Owner')
   const explicit = row ? orgWorkspaces(d).filter((w) => w.userIds.includes(row.user.id)).map((w) => w.name) : []
+  // Demoted to user, they stop managing cabinets in workspaces they aren't a member of; admins take over.
+  const released =
+    row && role === 'user'
+      ? d.cabinets.filter((c) => c.managedBy === row.user.id && d.workspaces.some((w) => w.id === c.workspaceId && w.orgId === d.currentOrgId && !w.userIds.includes(row.user.id))).map((c) => c.name)
+      : []
   return (
     <Modal open={!!row} onClose={onClose} title={`Change role for ${row?.user.name}`} width={480}>
       <Segmented<Role>
@@ -299,6 +304,7 @@ function ChangeRoleModal({ row, onClose }: { row: UserRow | null; onClose: () =>
               `${adminsAfter.map((x) => `${x.u.name} (${x.r})`).join(', ') || 'None'} — ${ownerAfter ? 'every workspace keeps an active Owner' : 'no active Owner until Keyhole support unlocks one'}`,
               ownerAfter ? undefined : 'amber',
             ],
+            ['Cabinets they manage', released.length ? `${released.join(', ')} — keep working; admins take over management` : 'Unaffected'],
             ['Agents they created', 'Unaffected'],
           ]}
         />
@@ -332,7 +338,7 @@ export function TransferOwnershipDialog({ open, to, onClose }: { open: boolean; 
     onClose()
   }
   // Existing Owners already have ownership; transferring to them would only demote you.
-  const candidates = d.users.filter((u) => u.id !== d.currentUserId && u.roles[d.currentOrgId] && u.roles[d.currentOrgId] !== 'Owner' && isActive(u))
+  const candidates = d.users.filter((u) => u.id !== d.currentUserId && u.roles[d.currentOrgId] && u.roles[d.currentOrgId] !== 'Owner' && isActive(u, d.currentOrgId))
   const target = to ?? candidates.find((u) => u.id === picked)
   const role = target?.roles[d.currentOrgId]
   return (

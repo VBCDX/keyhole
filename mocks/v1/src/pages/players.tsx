@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ago, initials, maskToken, until } from '../lib/format'
-import { actions, agentById, canSeeWorkspace, isAdmin, isAdminRole, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
+import { actions, agentById, canSeeWorkspace, isAdmin, isAdminRole, isSuspended, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
 import type { Agent } from '../lib/types'
 import { TokenPanel } from '../components/keyhole'
 import { AgentsTable, AuditLog, RevokeAgentDialog, RotateAgentDialog, SuspendAgentDialog, UsersTable, useUserRows } from '../components/shared'
@@ -46,7 +46,7 @@ export function UserDetail() {
             {u.email} · {role} · {u.id === d.currentUserId ? 'active now' : `last active ${ago(u.lastActive, now).toLowerCase()}`}
           </div>
         </div>
-        <span className="ml-auto">{u.locked ? <StatusInline tone="amber">Locked by support</StatusInline> : u.status === 'suspended' ? <StatusInline tone="amber">Suspended</StatusInline> : <StatusInline tone="green">Active</StatusInline>}</span>
+        <span className="ml-auto">{u.locked ? <StatusInline tone="amber">Locked by support</StatusInline> : isSuspended(u, d.currentOrgId) ? <StatusInline tone="amber">Suspended</StatusInline> : <StatusInline tone="green">Active</StatusInline>}</span>
       </div>
       {u.locked && (
         <div className="mt-5 flex items-center justify-between gap-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-400">

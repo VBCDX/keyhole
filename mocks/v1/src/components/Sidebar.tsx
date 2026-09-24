@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { actions, me, myOrgs, org, useDB } from '../lib/store'
+import { actions, isSuspended, me, myOrgs, org, useDB } from '../lib/store'
 import { KeyholeIcon } from './keyhole'
 import { cx } from './ui'
 
@@ -64,7 +64,11 @@ function OrgSwitcher() {
               className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[13px] text-zinc-300 hover:bg-line"
             >
               <span className="truncate">{o.name}</span>
-              <span className="text-2xs text-zinc-500">{o.id === d.currentOrgId ? '✓' : me(d).roles[o.id]}</span>
+              {isSuspended(me(d), o.id) ? (
+                <span className="text-2xs text-amber-400">suspended</span>
+              ) : (
+                <span className="text-2xs text-zinc-500">{o.id === d.currentOrgId ? '✓' : me(d).roles[o.id]}</span>
+              )}
             </button>
           ))}
           <div className="my-1 border-t border-line" />

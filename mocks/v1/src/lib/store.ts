@@ -19,7 +19,7 @@ import type {
 } from './types'
 
 const LS_KEY = 'keyhole-mocks-v1'
-const VERSION = 5
+const VERSION = 6
 
 function load(): DB {
   try {
@@ -101,10 +101,12 @@ const RANK: Record<Role, number> = { user: 0, userAdmin: 1, Owner: 2 }
 export const isAdminRole = (r: Role | null | undefined) => r === 'Owner' || r === 'userAdmin'
 /** Owners and userAdmins: they administer every workspace in the organization (rule 1). */
 /** Suspended or support-locked people can't act, so they never count towards rules 1 and 2. */
-export const isActive = (u: User | undefined) => !!u && u.status === 'active' && !u.locked
+export const isSuspended = (u: User | undefined, orgId: string) => !!u?.suspended?.[orgId]
+/** Can this person act in this organization: signed up, not locked by support, not suspended there. */
+export const isActive = (u: User | undefined, orgId: string) => !!u && u.status === 'active' && !u.locked && !isSuspended(u, orgId)
 /** Active Owners and userAdmins: they administer every workspace in the organization (rule 1). */
-export const orgAdmins = (d: DB) => d.users.filter((u) => isAdminRole(u.roles[d.currentOrgId]) && isActive(u))
-export const activeOwners = (d: DB) => d.users.filter((u) => u.roles[d.currentOrgId] === 'Owner' && isActive(u))
+export const orgAdmins = (d: DB) => d.users.filter((u) => isAdminRole(u.roles[d.currentOrgId]) && isActive(u, d.currentOrgId))
+export const activeOwners = (d: DB) => d.users.filter((u) => u.roles[d.currentOrgId] === 'Owner' && isActive(u, d.currentOrgId))
 /**
  * An Owner with no other active Owner beside them. Demoting, suspending or removing them would leave
  * the organization with nobody able to manage Owners, so it's blocked (transfer ownership instead).
@@ -129,7 +131,7 @@ export function hasWorkspaceAccess(d: DB, userId: string | null | undefined, wsI
   const u = d.users.find((x) => x.id === userId)
   const w = d.workspaces.find((x) => x.id === wsId)
   const r = w && u?.roles[w.orgId]
-  return !!r && isActive(u) && (isAdminRole(r) || w.userIds.includes(u!.id))
+  return !!r && isActive(u, w!.orgId) && (isAdminRole(r) || w!.userIds.includes(u!.id))
 }
 /** Membership regardless of status: suspension pauses a person, it doesn't take their place away. */
 function isMember(d: DB, userId: string, w: Workspace) {
@@ -773,8 +775,7 @@ export const actions = {
       if (!inv) return
       d.invites = d.invites.filter((x) => x.id !== inviteId)
       for (const k in d.incomingInvites) d.incomingInvites[k] = d.incomingInvites[k].filter((x) => x.id !== inviteId)
-      const u = d.users.find((x) => x.email === inv.email)
-      if (u && !Object.keys(u.roles).length) d.users = d.users.filter((x) => x.id !== u.id)
+      // The person's record stays: accounts are never deleted here, so "Created by" and history keep resolving.
       log(d, { object: `Revoked invite for ${inv.email}` })
     })
   },
@@ -822,10 +823,12 @@ export const actions = {
     update((d) => {
       const u = userById(d, userId)
       if (!u || !canManageMember(d, userId) || (suspended && isLastOwner(d, userId))) return
-      const next = suspended ? 'suspended' : 'active'
-      if (u.status === next) return
-      log(d, { object: `${suspended ? 'Suspended' : 'Reactivated'} ${u.name}`, detail: [['Status', `${u.status} → ${next}`]] })
-      u.status = next
+      // Only this membership changes: the person's other organizations, and their logs, are untouched.
+      if (isSuspended(u, d.currentOrgId) === suspended) return
+      const label = (s: boolean) => (s ? 'suspended' : 'active')
+      log(d, { object: `${suspended ? 'Suspended' : 'Reactivated'} ${u.name}`, detail: [['Status in this organization', `${label(!suspended)} → ${label(suspended)}`]] })
+      if (suspended) u.suspended = { ...u.suspended, [d.currentOrgId]: true }
+      else if (u.suspended) delete u.suspended[d.currentOrgId]
     })
   },
   /** The current Owner hands ownership to another member and becomes a userAdmin. */
@@ -834,7 +837,7 @@ export const actions = {
       const from = me(d)
       const to = userById(d, toUserId)
       const before = to?.roles[d.currentOrgId]
-      if (!from || myRole(d) !== 'Owner' || !to || !before || before === 'Owner' || to.id === from.id || !isActive(to)) return
+      if (!from || myRole(d) !== 'Owner' || !to || !before || before === 'Owner' || to.id === from.id || !isActive(to, d.currentOrgId)) return
       to.roles[d.currentOrgId] = 'Owner'
       from.roles[d.currentOrgId] = 'userAdmin'
       log(d, {
@@ -880,6 +883,8 @@ export const actions = {
       const role = u.roles[d.currentOrgId]
       const lost = d.workspaces.filter((w) => w.orgId === d.currentOrgId && w.userIds.includes(userId)).map((w) => w.name)
       delete u.roles[d.currentOrgId]
+      // Suspension belongs to the membership, so it goes with it.
+      if (u.suspended) delete u.suspended[d.currentOrgId]
       for (const w of d.workspaces) if (w.orgId === d.currentOrgId) w.userIds = w.userIds.filter((x) => x !== userId)
       const released = settleCabinetManagement(d)
       log(d, {

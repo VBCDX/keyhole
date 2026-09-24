@@ -1,5 +1,7 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { me, useDB } from './lib/store'
+import { useEffect } from 'react'
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { actions, isSuspended, me, myOrgs, org, useDB } from './lib/store'
+import { Button } from './components/ui'
 import { AppShell } from './components/AppShell'
 import { DemoPanel } from './components/DemoPanel'
 import { KeyholeIcon } from './components/keyhole'
@@ -37,14 +39,37 @@ function Locked() {
   )
 }
 
-/** Suspension takes effect immediately (rule 5): a suspended person can't use the app until reactivated. */
+/**
+ * Suspension takes effect immediately (rule 5), but only in the organization that suspended you:
+ * your other organizations stay one click away.
+ */
 function Suspended() {
+  const d = useDB()
+  const u = me(d)
+  const here = org(d)
+  const others = myOrgs(d).filter((o) => !isSuspended(u, o.id))
+  // A link into another of their organizations (#/orgs/<id>/…) opens it rather than stopping here.
+  const linked = useLocation().pathname.match(/^\/orgs\/([^/]+)/)?.[1]
+  const target = others.find((o) => o.id === linked)
+  useEffect(() => {
+    if (target) actions.setOrg(target.id)
+  }, [target])
   return (
     <div className="flex h-full items-center justify-center bg-page text-zinc-100">
       <div className="flex w-[420px] flex-col items-center gap-3 text-center">
         <KeyholeIcon size={28} state="error" />
-        <div className="text-[15px] font-semibold">This account is suspended</div>
-        <div className="text-sm2 leading-relaxed text-zinc-400">An admin of your organization suspended it. Ask them to reactivate it — everything you set up is still there.</div>
+        <div className="text-[15px] font-semibold">You’re suspended in {here?.name}</div>
+        <div className="text-sm2 leading-relaxed text-zinc-400">An admin of {here?.name} suspended your membership. Ask them to reactivate it — everything you set up there is still in place.</div>
+        {others.length > 0 && (
+          <div className="mt-2 flex flex-col items-center gap-2">
+            <div className="text-xs text-zinc-500">Your other organizations aren’t affected:</div>
+            {others.map((o) => (
+              <Button key={o.id} onClick={() => actions.setOrg(o.id)}>
+                Open {o.name}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -60,7 +85,7 @@ function Routed() {
     )
   const u = me(d)
   if (u?.locked) return <Locked />
-  if (u?.status === 'suspended') return <Suspended />
+  if (u && isSuspended(u, d.currentOrgId)) return <Suspended />
   if (!u || !Object.keys(u.roles).length || !d.orgs.some((o) => o.id === d.currentOrgId)) return <NoOrgShell />
   return (
     <Routes>

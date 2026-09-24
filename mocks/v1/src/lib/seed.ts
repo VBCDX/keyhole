@@ -167,7 +167,8 @@ export function populatedDB(): DB {
       dana(now),
       { id: 'u_ravi', name: 'Ravi Mehta', email: 'ravi@acme.com', roles: { org_acme: 'userAdmin' }, status: 'active', locked: false, lastActive: now - 2 * HOUR, sessions: [{ device: 'ThinkPad', place: 'Austin', at: now - 2 * HOUR }] },
       { id: 'u_mia', name: 'Mia Chen', email: 'mia@acme.com', roles: { org_acme: 'user', org_nw: 'user' }, status: 'active', locked: false, lastActive: now - 3 * HOUR, sessions: [{ device: 'MacBook Air', place: 'Seattle', at: now - 3 * HOUR }, { device: 'Pixel 8', place: 'Seattle', at: now - 5 * HOUR }] },
-      { id: 'u_jo', name: 'Jo Reyes', email: 'jo@acme.com', roles: { org_acme: 'user' }, status: 'suspended', locked: false, lastActive: now - 6 * DAY, sessions: [] },
+      { id: 'u_jo', name: 'Jo Reyes', email: 'jo@acme.com', roles: { org_acme: 'user' }, status: 'active', suspended: { org_acme: true }, locked: false, lastActive: now - 6 * DAY, sessions: [] },
+      { id: 'u_noor', name: 'Noor Haddad', email: 'noor@northwind.dev', roles: { org_nw: 'Owner' }, status: 'active', locked: false, lastActive: now - 1 * DAY, sessions: [{ device: 'MacBook Pro', place: 'Lisbon', at: now - 1 * DAY }] },
       { id: 'u_sam', name: 'Sam Ortiz', email: 'sam@acme.com', roles: {}, status: 'invited', locked: false, lastActive: null, sessions: [{ device: 'Chromebook', place: 'Denver', at: now - 10 * MIN }] },
     ],
     invites: [

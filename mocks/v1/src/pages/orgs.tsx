@@ -105,7 +105,7 @@ export function OrgOverview() {
   const now = useNow()
   const o = org(d)!
   const owners = d.users.filter((u) => u.roles[o.id] === 'Owner')
-  const inactiveOwners = owners.filter((u) => !isActive(u))
+  const inactiveOwners = owners.filter((u) => !isActive(u, o.id))
   const [transferring, setTransferring] = useState(false)
   const role = me(d).roles[o.id]
   const [renaming, setRenaming] = useState(false)
@@ -133,8 +133,14 @@ export function OrgOverview() {
       </div>
       {!activeOwners(d).length && (
         <Callout tone="amber" className="mt-4">
-          No active Owner: {inactiveOwners.map((u) => `${u.name} (${u.locked ? 'locked by Keyhole support' : 'suspended'})`).join(', ')}. Admins can keep running workspaces, but Owner-only actions — managing Owners, transferring
-          ownership, renaming or deleting the organization — wait until {inactiveOwners.some((u) => u.locked) ? 'Keyhole support unlocks the account' : 'an Owner is active again'}.
+          {owners.length ? (
+            <>
+              No active Owner: {inactiveOwners.map((u) => `${u.name} (${u.locked ? 'locked by Keyhole support' : 'suspended'})`).join(', ')}. Admins can keep running workspaces, but Owner-only actions — managing
+              Owners, transferring ownership, renaming or deleting the organization — wait until {inactiveOwners.some((u) => u.locked) ? 'Keyhole support unlocks the account' : 'an Owner is active again'}.
+            </>
+          ) : (
+            <>This organization has no Owner, so Owner-only actions — managing Owners, transferring ownership, renaming or deleting the organization — aren’t available to anyone.</>
+          )}
         </Callout>
       )}
       <Card className="mt-4 grid grid-cols-[160px_1fr] gap-x-3 gap-y-2.5 p-5 text-[13px]">
@@ -144,7 +150,7 @@ export function OrgOverview() {
           {bad.length ? `${plural(bad.length, 'store')} need attention` : unverified.length ? <span className="text-amber-400">{plural(unverified.length, 'store')} without certificate verification</span> : `All ${plural(stores.length, 'store')} healthy`}
         </span>
         <span className="text-zinc-500">{owners.length === 1 ? 'Owner' : 'Owners'}</span>
-        <span>{owners.map((u) => (isActive(u) ? u.name : `${u.name} (${u.locked ? 'locked' : 'suspended'})`)).join(', ')}</span>
+        <span>{owners.map((u) => (isActive(u, o.id) ? u.name : `${u.name} (${u.locked ? 'locked' : 'suspended'})`)).join(', ') || 'None'}</span>
         <span className="text-zinc-500">Created</span>
         <span>{ago(o.createdAt, now)}</span>
         <span className="text-zinc-500">Your role</span>

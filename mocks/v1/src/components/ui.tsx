@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, NavLink } from 'react-router-dom'
 
@@ -35,14 +35,23 @@ export function Button({
 /* ------------------------------------------------------------------ */
 /* Form fields                                                        */
 /* ------------------------------------------------------------------ */
+/** The id a Field's label points at; the input inside picks it up unless it has its own. */
+const FieldIdContext = createContext<string | undefined>(undefined)
+export function useFieldId(own?: string) {
+  const fromField = useContext(FieldIdContext)
+  return own ?? fromField
+}
+
 export function Field({ label, optional, hint, children, htmlFor, error }: { label: ReactNode; optional?: boolean | string; hint?: ReactNode; children: ReactNode; htmlFor?: string; error?: string | null }) {
+  const auto = useId()
+  const id = htmlFor ?? auto
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={htmlFor} className="text-xs font-medium text-zinc-300">
+      <label htmlFor={id} className="text-xs font-medium text-zinc-300">
         {label}
         {optional && <span className="font-normal text-zinc-600"> · {typeof optional === 'string' ? optional : 'optional'}</span>}
       </label>
-      {children}
+      <FieldIdContext.Provider value={id}>{children}</FieldIdContext.Provider>
       {error ? <div className="text-xs2 text-red-400">{error}</div> : hint ? <div className="text-xs2 text-zinc-500">{hint}</div> : null}
     </div>
   )
@@ -50,16 +59,16 @@ export function Field({ label, optional, hint, children, htmlFor, error }: { lab
 
 const INPUT = 'w-full rounded-lg border border-zinc-700 bg-page px-3 py-[9px] text-[13px] text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-zinc-500 disabled:text-zinc-500 disabled:border-edge'
 
-export function Input({ mono, className, ...rest }: React.InputHTMLAttributes<HTMLInputElement> & { mono?: boolean }) {
-  return <input {...rest} className={cx(INPUT, mono && 'font-mono text-sm2', className)} />
+export function Input({ mono, className, id, ...rest }: React.InputHTMLAttributes<HTMLInputElement> & { mono?: boolean }) {
+  return <input {...rest} id={useFieldId(id)} className={cx(INPUT, mono && 'font-mono text-sm2', className)} />
 }
-export function Textarea({ className, ...rest }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...rest} className={cx(INPUT, 'min-h-16 resize-y leading-relaxed', className)} />
+export function Textarea({ className, id, ...rest }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...rest} id={useFieldId(id)} className={cx(INPUT, 'min-h-16 resize-y leading-relaxed', className)} />
 }
-export function Select({ className, children, mono, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement> & { mono?: boolean }) {
+export function Select({ className, children, mono, id, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement> & { mono?: boolean }) {
   return (
     <div className="relative">
-      <select {...rest} className={cx(INPUT, 'appearance-none pr-8', mono && 'font-mono text-sm2', className)}>
+      <select {...rest} id={useFieldId(id)} className={cx(INPUT, 'appearance-none pr-8', mono && 'font-mono text-sm2', className)}>
         {children}
       </select>
       <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[10px] text-zinc-600">▾</span>
@@ -314,11 +323,24 @@ export function Table({ cols, head, children, className }: { cols: string; head:
     </div>
   )
 }
+/** Enter/Space on the focused element itself (not a button or input inside it). */
+export function activateOnKey(onActivate: () => void) {
+  return (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+    e.preventDefault()
+    onActivate()
+  }
+}
+export const FOCUS_RING = 'outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-zinc-500'
+
 export function Row({ cols, children, className, onClick }: { cols: string; children: ReactNode; className?: string; onClick?: () => void }) {
   return (
     <div
       onClick={onClick}
-      className={cx('grid items-center gap-3 border-b border-line px-4 py-[13px] text-[13px]', onClick && 'cursor-pointer hover:bg-white/[0.015]', className)}
+      role={onClick ? 'link' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? activateOnKey(onClick) : undefined}
+      className={cx('grid items-center gap-3 border-b border-line px-4 py-[13px] text-[13px]', onClick && cx('cursor-pointer hover:bg-white/[0.015]', FOCUS_RING), className)}
       style={{ gridTemplateColumns: cols }}
     >
       {children}
@@ -375,6 +397,44 @@ function useEscape(onClose: () => void) {
   }, [onClose])
 }
 
+/** The last focus move, so a dialog knows what opened it even when autoFocus got there first. */
+let lastFocus: { target: Element | null; from: Element | null } = { target: null, from: null }
+if (typeof document !== 'undefined')
+  document.addEventListener('focusin', (e) => void (lastFocus = { target: e.target as Element, from: e.relatedTarget as Element | null }), true)
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Keeps Tab inside an open dialog and hands focus back to whatever opened it.
+ * Returns the keydown handler to put on the dialog element.
+ */
+function useFocusTrap(ref: RefObject<HTMLElement | null>, open: boolean) {
+  useEffect(() => {
+    if (!open) return
+    const el = ref.current
+    const opener = (el && lastFocus.target && el.contains(lastFocus.target) ? lastFocus.from : document.activeElement) as HTMLElement | null
+    // autoFocus inside the dialog wins; otherwise focus the dialog itself.
+    if (el && !el.contains(document.activeElement)) el.focus()
+    return () => {
+      if (opener?.isConnected) opener.focus()
+    }
+  }, [open, ref])
+  return (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Tab' || !ref.current) return
+    const items = Array.from(ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((x) => x.offsetParent !== null || x === document.activeElement)
+    if (!items.length) return e.preventDefault()
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
+}
+
 export function CloseX({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" aria-label="Close" onClick={onClick} className="text-sm text-zinc-600 hover:text-zinc-300">
@@ -385,11 +445,13 @@ export function CloseX({ onClick }: { onClick: () => void }) {
 
 export function Modal({ open, onClose, width = 480, children, title, dismissable = true }: { open: boolean; onClose: () => void; width?: number; children: ReactNode; title?: ReactNode; dismissable?: boolean }) {
   const id = useId()
+  const ref = useRef<HTMLDivElement>(null)
   useEscape(dismissable ? onClose : () => {})
+  const trap = useFocusTrap(ref, open)
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-canvas/65 p-4" onMouseDown={(e) => dismissable && e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal aria-labelledby={title ? id : undefined} style={{ width }} className="flex max-h-[calc(100vh-2rem)] max-w-full flex-col gap-4 overflow-y-auto rounded-xl border border-edge bg-panel p-7 text-zinc-100 shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
+      <div ref={ref} tabIndex={-1} onKeyDown={trap} role="dialog" aria-modal aria-labelledby={title ? id : undefined} style={{ width }} className="flex outline-none max-h-[calc(100vh-2rem)] max-w-full flex-col gap-4 overflow-y-auto rounded-xl border border-edge bg-panel p-7 text-zinc-100 shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
         {title && (
           <div className="flex items-center justify-between gap-4">
             <div id={id} className="text-[15px] font-semibold">
@@ -406,14 +468,19 @@ export function Modal({ open, onClose, width = 480, children, title, dismissable
 }
 
 export function SlideOver({ open, onClose, width = 480, title, children, footer }: { open: boolean; onClose: () => void; width?: number; title: ReactNode; children: ReactNode; footer?: ReactNode }) {
+  const id = useId()
+  const ref = useRef<HTMLElement>(null)
   useEscape(onClose)
+  const trap = useFocusTrap(ref, open)
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-canvas/60" onClick={onClose} />
-      <aside role="dialog" aria-modal style={{ width }} className="absolute top-0 right-0 bottom-0 flex max-w-full flex-col border-l border-edge bg-panel shadow-[-24px_0_48px_rgba(0,0,0,0.4)]">
+      <aside ref={ref} tabIndex={-1} onKeyDown={trap} role="dialog" aria-modal aria-labelledby={id} style={{ width }} className="absolute outline-none top-0 right-0 bottom-0 flex max-w-full flex-col border-l border-edge bg-panel shadow-[-24px_0_48px_rgba(0,0,0,0.4)]">
         <div className="flex items-center justify-between px-8 pt-7">
-          <div className="text-[15px] font-semibold">{title}</div>
+          <div id={id} className="text-[15px] font-semibold">
+            {title}
+          </div>
           <CloseX onClick={onClose} />
         </div>
         <div className="flex flex-1 flex-col gap-[18px] overflow-y-auto px-8 pt-[18px] pb-7">{children}</div>
@@ -432,6 +499,7 @@ export function Footer({ children, className }: { children: ReactNode; className
 export function Menu({ items, label = 'Actions' }: { items: ({ label: string; onClick: () => void; danger?: boolean; disabled?: boolean } | null)[]; label?: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!open) return
     const h = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
@@ -440,7 +508,7 @@ export function Menu({ items, label = 'Actions' }: { items: ({ label: string; on
   }, [open])
   return (
     <div ref={ref} className="relative inline-block" onClick={(e) => e.stopPropagation()}>
-      <button type="button" aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)} className="rounded-md px-2 py-0.5 text-zinc-500 hover:bg-line hover:text-zinc-200">
+      <button ref={trigger} type="button" aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)} className="rounded-md px-2 py-0.5 text-zinc-500 hover:bg-line hover:text-zinc-200">
         ⋯
       </button>
       {open && (
@@ -451,6 +519,8 @@ export function Menu({ items, label = 'Actions' }: { items: ({ label: string; on
               type="button"
               disabled={it!.disabled}
               onClick={() => {
+                // Park focus on the trigger so a dialog opened from here can hand it back.
+                trigger.current?.focus()
                 setOpen(false)
                 it!.onClick()
               }}

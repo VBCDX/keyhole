@@ -8,6 +8,8 @@ import { CopyChip, TokenPanel } from './keyhole'
 import {
   Avatar,
   Button,
+  FOCUS_RING,
+  activateOnKey,
   Checkbox,
   ErrorBox,
   Field,
@@ -437,9 +439,11 @@ export function LogRow({ e, compact, expanded, onToggle, fresh }: { e: AuditEven
   return (
     <div className={cx('border-b border-line', blocked && 'border-l-[3px] border-l-red-600 bg-red-500/[0.04]', fresh && 'animate-row-in')}>
       <div
-        className={cx('flex items-center gap-3.5 px-4 text-sm2', compact ? 'py-2.5' : 'py-[11px]', expandable && 'cursor-pointer hover:bg-white/[0.015]')}
+        className={cx('flex items-center gap-3.5 px-4 text-sm2', compact ? 'py-2.5' : 'py-[11px]', expandable && cx('cursor-pointer hover:bg-white/[0.015]', FOCUS_RING))}
         onClick={expandable ? onToggle : undefined}
         role={expandable ? 'button' : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        onKeyDown={expandable && onToggle ? activateOnKey(onToggle) : undefined}
         aria-expanded={expandable ? expanded : undefined}
       >
         <span className={cx('shrink-0 font-mono text-xs2 text-zinc-500', blocked ? 'w-[61px]' : 'w-16')}>{clock(e.at)}</span>

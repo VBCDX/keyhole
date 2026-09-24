@@ -6,7 +6,7 @@ import { actions, isAdmin, keyUsage, lastUsedForKey, orgConnectors, orgKeys, org
 import type { Key, SecretStore } from '../lib/types'
 import { LockedDots, SECRET_LINE, SecretField } from '../components/keyhole'
 import { ImpactDialog, ListBody } from '../components/shared'
-import { Button, Checkbox, Dot, Field, Footer, Input, Menu, Modal, Pill, Row, Select, SlideOver, Table, Textarea, cx } from '../components/ui'
+import { Button, Checkbox, Dot, FOCUS_RING, Field, Footer, Input, Menu, Modal, Pill, Row, Select, SlideOver, Table, Textarea, activateOnKey, cx } from '../components/ui'
 
 function storeHealth(d: ReturnType<typeof useDB>, s: SecretStore) {
   const conn = s.route && s.route !== 'public' ? d.connectors.find((c) => c.id === s.route) : null
@@ -27,7 +27,13 @@ export function StoreRow({ s, onClick, chevron = true }: { s: SecretStore; onCli
   const keys = d.keys.filter((k) => k.storeId === s.id && !k.cabinetId)
   const h = storeHealth(d, s)
   return (
-    <div onClick={onClick} className={cx('flex items-center gap-2.5 rounded-[10px] border border-edge bg-panel px-4 py-3.5', onClick && 'cursor-pointer hover:border-zinc-700')}>
+    <div
+      onClick={onClick}
+      role={onClick ? 'link' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? activateOnKey(onClick) : undefined}
+      className={cx('flex items-center gap-2.5 rounded-[10px] border border-edge bg-panel px-4 py-3.5', onClick && cx('cursor-pointer hover:border-zinc-700', FOCUS_RING))}
+    >
       <TypeMark type={s.type} />
       <Dot health={h.dot} />
       <span className="text-md font-semibold">{s.name}</span>

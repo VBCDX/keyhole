@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Button, cx } from './ui'
+import { Button, cx, useFieldId } from './ui'
 
 /* ------------------------------------------------------------------ */
 /* Keyhole status icon — the one signature flourish.                  */
@@ -141,11 +141,12 @@ export function SecretField({
   autoFocus?: boolean
 }) {
   const [len, setLen] = useState(0)
+  const inputId = useFieldId(id)
   return (
     <div className={cx('flex items-center justify-between gap-3 rounded-lg border bg-secret-bg px-3', compact ? 'py-2' : 'py-2.5', len ? 'border-brass/35' : 'border-brass/20 focus-within:border-brass/50')}>
       {prefix}
       <input
-        id={id}
+        id={inputId}
         type="password"
         autoComplete="off"
         autoFocus={autoFocus}

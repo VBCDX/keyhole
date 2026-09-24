@@ -254,8 +254,8 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
   const [picked, setPicked] = useState<string[]>([])
   const [toolId, setToolId] = useState('')
   const [slotMap, setSlotMap] = useState<Record<string, string | null>>({})
-  /** Slots the person picked by hand, as opposed to ones filled for them. */
-  const [manual, setManual] = useState<string[]>([])
+  /** The key the person picked by hand for each slot, as opposed to ones filled for them. */
+  const [manual, setManual] = useState<Record<string, string>>({})
   const [access, setAccess] = useState<Cabinet['access']>('everyone')
   useEffect(() => {
     if (open) {
@@ -265,7 +265,7 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
       setPicked([])
       setToolId('')
       setSlotMap({})
-      setManual([])
+      setManual({})
       setAccess('everyone')
     }
   }, [open]) // eslint-disable-line
@@ -297,7 +297,7 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
         tool.slots.map((s) => {
           const current = slotMap[s.name]
           const stillThere = !!current && cabinetKeyOptions.some((o) => o.value === current)
-          if (manual.includes(s.name) && stillThere) return [s.name, current]
+          if (manual[s.name] === current && stillThere) return [s.name, current]
           const exact = cabinetKeyOptions.find((o) => o.label === s.name)
           return [s.name, exact?.value ?? (cabinetKeyOptions.length === 1 ? cabinetKeyOptions[0].value : stillThere ? current : null)]
         }),
@@ -376,7 +376,7 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
               value={slotMap[s.name] ?? ''}
               onChange={(e) => {
                 setSlotMap({ ...slotMap, [s.name]: e.target.value || null })
-                setManual([...manual, s.name])
+                setManual({ ...manual, [s.name]: e.target.value })
               }}
               className="min-w-0 flex-1 appearance-none bg-transparent font-mono text-xs text-zinc-200 outline-none"
             >
@@ -390,7 +390,7 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
             {slotMap[s.name] ? (
               <span className="inline-flex shrink-0 items-center gap-1.5 text-xs2 text-zinc-500">
                 <Dot health="healthy" size={6} />
-                {cabinetKeyOptions.find((o) => o.value === slotMap[s.name])?.label === s.name ? 'Matched by name' : manual.includes(s.name) ? 'Chosen by you' : 'Chosen for you (only key)'}
+                {cabinetKeyOptions.find((o) => o.value === slotMap[s.name])?.label === s.name ? 'Matched by name' : manual[s.name] === slotMap[s.name] ? 'Chosen by you' : 'Chosen for you (only key)'}
               </span>
             ) : (
               <span className="text-xs2 text-amber-400">Missing</span>

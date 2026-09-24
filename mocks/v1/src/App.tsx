@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { actions, isSuspended, me, myOrgs, org, useDB } from './lib/store'
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { actions, isSuspended, me, myOrgs, org, recordOrgFromPath, useDB } from './lib/store'
 import { Button } from './components/ui'
 import { AppShell } from './components/AppShell'
 import { DemoPanel } from './components/DemoPanel'
@@ -47,13 +47,8 @@ function Suspended() {
   const d = useDB()
   const u = me(d)
   const here = org(d)
+  const nav = useNavigate()
   const others = myOrgs(d).filter((o) => !isSuspended(u, o.id))
-  // A link into another of their organizations (#/orgs/<id>/…) opens it rather than stopping here.
-  const linked = useLocation().pathname.match(/^\/orgs\/([^/]+)/)?.[1]
-  const target = others.find((o) => o.id === linked)
-  useEffect(() => {
-    if (target) actions.setOrg(target.id)
-  }, [target])
   return (
     <div className="flex h-full items-center justify-center bg-page text-zinc-100">
       <div className="flex w-[420px] flex-col items-center gap-3 text-center">
@@ -64,7 +59,13 @@ function Suspended() {
           <div className="mt-2 flex flex-col items-center gap-2">
             <div className="text-xs text-zinc-500">Your other organizations aren’t affected:</div>
             {others.map((o) => (
-              <Button key={o.id} onClick={() => actions.setOrg(o.id)}>
+              <Button
+                key={o.id}
+                onClick={() => {
+                  actions.setOrg(o.id)
+                  nav('/')
+                }}
+              >
                 Open {o.name}
               </Button>
             ))}
@@ -75,8 +76,25 @@ function Suspended() {
   )
 }
 
+/** The last path Routed resolved a record organization for (module state: it only gates one render). */
+let switchedForPath: string | null = null
+
 function Routed() {
   const d = useDB()
+  // Records belong to one organization. A link to a record in another organization the viewer belongs to
+  // switches to it first, so that organization's suspension gate and role checks apply. Pages show
+  // "no access" for records in organizations the viewer isn't in.
+  // Only a navigation triggers the switch: choosing another org (switcher, suspended screen) while the old
+  // URL is still showing mustn't be undone before the new URL arrives.
+  const { pathname } = useLocation()
+  const recordOrg = d.currentUserId === 'support' ? null : recordOrgFromPath(d, pathname)
+  const switchTo = recordOrg && recordOrg !== d.currentOrgId && me(d)?.roles[recordOrg] ? recordOrg : null
+  useEffect(() => {
+    if (switchedForPath === pathname) return
+    switchedForPath = pathname
+    if (switchTo) actions.setOrg(switchTo)
+  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (switchTo && switchedForPath !== pathname) return null
   if (d.currentUserId === 'support')
     return (
       <Routes>

@@ -23,8 +23,9 @@ A **Prototype controls** pill sits at the bottom left. It isn't part of the prod
 
 - **Scenario**: *New org (Flow 1)* starts Acme Corp empty, for the golden path. *Populated (Flows 2–8)* loads
   stores, a connector fleet, agents, cabinets, and audit history. Switching scenarios resets all data.
-- **View as**: Dana (Owner), Ravi (userAdmin), Mia (user), Sam (invited, for the invitation flow), or
-  Keyhole support (superAdmin, the separate support console).
+- **View as**: Dana (Owner), Ravi (userAdmin), Mia (user), Sam (invited, for the invitation flow), Noor
+  (Owner of a second organization, Northwind Labs, where Mia is also a member), or Keyhole support (superAdmin,
+  the separate support console).
 - **List state**: force every list into its loading-skeleton or error state.
 
 | Flow | Where to start |

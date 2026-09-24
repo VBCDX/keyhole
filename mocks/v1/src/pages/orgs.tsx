@@ -23,7 +23,7 @@ import {
   visibleEvents,
 } from '../lib/store'
 import type { Invite, Role, Tool } from '../lib/types'
-import { AgentsTable, AuditLog, ImpactDialog, ListBody, TransferOwnershipDialog, UsersTable, useUserRows } from '../components/shared'
+import { AgentsTable, AuditLog, ImpactDialog, ListBody, NoAccess, TransferOwnershipDialog, UsersTable, useUserRows } from '../components/shared'
 import { Breadcrumb, Button, Callout, Card, Checkbox, Dot, Field, Footer, Input, Modal, PageTitle, Pill, Row, Segmented, Select, Table, Tabs } from '../components/ui'
 import { WorkspacesTable } from './workspaces'
 
@@ -71,11 +71,10 @@ export function OrgDetail() {
   const nav = useNavigate()
   const { orgId } = useParams()
   const { pathname } = useLocation()
-  useEffect(() => {
-    if (orgId && orgId !== d.currentOrgId && me(d).roles[orgId]) actions.setOrg(orgId)
-  }, [orgId]) // eslint-disable-line
-  const o = org(d, orgId)
-  if (!o) return <div className="text-sm text-zinc-400">You don’t have access to this organization.</div>
+  // Render the organization in the URL. Routed has already switched to it if the viewer belongs to it,
+  // so anything else is an organization they can't see — never another org's data under this title.
+  const o = orgId === d.currentOrgId ? org(d, orgId) : undefined
+  if (!o) return <NoAccess what="organization" to="/orgs" back="Back to your organizations" />
   const base = `/orgs/${o.id}`
   if (pathname.includes('connect-openbao')) return <Outlet />
   const onStoresList = pathname.endsWith('/stores')

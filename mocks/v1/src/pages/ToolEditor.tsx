@@ -5,7 +5,7 @@ import { testCall } from '../lib/simulate'
 import { actions, filledSlot, isAdmin, orgEvents, toolById, toolWorkspaces, useDB, useNow } from '../lib/store'
 import type { DB, HttpMethod, KeySlot, Tool, ToolAction, ToolInput, ToolSnapshot, Workspace } from '../lib/types'
 import { CopyChip, KeyholeIcon } from '../components/keyhole'
-import { ImpactDialog } from '../components/shared'
+import { ImpactDialog, NoAccess } from '../components/shared'
 import { Button, Checkbox, Field, Footer, Input, Modal, Pill, Select, Textarea, cx } from '../components/ui'
 
 const SECTIONS = [
@@ -132,6 +132,12 @@ export function ToolEditor() {
   }, [params])
 
   if (!t) return <div className="p-10 text-sm text-zinc-400">This tool no longer exists. <Link to="/tools">Back to tools</Link></div>
+  if (t.orgId !== d.currentOrgId)
+    return (
+      <div className="p-10">
+        <NoAccess what="tool" to="/tools" back="Back to tools" />
+      </div>
+    )
 
   const edit = (patch: Partial<ToolSnapshot>) => admin && actions.editTool(t.id, patch)
   const setAction = (id: string, patch: Partial<ToolAction>) => edit({ actions: t.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)) })

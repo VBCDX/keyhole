@@ -548,7 +548,10 @@ export function RotateAgentDialog({ agent, onClose, onRotated }: { agent: Agent 
       ]}
       body="The new token is shown once. Put it in the agent’s config within 10 minutes — after that, requests with the old token are blocked."
       confirmLabel="Rotate token"
-      onConfirm={() => agent && onRotated(agent, actions.rotateAgent(agent.id))}
+      onConfirm={() => {
+        const token = agent && actions.rotateAgent(agent.id)
+        if (agent && token) onRotated(agent, token)
+      }}
     />
   )
 }
@@ -830,6 +833,18 @@ export function AuditLog({ events, scopeLabel, hideWorkspaceFilter, initialExpan
         Logs kept 90 days on this plan.
         {role === 'user' && ' You see activity in your workspaces and your own actions.'}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The standard state for a record in an organization the viewer can't use. Records in organizations the
+ * viewer belongs to are switched to before the page renders (see Routed), so this means "not yours".
+ */
+export function NoAccess({ what, to, back }: { what: string; to: string; back: string }) {
+  return (
+    <div className="text-sm text-zinc-400">
+      You don’t have access to this {what}. <Link to={to}>{back}</Link>
     </div>
   )
 }

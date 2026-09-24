@@ -4,7 +4,7 @@ import { ago, initials, maskToken, until } from '../lib/format'
 import { actions, agentById, canSeeWorkspace, isAdmin, isAdminRole, isSuspended, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
 import type { Agent } from '../lib/types'
 import { TokenPanel } from '../components/keyhole'
-import { AgentsTable, AuditLog, RevokeAgentDialog, RotateAgentDialog, SuspendAgentDialog, UsersTable, useUserRows } from '../components/shared'
+import { AgentsTable, AuditLog, NoAccess, RevokeAgentDialog, RotateAgentDialog, SuspendAgentDialog, UsersTable, useUserRows } from '../components/shared'
 import { Avatar, Breadcrumb, Button, Card, Checkbox, Field, Footer, Input, Modal, PageTitle, Segmented, StatusInline, cx } from '../components/ui'
 import { InviteModal, PendingInvites } from './orgs'
 
@@ -130,7 +130,9 @@ function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }
   }, [open]) // eslint-disable-line
   const clash = orgAgents(d).some((a) => a.label === label.trim() && a.status !== 'revoked')
   const create = () => {
-    const { id, token } = actions.createAgent({ label: label.trim(), workspaceIds: sel, expiryDays: expiry === 'none' ? null : Number(expiry), rateLimit: rate ? Number(rate) : null })
+    const made = actions.createAgent({ label: label.trim(), workspaceIds: sel, expiryDays: expiry === 'none' ? null : Number(expiry), rateLimit: rate ? Number(rate) : null })
+    if (!made) return onClose()
+    const { id, token } = made
     setCreated({ token, agent: agentById(d, id) ?? ({ id, label: label.trim(), workspaceIds: sel } as Agent) })
   }
   if (created) {
@@ -193,6 +195,7 @@ export function AgentDetail() {
   const [rotated, setRotated] = useState<string | null>(null)
   const [label, setLabel] = useState(a?.label ?? '')
   if (!a) return <div className="text-sm text-zinc-400">This agent doesn’t exist. <Link to="/players/agents">Back to agents</Link></div>
+  if (a.orgId !== d.currentOrgId) return <NoAccess what="agent" to="/players/agents" back="Back to agents" />
   const admin = isAdmin(d)
   const revoked = a.status === 'revoked'
   const lockLists = d.cabinets.filter((c) => canSeeWorkspace(d, c.workspaceId) && Array.isArray(c.access) && c.access.some((p) => p.kind === 'agent' && p.id === a.id)).map((c) => c.name)

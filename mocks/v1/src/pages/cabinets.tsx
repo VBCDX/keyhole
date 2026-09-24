@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { initials, plural } from '../lib/format'
-import { actions, agentById, isAdmin, keyById, me, orgTools, toolById, useDB, userById } from '../lib/store'
+import { actions, agentById, isAdmin, keyById, liveTool, me, orgTools, toolById, useDB, userById } from '../lib/store'
 import type { Cabinet, PlayerRef, Workspace } from '../lib/types'
 import { ImpactDialog } from '../components/shared'
 import { SECRET_LINE, SecretField } from '../components/keyhole'
@@ -286,8 +286,9 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
   const errors = newKeys.map(rowError)
   const validNew = newKeys.filter((k, i) => k.name.trim() && k.length && !errors[i])
   const cabinetKeyOptions = [...validNew.map((k) => ({ value: `new:${k.name.trim()}`, label: k.name.trim() })), ...picked.map((id) => ({ value: id, label: keyById(d, id)!.name }))]
-  const tool = toolById(d, toolId)
-  const tools = orgTools(d)
+  // Like workspaces, cabinets only take published tools, filled from the version agents actually get.
+  const tool = liveTool(toolById(d, toolId))
+  const tools = orgTools(d).filter((t) => t.published)
 
   // Auto-fill slots: a hand-picked key stays, then an exact name match, else the only cabinet key.
   useEffect(() => {
@@ -360,7 +361,7 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
           <option value="">No tool</option>
           {tools.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.displayName}
+              {t.published!.displayName} · v{t.published!.version}
             </option>
           ))}
         </Select>
@@ -409,7 +410,7 @@ function NewCabinetModal({ open, onClose, ws }: { open: boolean; onClose: () => 
           variant="primary"
           disabled={!ok}
           onClick={() => {
-            actions.createCabinet({ workspaceId: ws.id, name: name.trim(), newKeys: validNew.map((k) => ({ name: k.name.trim(), length: k.length })), pickedKeyIds: picked, tools: tool ? [{ toolId: tool.id, slotMap }] : [], access })
+            actions.createCabinet({ workspaceId: ws.id, name: name.trim(), newKeys: validNew.map((k) => ({ name: k.name.trim(), length: k.length })), pickedKeyIds: picked, tools: tool ? [{ toolId, slotMap }] : [], access })
             onClose()
           }}
         >

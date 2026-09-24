@@ -797,7 +797,7 @@ export const actions = {
         d.keys.push({ id: kid, orgId: d.currentOrgId, name: nk.name, storeId: 'st_local', length: nk.length, createdAt: Date.now(), rotatedAt: null, expiresAt: null, rotationReminderDays: null, notes: 'Cabinet key', cabinetId: id })
       }
       const fill = (v: string | null) => (!v ? null : v.startsWith('new:') ? (nameToId[v.slice(4)] ?? null) : keyIds.includes(v) ? v : null)
-      const tools = c.tools.map((t) => ({ ...t, slotMap: Object.fromEntries(Object.entries(t.slotMap).map(([s, v]) => [s, fill(v)])) }))
+      const tools = c.tools.filter((t) => liveTool(toolById(d, t.toolId))).map((t) => ({ ...t, slotMap: Object.fromEntries(Object.entries(t.slotMap).map(([s, v]) => [s, fill(v)])) }))
       d.cabinets.push({ id, workspaceId: c.workspaceId, name: c.name, ownerId: d.currentUserId, keyIds, tools, access: c.access, createdAt: Date.now() })
       log(d, { object: `Created cabinet ${c.name}${c.access === 'everyone' ? '' : ' (locked)'}`, workspaceId: c.workspaceId })
     })

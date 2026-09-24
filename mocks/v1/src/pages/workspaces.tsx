@@ -437,7 +437,13 @@ export function WsTools() {
   const [adding, setAdding] = useState(false)
   const [results, setResults] = useState<Record<string, ReturnType<typeof testCall>>>({})
   const [removing, setRemoving] = useState<string | null>(null)
+  const [turningOff, setTurningOff] = useState<string | null>(null)
   const available = orgTools(d).filter((t) => !w.tools.some((x) => x.toolId === t.id))
+  const activeAgents = w.agentIds.filter((id) => agentById(d, id)?.status === 'active').length
+  const lastCalled = (toolId: string | null) => {
+    const e = orgEvents(d).find((x) => x.workspaceId === w.id && x.type === 'request' && x.object === toolById(d, toolId ?? '')?.displayName)
+    return e ? new Date(e.at).toLocaleString() : 'Never'
+  }
   return (
     <div className="mt-5 max-w-[1060px]">
       {admin && w.tools.length > 0 && (
@@ -516,7 +522,7 @@ export function WsTools() {
                     {!slots.length && <span className="text-xs text-zinc-500">No key needed</span>}
                   </div>
                   <div>
-                    <Toggle on={wt.enabled} onChange={(v) => actions.updateWorkspaceTool(w.id, t.id, { enabled: v })} label={`Turn ${t.displayName} on or off`} disabled={!admin} />
+                    <Toggle on={wt.enabled} onChange={(v) => (v ? actions.updateWorkspaceTool(w.id, t.id, { enabled: true }) : setTurningOff(t.id))} label={`Turn ${t.displayName} on or off`} disabled={!admin} />
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500">
                     <LimitInput key={wt.perMinute} value={wt.perMinute} disabled={!admin} onCommit={(n) => actions.updateWorkspaceTool(w.id, t.id, { perMinute: n })} />
@@ -574,15 +580,24 @@ export function WsTools() {
         onClose={() => setRemoving(null)}
         title={`Remove ${removing ? toolById(d, removing)?.displayName : ''} from ${w.name}?`}
         rows={[
-          ['Agents that can call it', plural(w.agentIds.filter((id) => agentById(d, id)?.status === 'active').length, 'agent')],
-          ['Last called', (() => {
-            const e = orgEvents(d).find((x) => x.workspaceId === w.id && x.object === toolById(d, removing ?? '')?.displayName)
-            return e ? new Date(e.at).toLocaleString() : 'Never'
-          })()],
+          ['Agents that can call it', plural(activeAgents, 'agent')],
+          ['Last called', lastCalled(removing)],
         ]}
         body="Agents stop seeing this tool on their next request. The tool itself stays in the organization."
         confirmLabel="Remove tool"
         onConfirm={() => removing && actions.removeWorkspaceTool(w.id, removing)}
+      />
+      <ImpactDialog
+        open={!!turningOff}
+        onClose={() => setTurningOff(null)}
+        title={`Turn ${turningOff ? toolById(d, turningOff)?.displayName : ''} off in ${w.name}?`}
+        rows={[
+          ['Agents that can call it', plural(activeAgents, 'agent'), activeAgents ? 'amber' : undefined],
+          ['Last called', lastCalled(turningOff)],
+        ]}
+        body="Agents stop seeing this tool on their next request. Its key slots stay filled, so turning it back on is instant."
+        confirmLabel="Turn off"
+        onConfirm={() => turningOff && actions.updateWorkspaceTool(w.id, turningOff, { enabled: false })}
       />
     </div>
   )

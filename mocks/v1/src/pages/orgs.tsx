@@ -20,7 +20,7 @@ import {
   useNow,
   visibleEvents,
 } from '../lib/store'
-import type { Role, Tool } from '../lib/types'
+import type { Invite, Role, Tool } from '../lib/types'
 import { AgentsTable, AuditLog, ImpactDialog, ListBody, UsersTable, useUserRows } from '../components/shared'
 import { Breadcrumb, Button, Card, Checkbox, Dot, Field, Footer, Input, Modal, PageTitle, Pill, Row, Segmented, Select, Table, Tabs } from '../components/ui'
 import { WorkspacesTable } from './workspaces'
@@ -265,6 +265,7 @@ export function PendingInvites() {
   const now = useNow()
   const invites = d.invites.filter((i) => i.orgId === d.currentOrgId)
   const admin = isAdmin(d)
+  const [revoking, setRevoking] = useState<Invite | null>(null)
   if (!invites.length) return null
   return (
     <>
@@ -284,7 +285,7 @@ export function PendingInvites() {
                   <button className="text-sm2 text-brass hover:text-brass-light" onClick={() => actions.resendInvite(i.id)}>
                     Resend
                   </button>
-                  <button className="text-sm2 text-red-400 hover:text-red-300" onClick={() => actions.revokeInvite(i.id)}>
+                  <button className="text-sm2 text-red-400 hover:text-red-300" onClick={() => setRevoking(i)}>
                     Revoke
                   </button>
                 </span>
@@ -293,6 +294,19 @@ export function PendingInvites() {
           )
         })}
       </div>
+      <ImpactDialog
+        open={!!revoking}
+        onClose={() => setRevoking(null)}
+        title={`Revoke the invite for ${revoking?.email}?`}
+        rows={[
+          ['Role', revoking?.role ?? ''],
+          ['Workspaces', revoking?.workspaceIds.map((id) => d.workspaces.find((w) => w.id === id)?.name).filter(Boolean).join(', ') || 'None'],
+          ['Invited', revoking ? `${ago(revoking.invitedAt, now)} by ${revoking.invitedBy}` : ''],
+        ]}
+        body="The invite link stops working right away. You can invite them again later."
+        confirmLabel="Revoke invite"
+        onConfirm={() => revoking && actions.revokeInvite(revoking.id)}
+      />
     </>
   )
 }

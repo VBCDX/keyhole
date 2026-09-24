@@ -150,6 +150,10 @@ export const keyUsage = (d: DB, keyId: string) => {
   return uses
 }
 
+/** Agents a person created that still work. They belong to the organization, not to the person. */
+export const agentsCreatedBy = (d: DB, u: User, orgIds = [d.currentOrgId]) =>
+  d.agents.filter((a) => orgIds.includes(a.orgId) && a.createdBy === u.name && a.status !== 'revoked')
+
 export const toolWorkspaces = (d: DB, toolId: string) =>
   d.workspaces.filter((w) => w.tools.some((t) => t.toolId === toolId))
 

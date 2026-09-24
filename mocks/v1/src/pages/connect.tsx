@@ -4,6 +4,7 @@ import { ago } from '../lib/format'
 import { actions, agentById, getDB, isAdmin, liveTool, log, orgEvents, sessionTokenFor, toolById, update, useDB, useNow } from '../lib/store'
 import type { AuditEvent, Workspace } from '../lib/types'
 import { EnrollPanel } from '../components/EnrollPanel'
+import { ImpactDialog } from '../components/shared'
 import { CopyChip, KeyholeIcon } from '../components/keyhole'
 import { Button, Card, Field, Segmented, Select, SlideOver, Toggle } from '../components/ui'
 import { useWorkspace } from './workspaces'
@@ -266,9 +267,13 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
 
 export function ConnectTab() {
   const d = useDB()
+  const now = useNow()
   const w = useWorkspace()
   const admin = isAdmin(d)
   const [panel, setPanel] = useState<Kind | null>(null)
+  const [turningOff, setTurningOff] = useState<Kind | null>(null)
+  const active = w.agentIds.map((id) => agentById(d, id)).filter((a) => a?.status === 'active').map((a) => a!.label)
+  const lastRequest = orgEvents(d).find((e) => e.workspaceId === w.id && e.type === 'request' && e.actorKind === 'agent')
   const row = (kind: Kind, title: string, sub: string) => {
     const on = w[kind]
     return (
@@ -288,8 +293,10 @@ export function ConnectTab() {
             label={`Turn ${title} ${on ? 'off' : 'on'}`}
             disabled={!admin}
             onChange={(v) => {
-              actions.setConnection(w.id, kind, v)
-              if (v) setPanel(kind)
+              // Turning a method on is harmless; turning it off disconnects agents, so it's previewed first.
+              if (!v) return setTurningOff(kind)
+              actions.setConnection(w.id, kind, true)
+              setPanel(kind)
             }}
           />
         </div>
@@ -302,6 +309,19 @@ export function ConnectTab() {
       {row('mcp', 'MCP', "AI assistants connect here and see this workspace's tools")}
       {!admin && <div className="text-xs text-zinc-500">Only admins can turn connection methods on or off.</div>}
       <ConnectPanel kind={panel ?? 'mcp'} w={w} open={!!panel} onClose={() => setPanel(null)} />
+      <ImpactDialog
+        open={!!turningOff}
+        onClose={() => setTurningOff(null)}
+        title={`Turn ${turningOff?.toUpperCase()} off for ${w.name}?`}
+        rows={[
+          ['Active agents on this workspace', active.join(', ') || 'None', active.length ? 'amber' : undefined],
+          ['Last agent request', lastRequest ? `${lastRequest.actor} · ${ago(lastRequest.at, now).toLowerCase()}` : 'Never'],
+          ['Other method', turningOff && w[turningOff === 'mcp' ? 'https' : 'mcp'] ? `${turningOff === 'mcp' ? 'HTTPS' : 'MCP'} stays on` : 'Off — nothing can connect'],
+        ]}
+        body={`Agents connected over ${turningOff?.toUpperCase()} are refused on their next request. Turning it back on restores them with the same tokens.`}
+        confirmLabel={`Turn ${turningOff?.toUpperCase()} off`}
+        onConfirm={() => turningOff && actions.setConnection(w.id, turningOff, false)}
+      />
     </div>
   )
 }

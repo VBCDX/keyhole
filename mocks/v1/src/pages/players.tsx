@@ -4,7 +4,7 @@ import { ago, initials, maskToken, until } from '../lib/format'
 import { actions, agentById, canSeeWorkspace, isAdmin, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
 import type { Agent } from '../lib/types'
 import { TokenPanel } from '../components/keyhole'
-import { AgentsTable, AuditLog, RevokeAgentDialog, UsersTable, useUserRows } from '../components/shared'
+import { AgentsTable, AuditLog, RevokeAgentDialog, RotateAgentDialog, SuspendAgentDialog, UsersTable, useUserRows } from '../components/shared'
 import { Avatar, Breadcrumb, Button, Card, Checkbox, Field, Footer, Input, Modal, PageTitle, Segmented, StatusInline, cx } from '../components/ui'
 import { InviteModal, PendingInvites } from './orgs'
 
@@ -172,6 +172,8 @@ export function AgentDetail() {
   const { agentId } = useParams()
   const a = agentById(d, agentId!)
   const [revoking, setRevoking] = useState(false)
+  const [rotating, setRotating] = useState(false)
+  const [suspending, setSuspending] = useState(false)
   const [rotated, setRotated] = useState<string | null>(null)
   const [label, setLabel] = useState(a?.label ?? '')
   if (!a) return <div className="text-sm text-zinc-400">This agent doesn’t exist. <Link to="/players/agents">Back to agents</Link></div>
@@ -188,8 +190,8 @@ export function AgentDetail() {
           admin &&
           !revoked && (
             <>
-              <Button onClick={() => setRotated(actions.rotateAgent(a.id))}>Rotate token</Button>
-              <Button onClick={() => actions.setAgentStatus(a.id, a.status === 'suspended' ? 'active' : 'suspended')}>{a.status === 'suspended' ? 'Resume' : 'Suspend'}</Button>
+              <Button onClick={() => setRotating(true)}>Rotate token</Button>
+              <Button onClick={() => (a.status === 'suspended' ? actions.setAgentStatus(a.id, 'active') : setSuspending(true))}>{a.status === 'suspended' ? 'Resume' : 'Suspend'}</Button>
               <Button variant="danger" onClick={() => setRevoking(true)}>
                 Revoke token
               </Button>
@@ -234,6 +236,8 @@ export function AgentDetail() {
       <div className="eyebrow mt-7 mb-3">Activity</div>
       <AuditLog events={events} scopeLabel={a.label} />
       <RevokeAgentDialog agent={revoking ? a : null} onClose={() => setRevoking(false)} lockLists={lockLists} />
+      <RotateAgentDialog agent={rotating ? a : null} onClose={() => setRotating(false)} onRotated={(_, token) => setRotated(token)} />
+      <SuspendAgentDialog agent={suspending ? a : null} onClose={() => setSuspending(false)} />
       <Modal open={!!rotated} onClose={() => {}} width={540} dismissable={false}>
         {rotated && <TokenPanel token={rotated} title="Token rotated" subtitle={a.label} note="The old token keeps working for 10 minutes so running agents can switch over." onDone={() => setRotated(null)} />}
       </Modal>

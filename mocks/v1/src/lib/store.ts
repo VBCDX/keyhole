@@ -15,6 +15,7 @@ import type {
   ToolSnapshot,
   User,
   Workspace,
+  WorkspaceTool,
 } from './types'
 
 const LS_KEY = 'keyhole-mocks-v1'
@@ -160,6 +161,31 @@ export function slotCandidates(d: DB, keyIds: string[], slot: string) {
 export function autoMatch(d: DB, keyIds: string[], slot: string) {
   const exact = keyIds.map((id) => keyById(d, id)).find((k) => k && k.name === slot && !k.sourceRemoved)
   return exact?.id ?? null
+}
+
+/** The key filling a workspace tool's slot — only while the workspace still exposes that key. */
+export function filledSlot(d: DB, w: Workspace, wt: WorkspaceTool, slot: string) {
+  const id = wt.slotMap[slot]
+  return id && w.keyIds.includes(id) && keyById(d, id) ? id : null
+}
+/** Slot names of a granted tool that have no usable key in this workspace. */
+export function missingSlots(d: DB, w: Workspace, wt: WorkspaceTool) {
+  const t = toolById(d, wt.toolId)
+  return (t?.slots ?? []).filter((s) => !filledSlot(d, w, wt, s.name)).map((s) => s.name)
+}
+
+/** What un-exposing keys would break: tool slots and cabinet keys in the workspace that point at them. */
+export function unexposeImpact(d: DB, wsId: string, keyIds: string[]) {
+  const w = wsById(d, wsId)
+  const removed = w ? w.keyIds.filter((id) => !keyIds.includes(id)) : []
+  const slots: { tool: string; slot: string; key: string }[] = []
+  for (const wt of w?.tools ?? [])
+    for (const [slot, kid] of Object.entries(wt.slotMap))
+      if (kid && removed.includes(kid)) slots.push({ tool: toolById(d, wt.toolId)?.displayName ?? 'Tool', slot, key: keyById(d, kid)?.name ?? kid })
+  const cabinets = d.cabinets
+    .filter((c) => c.workspaceId === wsId && c.keyIds.some((k) => removed.includes(k)))
+    .map((c) => ({ name: c.name, keys: c.keyIds.filter((k) => removed.includes(k)).map((k) => keyById(d, k)?.name ?? k) }))
+  return { removed, slots, cabinets }
 }
 
 export function lastUsedForKey(d: DB, keyId: string) {
@@ -395,7 +421,28 @@ export const actions = {
   setWorkspaceKeys(wsId: string, keyIds: string[]) {
     update((d) => {
       const w = wsById(d, wsId)
-      if (w) w.keyIds = keyIds
+      if (!w) return
+      const { removed, slots, cabinets } = unexposeImpact(d, wsId, keyIds)
+      const added = keyIds.filter((id) => !w.keyIds.includes(id))
+      w.keyIds = keyIds
+      // Un-exposing a key cuts it off everywhere in the workspace: slots go back to Missing.
+      const clear = (m: Record<string, string | null>) => {
+        for (const s in m) if (m[s] && removed.includes(m[s]!)) m[s] = null
+      }
+      for (const wt of w.tools) clear(wt.slotMap)
+      for (const c of d.cabinets.filter((x) => x.workspaceId === wsId)) {
+        c.keyIds = c.keyIds.filter((k) => !removed.includes(k))
+        for (const t of c.tools) clear(t.slotMap)
+      }
+      const names = (ids: string[]) => ids.map((id) => keyById(d, id)?.name ?? id).join(', ')
+      if (added.length) log(d, { object: `Exposed ${names(added)} in ${w.name}`, workspaceId: wsId })
+      if (removed.length) {
+        const detail: [string, string][] = [
+          ...slots.map((x): [string, string] => [`${x.tool} · ${x.slot}`, `${x.key} → Missing`]),
+          ...cabinets.map((c): [string, string] => [`Cabinet ${c.name}`, `Loses ${c.keys.join(', ')}`]),
+        ]
+        log(d, { object: `Stopped exposing ${names(removed)} in ${w.name}`, workspaceId: wsId, detail: detail.length ? detail : undefined })
+      }
     })
   },
   grantTool(wsId: string, toolId: string, slotMap: Record<string, string | null>) {
@@ -713,7 +760,7 @@ export const actions = {
     update((d) => {
       const w = wsById(d, wsId)
       const a = agentId ? agentById(d, agentId) : null
-      const wt = w?.tools.find((t) => t.enabled)
+      const wt = w?.tools.find((t) => t.enabled && !missingSlots(d, w, t).length)
       const t = wt ? toolById(d, wt.toolId) : null
       const act = t?.actions[0]
       if (a) a.lastUsedAt = Date.now()

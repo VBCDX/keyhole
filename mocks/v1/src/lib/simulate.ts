@@ -1,5 +1,5 @@
 import { trackingCode } from './format'
-import { agentById, log, toolById, update } from './store'
+import { agentById, log, missingSlots, toolById, update } from './store'
 import type { DB, Tool } from './types'
 
 const effective = (t: Tool) => t.published ?? t
@@ -14,7 +14,8 @@ export function liveTick() {
     const workspaces = d.workspaces.filter((w) => w.orgId === d.currentOrgId)
     const candidates: { agentId: string; wsId: string; toolId: string }[] = []
     for (const w of workspaces)
-      for (const wt of w.tools.filter((x) => x.enabled))
+      // A tool with an empty key slot can't make calls, so it produces no traffic.
+      for (const wt of w.tools.filter((x) => x.enabled && !missingSlots(d, w, x).length))
         for (const aid of w.agentIds) {
           const a = agentById(d, aid)
           if (a && a.status === 'active') candidates.push({ agentId: aid, wsId: w.id, toolId: wt.toolId })

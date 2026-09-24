@@ -8,7 +8,9 @@ import {
   autoMatch,
   canSeeWorkspace,
   isAdmin,
+  filledSlot,
   keyById,
+  missingSlots,
   orgAgents,
   orgEvents,
   orgKeys,
@@ -18,6 +20,7 @@ import {
   slotCandidates,
   storeById,
   toolById,
+  unexposeImpact,
   useDB,
   visibleEvents,
   wsById,
@@ -38,7 +41,7 @@ function wsHealth(d: ReturnType<typeof useDB>, w: Workspace) {
   const conns = d.connectors.filter((c) => c.workspaceId === w.id)
   if (conns.some((c) => c.health === 'offline')) return { h: 'offline' as const, t: 'Connector offline' }
   if (conns.some((c) => c.health === 'degraded')) return { h: 'degraded' as const, t: 'Connector degraded' }
-  const missing = w.tools.some((t) => Object.values(t.slotMap).some((v) => !v))
+  const missing = w.tools.some((t) => missingSlots(d, w, t).length)
   if (missing) return { h: 'degraded' as const, t: 'Missing key slot' }
   if (w.keyIds.some((id) => keyById(d, id)?.sourceRemoved)) return { h: 'degraded' as const, t: 'Key source removed' }
   return { h: 'healthy' as const, t: 'Healthy' }
@@ -305,11 +308,17 @@ export function WsSummary() {
   const rows = useUserRows(w.id)
   const [editKeys, setEditKeys] = useState(false)
   const [keys, setKeys] = useState<string[]>([])
+  const [confirmKeys, setConfirmKeys] = useState(false)
   const [editPlayers, setEditPlayers] = useState(false)
   const [pu, setPu] = useState<string[]>([])
   const [pa, setPa] = useState<string[]>([])
   const admin = isAdmin(d)
   const agents = w.agentIds.map((id) => agentById(d, id)).filter(Boolean) as NonNullable<ReturnType<typeof agentById>>[]
+  const impact = unexposeImpact(d, w.id, keys)
+  const saveKeys = () => {
+    actions.setWorkspaceKeys(w.id, keys)
+    setEditKeys(false)
+  }
   return (
     <div className="mt-5 flex max-w-[1160px] flex-col gap-7">
       <div>
@@ -375,18 +384,24 @@ export function WsSummary() {
           <Button size="lg" onClick={() => setEditKeys(false)}>
             Cancel
           </Button>
-          <Button
-            size="lg"
-            variant="primary"
-            onClick={() => {
-              actions.setWorkspaceKeys(w.id, keys)
-              setEditKeys(false)
-            }}
-          >
+          <Button size="lg" variant="primary" onClick={() => (impact.slots.length || impact.cabinets.length ? setConfirmKeys(true) : saveKeys())}>
             Save keys
           </Button>
         </Footer>
       </Modal>
+      <ImpactDialog
+        open={confirmKeys}
+        onClose={() => setConfirmKeys(false)}
+        title={`Stop exposing ${impact.removed.map((id) => keyById(d, id)?.name).join(', ')} in ${w.name}?`}
+        rows={[
+          ['Tool slots that lose their key', impact.slots.map((x) => `${x.tool} · ${x.slot}`).join('; ') || 'None', impact.slots.length ? 'amber' : undefined],
+          ['Cabinets that lose a key', impact.cabinets.map((c) => `${c.name} · ${c.keys.join(', ')}`).join('; ') || 'None', impact.cabinets.length ? 'amber' : undefined],
+          ['Agents on this workspace', plural(agents.filter((a) => a.status === 'active').length, 'active agent')],
+        ]}
+        body="Those slots show Missing, and calls through them fail until another exposed key fills them. The keys themselves stay in their stores."
+        confirmLabel="Stop exposing"
+        onConfirm={saveKeys}
+      />
       <Modal open={editPlayers} onClose={() => setEditPlayers(false)} width={560} title={`Who gets access to “${w.name}”?`}>
         <PlayerPicker users={pu} agents={pa} onUsers={setPu} onAgents={setPa} />
         <Footer>
@@ -453,7 +468,7 @@ export function WsTools() {
           {w.tools.map((wt) => {
             const t = toolById(d, wt.toolId)
             if (!t) return null
-            const missing = t.slots.find((s) => !wt.slotMap[s.name])
+            const missing = missingSlots(d, w, wt)
             const r = results[wt.toolId]
             return (
               <div key={wt.toolId} className="border-b border-line">
@@ -468,7 +483,7 @@ export function WsTools() {
                   </div>
                   <div className="flex flex-col gap-1">
                     {t.slots.map((s) => {
-                      const k = keyById(d, wt.slotMap[s.name])
+                      const k = keyById(d, filledSlot(d, w, wt, s.name))
                       return (
                         <div key={s.id} className="flex items-center gap-2 text-xs">
                           <span className="font-mono text-brass-light">{s.name}</span>
@@ -476,7 +491,7 @@ export function WsTools() {
                           {admin ? (
                             <select
                               aria-label={`Key for ${s.name}`}
-                              value={wt.slotMap[s.name] ?? ''}
+                              value={k?.id ?? ''}
                               onChange={(e) => actions.updateWorkspaceTool(w.id, t.id, { slotMap: { ...wt.slotMap, [s.name]: e.target.value || null } })}
                               className={cx('rounded-md border bg-page px-2 py-0.5 font-mono text-xs outline-none', k ? 'border-edge text-zinc-300' : 'border-amber-500/40 text-amber-400')}
                             >
@@ -488,7 +503,7 @@ export function WsTools() {
                               ))}
                             </select>
                           ) : (
-                            <span className="font-mono text-zinc-300">{k?.name ?? 'Missing'}</span>
+                            <span className={cx('font-mono', k ? 'text-zinc-300' : 'text-amber-400')}>{k?.name ?? 'Missing'}</span>
                           )}
                         </div>
                       )
@@ -511,7 +526,7 @@ export function WsTools() {
                     /min
                   </div>
                   <div>
-                    <Button size="sm" disabled={!wt.enabled} onClick={() => setResults({ ...results, [t.id]: testCall({ toolId: t.id, wsId: w.id, missingSlot: missing?.name }) })}>
+                    <Button size="sm" disabled={!wt.enabled} onClick={() => setResults({ ...results, [t.id]: testCall({ toolId: t.id, wsId: w.id, missingSlot: missing[0] }) })}>
                       Test call
                     </Button>
                   </div>
@@ -523,6 +538,18 @@ export function WsTools() {
                     )}
                   </div>
                 </Row>
+                {missing.map((m) => (
+                  <div key={m} className="mx-4 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3.5 py-2 text-xs text-amber-400">
+                    Missing: <span className="font-mono text-xs2">{m}</span> — this workspace exposes no key for that slot, so calls fail.{' '}
+                    {admin ? (
+                      <>
+                        Pick one above, or <Link to={`/workspaces/${w.id}/summary`}>expose a key</Link>.
+                      </>
+                    ) : (
+                      'Ask an admin to fill it.'
+                    )}
+                  </div>
+                ))}
                 {r && (
                   <div className={cx('mx-4 mb-3 flex items-center gap-3 rounded-lg border px-3.5 py-2 text-xs', r.ok ? 'border-green-500/30 bg-green-500/[0.05]' : 'border-amber-500/30 bg-amber-500/[0.05]')}>
                     {r.ok ? (

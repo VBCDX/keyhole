@@ -124,7 +124,7 @@ export function populatedDB(): DB {
   }
 
   const events: AuditEvent[] = [
-    ev('ev_1', 2 * MIN, { ...stripeReq, actor: 'billing-agent', actorId: 'ag_billing', result: '200 · 164 ms', trk: 'trk_2b8xm4c1', detail: [['Action', 'GET /v1/charges'], ['Workspace', 'Production'], ['Route', 'Direct']] }),
+    ev('ev_1', 2 * MIN, { ...stripeReq, actor: 'billing-agent', actorId: 'ag_billing', via: 'pay-api-01', viaId: 'sc_payapi01', result: '200 · 164 ms', trk: 'trk_2b8xm4c1', detail: [['Action', 'GET /v1/charges'], ['Workspace', 'Production'], ['Sidecar', 'pay-api-01']] }),
     ev('ev_2', 2 * MIN + 27_000, {
       type: 'blocked',
       severity: 'blocked',
@@ -236,9 +236,13 @@ export function populatedDB(): DB {
       { id: 'cb_legacy', workspaceId: 'ws_prod', name: 'Legacy imports', createdBy: null, managedBy: null, keyIds: ['k_legacy_c'], tools: [], access: 'everyone', createdAt: now - 90 * DAY },
     ],
     connectors: [
-      { id: 'cn_edge01', orgId: 'org_acme', name: 'edge-01', workspaceId: 'ws_prod', version: '1.4.2', health: 'healthy', lastSeen: now - 20_000, ip: '10.2.14.7', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },
-      { id: 'cn_edge02', orgId: 'org_acme', name: 'edge-02', workspaceId: 'ws_staging', version: '1.4.0', health: 'degraded', lastSeen: now - 90_000, ip: '10.2.14.9', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },
-      { id: 'cn_lab', orgId: 'org_acme', name: 'lab-runner', workspaceId: 'ws_sandbox', version: '1.3.9', health: 'offline', lastSeen: now - 2 * HOUR, ip: null, enrolledBy: 'Ravi M.', enrolledAt: now - 14 * DAY },
+      { id: 'cn_edge01', orgId: 'org_acme', kind: 'vault', name: 'edge-01', workspaceId: 'ws_prod', version: '1.4.2', health: 'healthy', lastSeen: now - 20_000, ip: '10.2.14.7', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },
+      { id: 'cn_edge02', orgId: 'org_acme', kind: 'vault', name: 'edge-02', workspaceId: 'ws_staging', version: '1.4.0', health: 'degraded', lastSeen: now - 90_000, ip: '10.2.14.9', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },
+      { id: 'cn_lab', orgId: 'org_acme', kind: 'vault', name: 'lab-runner', workspaceId: 'ws_sandbox', version: '1.3.9', health: 'offline', lastSeen: now - 2 * HOUR, ip: null, enrolledBy: 'Ravi M.', enrolledAt: now - 14 * DAY },
+      {
+        id: 'sc_payapi01', orgId: 'org_acme', kind: 'sidecar', name: 'pay-api-01', workspaceId: 'ws_prod', agentId: 'ag_billing', protocols: ['http', 'mcp'], listen: '127.0.0.1:8787',
+        host: 'pay-api-7f9c.prod.acme.internal', requestsBase: 1284, version: '1.5.0', health: 'healthy', lastSeen: now - 12_000, ip: '10.2.30.14', enrolledBy: 'Dana K.', enrolledAt: now - 2 * DAY,
+      },
     ],
     events,
     notifications: { ...DEFAULT_NOTIFICATIONS },

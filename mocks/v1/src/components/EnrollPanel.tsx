@@ -1,26 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import { HEARTBEAT_AFTER_MS, enrollmentExpiry, useCountdown } from '../lib/enroll'
 import { newEnrollmentToken } from '../lib/format'
 import { actions, orgConnectors, orgWorkspaces, useDB } from '../lib/store'
 import { CopyChip, KeyholeIcon } from './keyhole'
 import { Button, Field, Select } from './ui'
 
-const HEARTBEAT_AFTER_MS = 6000
-
-function useCountdown(until: number | null) {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    if (!until) return
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [until])
-  if (!until) return null
-  const s = Math.max(0, Math.round((until - now) / 1000))
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
-
 /**
- * The command-and-token panel, shared by Connectors → Enroll, the OpenBao
- * wizard, and the Connect tab's Connector route.
+ * The vault connector command-and-token panel, shared by Connectors → Enroll
+ * and the OpenBao wizard. (Sidecars have their own panel.)
  */
 export function EnrollPanel({
   workspaceId,
@@ -48,12 +35,12 @@ export function EnrollPanel({
 
   const generate = () => {
     setToken(newEnrollmentToken())
-    setExpires(Date.now() + 15 * 60_000)
+    setExpires(enrollmentExpiry())
     setEnrolled(null)
     window.clearTimeout(timer.current)
     // In the prototype, the connector "runs" and reports in a few seconds later.
     timer.current = window.setTimeout(() => {
-      const n = orgConnectors(d).length + 1
+      const n = orgConnectors(d).filter((c) => c.kind === 'vault').length + 1
       const id = actions.enrollConnector({ name: `edge-${String(n).padStart(2, '0')}`, workspaceId: ws?.id ?? '' })
       setEnrolled(id)
       setToken(null)

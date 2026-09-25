@@ -6,10 +6,12 @@ import type {
   Agent,
   AuditEvent,
   Cabinet,
+  Connector,
   DB,
   Key,
   PlayerRef,
   Role,
+  SidecarProtocol,
   SecretStore,
   Tool,
   ToolSnapshot,
@@ -145,6 +147,13 @@ function canManageCabinet(d: DB, c: Cabinet) {
   const w = d.workspaces.find((x) => x.id === c.workspaceId)
   return !!w && inMyOrg(d, w.orgId) && (isAdmin(d) || (c.managedBy === d.currentUserId && hasWorkspaceAccess(d, d.currentUserId, w.id)))
 }
+
+export const protocolList = (c: Connector) => (c.protocols ?? []).map((p) => p.toUpperCase()).join(' · ')
+export const connectorKind = (c: Connector) => (c.kind === 'sidecar' ? 'sidecar' : 'vault connector')
+/** Requests through a sidecar in the last 24 hours: the seeded baseline plus modelled log rows. */
+export const sidecarRequests24h = (d: DB, c: Connector) => (c.requestsBase ?? 0) + d.events.filter((e) => e.viaId === c.id && e.type === 'request' && Date.now() - e.at < 86_400_000).length
+/** The healthy sidecar an agent uses in a workspace, if any. */
+export const sidecarFor = (d: DB, agentId: string, wsId: string) => d.connectors.find((c) => c.kind === 'sidecar' && c.agentId === agentId && c.workspaceId === wsId && c.health !== 'offline')
 
 /** The organization of the record a URL points at (#/orgs/:id, /workspaces/:id, /tools/:id, /players/agents/:id). */
 export function recordOrgFromPath(d: DB, path: string): string | null {
@@ -692,7 +701,10 @@ export const actions = {
       d.connectors = d.connectors.filter((c) => c.workspaceId !== wsId)
       for (const s of routed) s.health = 'unreachable'
       const detail: [string, string][] = []
-      if (conns.length) detail.push(['Vault connectors revoked', conns.map((c) => c.name).join(', ')])
+      const vaults = conns.filter((c) => c.kind === 'vault')
+      const sidecars = conns.filter((c) => c.kind === 'sidecar')
+      if (vaults.length) detail.push(['Vault connectors revoked', vaults.map((c) => c.name).join(', ')])
+      if (sidecars.length) detail.push(['Sidecars revoked', sidecars.map((c) => c.name).join(', ')])
       if (routed.length) detail.push(['Stores now unreachable', routed.map((s) => s.name).join(', ')])
       log(d, { object: `Deleted workspace ${w.name}`, detail: detail.length ? detail : undefined })
     })
@@ -998,12 +1010,38 @@ export const actions = {
     const id = uid('cn')
     update((d) => {
       if (!adminIn(d, wsById(d, c.workspaceId)?.orgId)) return
-      d.connectors.push({ id, orgId: d.currentOrgId, name: c.name, workspaceId: c.workspaceId, version: '1.4.2', health: 'healthy', lastSeen: Date.now(), ip: `10.2.14.${20 + Math.floor(Math.random() * 60)}`, enrolledBy: me(d).name.replace(/(\w+) (\w).*/, '$1 $2.'), enrolledAt: Date.now() })
+      d.connectors.push({ id, orgId: d.currentOrgId, kind: 'vault', name: c.name, workspaceId: c.workspaceId, version: '1.4.2', health: 'healthy', lastSeen: Date.now(), ip: `10.2.14.${20 + Math.floor(Math.random() * 60)}`, enrolledBy: me(d).name.replace(/(\w+) (\w).*/, '$1 $2.'), enrolledAt: Date.now() })
       // The person who issued the enrollment token is attributed; the heartbeat is the connector's own.
       log(d, { object: `Enrolled vault connector ${c.name} in ${wsById(d, c.workspaceId)?.name ?? 'a workspace'}`, workspaceId: c.workspaceId })
       log(d, { type: 'connection', severity: 'ok', actor: c.name, actorKind: 'connector', object: 'Vault connector enrolled', workspaceId: c.workspaceId, result: 'First heartbeat' })
     })
     return id
+  },
+  /** A sidecar next to an app or agent harness, acting as one agent of its workspace. */
+  enrollSidecar(c: { name: string; workspaceId: string; agentId: string; protocols: SidecarProtocol[]; listen: string }) {
+    const id = uid('sc')
+    update((d) => {
+      const w = wsById(d, c.workspaceId)
+      const a = agentById(d, c.agentId)
+      if (!w || !adminIn(d, w.orgId) || !a || a.orgId !== w.orgId || !w.agentIds.includes(a.id) || !c.protocols.length) return
+      const host = `${c.name.replace(/[^a-z0-9-]/gi, '').toLowerCase() || 'app'}-${Math.random().toString(16).slice(2, 6)}.${w.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.internal`
+      d.connectors.push({ id, orgId: w.orgId, kind: 'sidecar', name: c.name, workspaceId: w.id, agentId: a.id, protocols: c.protocols, listen: c.listen, host, requestsBase: 0, version: '1.5.0', health: 'healthy', lastSeen: Date.now(), ip: `10.2.30.${20 + Math.floor(Math.random() * 60)}`, enrolledBy: me(d).name.replace(/(\w+) (\w).*/, '$1 $2.'), enrolledAt: Date.now() })
+      log(d, { object: `Enrolled sidecar ${c.name} in ${w.name} for ${a.label}`, workspaceId: w.id, detail: [['Agent', a.label], ['Protocols', c.protocols.map((p) => p.toUpperCase()).join(', ')], ['Listens on', c.listen]] })
+      log(d, { type: 'connection', severity: 'ok', actor: c.name, actorKind: 'connector', object: 'Sidecar enrolled', workspaceId: w.id, result: 'First heartbeat', detail: [['Host', host]] })
+    })
+    return id
+  },
+  /** Point a sidecar at another agent of its workspace; that agent's permissions apply from the next request. */
+  rebindSidecar(id: string, agentId: string) {
+    update((d) => {
+      const c = d.connectors.find((x) => x.id === id)
+      const w = c && wsById(d, c.workspaceId)
+      const a = agentById(d, agentId)
+      if (!c || c.kind !== 'sidecar' || !w || !adminIn(d, w.orgId) || !a || a.status !== 'active' || !w.agentIds.includes(a.id) || c.agentId === a.id) return
+      const before = agentById(d, c.agentId ?? '')?.label ?? '—'
+      c.agentId = a.id
+      log(d, { object: `Rebound sidecar ${c.name} to ${a.label}`, workspaceId: w.id, detail: [['Agent', `${before} → ${a.label}`]] })
+    })
   },
   /** New credential for a running connector. Checked before minting; the token is returned once and never stored. */
   rotateConnector(id: string) {
@@ -1014,7 +1052,7 @@ export const actions = {
       const x = d.connectors.find((y) => y.id === id)
       if (!x) return
       x.rotatedAt = Date.now()
-      log(d, { object: `Rotated token for vault connector ${x.name}`, workspaceId: x.workspaceId, detail: [['Credential', 'New token issued · the old one works 10 more minutes']] })
+      log(d, { object: `Rotated token for ${connectorKind(x)} ${x.name}`, workspaceId: x.workspaceId, detail: [['Credential', 'New token issued · the old one works 10 more minutes']] })
     })
     return token
   },
@@ -1022,7 +1060,7 @@ export const actions = {
     update((d) => {
       const c = d.connectors.find((x) => x.id === id)
       if (!c || !adminIn(d, c.orgId) || !name.trim() || name.trim() === c.name) return
-      log(d, { object: `Renamed vault connector ${c.name} → ${name.trim()}`, workspaceId: c.workspaceId })
+      log(d, { object: `Renamed ${connectorKind(c)} ${c.name} → ${name.trim()}`, workspaceId: c.workspaceId })
       c.name = name.trim()
     })
   },
@@ -1032,25 +1070,27 @@ export const actions = {
       if (!c || !adminIn(d, c.orgId)) return
       d.connectors = d.connectors.filter((x) => x.id !== id)
       for (const s of d.stores) if (s.route === id) s.health = 'unreachable'
-      log(d, { object: `Revoked vault connector ${c.name}` })
+      log(d, { object: `Revoked ${connectorKind(c)} ${c.name}`, workspaceId: c.workspaceId })
     })
   },
 
   /* Verify + first call */
-  landFirstCall(wsId: string, agentId: string | null) {
+  landFirstCall(wsId: string, agentId: string | null, sidecarId?: string) {
     const trk = trackingCode()
     const ms = 140 + Math.floor(Math.random() * 90)
     update((d) => {
       const w = wsById(d, wsId)
       if (!w) return
       const a = agentId ? agentById(d, agentId) : null
+      const sc = sidecarId ? d.connectors.find((x) => x.id === sidecarId) : undefined
+      const via = sc ? { via: sc.name, viaId: sc.id } : {}
       const wt = w?.tools.find((t) => t.enabled && liveTool(toolById(d, t.toolId)) && !missingSlots(d, w, t).length)
       const t = wt ? liveTool(toolById(d, wt.toolId)) : null
       const act = t?.actions[0]
       if (a) a.lastUsedAt = Date.now()
-      const detail: [string, string][] = [['Action', act ? `${act.method} ${act.path}` : '—'], ['Workspace', w?.name ?? '—'], ['Route', 'Direct']]
-      log(d, { type: 'request', severity: 'ok', actor: a?.label ?? 'agent', actorKind: 'agent', actorId: a?.id, object: t?.displayName ?? 'MCP tools/list', destination: t ? new URL(t.baseUrl).host : undefined, orgId: w.orgId, workspaceId: wsId, result: `200 · ${ms} ms`, trk, detail })
-      log(d, { type: 'verification', severity: 'ok', actor: a?.label ?? 'agent', actorKind: 'agent', actorId: a?.id, object: 'First request verified', orgId: w.orgId, workspaceId: wsId, result: `200 · ${ms} ms`, trk: trackingCode() })
+      const detail: [string, string][] = [['Action', act ? `${act.method} ${act.path}` : '—'], ['Workspace', w?.name ?? '—'], sc ? ['Sidecar', sc.name] : ['Route', 'Direct']]
+      log(d, { type: 'request', severity: 'ok', actor: a?.label ?? 'agent', actorKind: 'agent', actorId: a?.id, ...via, object: t?.displayName ?? 'MCP tools/list', destination: t ? new URL(t.baseUrl).host : undefined, orgId: w.orgId, workspaceId: wsId, result: `200 · ${ms} ms`, trk, detail })
+      log(d, { type: 'verification', severity: 'ok', actor: a?.label ?? 'agent', actorKind: 'agent', actorId: a?.id, ...via, object: 'First request verified', orgId: w.orgId, workspaceId: wsId, result: `200 · ${ms} ms`, trk: trackingCode() })
       if (!d.firstCallAt) d.firstCallAt = Date.now()
     })
     return { trk, ms }

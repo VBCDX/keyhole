@@ -38,8 +38,23 @@ A **Prototype controls** pill sits at the bottom left. It isn't part of the prod
 | 6 · Revoke | Players › Agents › billing-agent › Revoke token. Its next attempt appears in the log as blocked about 4 s later. |
 | 7 · Live debugging | Audit › Live. ops-agent streams red rows. Expand one › *Open the tool's actions* › add `GET /v1/payouts` › Publish › back to Live, and the rows turn green. |
 | 8 · Support lock | View as Keyhole support › search `mia` › Lock account (a reason or ticket ID is required). View as Dana › Audit shows the support action and its reason; Players › Users › Mia › *Ask support to unlock*, which support then sees on Mia's record. |
+| 9 · Sidecar | Workspace › Connect › MCP › *Sidecar* › *Enroll a sidecar* (acts as billing-agent) › Generate token. The heartbeat arrives in about 6 s, then the first request lands *via sidecar*. Connectors lists both types; a sidecar's ⋯ offers Rename, Rotate token…, Rebind agent… and Revoke…. |
 
 State persists in `localStorage` (`keyhole-mocks-v1`). Resetting the scenario clears it.
+
+## Connectors: vault connectors and sidecars
+
+Both are installed copies of `keyholed`, enrolled with a single-use token that expires after 15 minutes. Both report
+health, and their credentials can be rotated (the old one keeps working for 10 minutes; the new one is shown once).
+
+| | Vault connector | Sidecar |
+|---|---|---|
+| Runs | Inside your network, near your vault | Next to one app or agent harness |
+| Used by | Stores: Keyhole reaches an OpenBao vault behind your firewall through it | Apps: they call the sidecar locally (HTTP, HTTPS, SSE or MCP) as if calling the service directly |
+| Identity | The workspace it's enrolled in | One agent of one workspace; that agent's grants, rate limit, expiry and status apply |
+| Secrets | Read from the vault and cached by Keyhole | Fetched for the tool slot and injected into the forwarded call; never in the app's memory or on its disk |
+| In the log | "Vault connector enrolled", heartbeats | Requests read "billing-agent via sidecar pay-api-01" |
+| Managed in | Connectors, OpenBao wizard step 2 | Connectors, Workspace › Connect › Sidecar |
 
 ## Ground rules the prototype enforces
 

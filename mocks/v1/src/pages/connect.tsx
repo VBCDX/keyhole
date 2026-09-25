@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ago } from '../lib/format'
-import { actions, agentById, getDB, isAdmin, liveTool, log, orgEvents, sessionTokenFor, toolById, update, useDB, useNow } from '../lib/store'
+import { actions, agentById, getDB, isAdmin, liveTool, log, orgEvents, protocolList, sessionTokenFor, toolById, update, useDB, useNow } from '../lib/store'
 import type { AuditEvent, Workspace } from '../lib/types'
-import { EnrollPanel } from '../components/EnrollPanel'
+import { SidecarEnrollPanel } from '../components/SidecarEnrollPanel'
+import { sidecarAppConfig } from '../lib/enroll'
 import { ImpactDialog } from '../components/shared'
 import { CopyChip, KeyholeIcon } from '../components/keyhole'
-import { Button, Card, Field, Segmented, Select, SlideOver, Toggle } from '../components/ui'
+import { Button, Card, Field, Segmented, Select, SlideOver, Toggle, Dot } from '../components/ui'
 import { useWorkspace } from './workspaces'
 
 type Kind = 'mcp' | 'https'
@@ -72,6 +73,12 @@ function VerifyCard({ v, w, last }: { v: Verify; w: Workspace; last?: AuditEvent
             <span className="text-zinc-500">Agent</span>
             {/* The name at the time of the call: history isn't rewritten by later renames or revocations. */}
             <span>{e.actor}</span>
+            {e.via && (
+              <>
+                <span className="text-zinc-500">Through</span>
+                <span>Sidecar {e.via}</span>
+              </>
+            )}
             <span className="text-zinc-500">Tool</span>
             <span>
               {req?.object ?? '—'}
@@ -129,7 +136,10 @@ function VerifyCard({ v, w, last }: { v: Verify; w: Workspace; last?: AuditEvent
 
 function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; open: boolean; onClose: () => void }) {
   const d = useDB()
-  const [tab, setTab] = useState<'direct' | 'connector'>('direct')
+  const [tab, setTab] = useState<'direct' | 'sidecar'>('direct')
+  const [enrollingSidecar, setEnrollingSidecar] = useState(false)
+  const sidecars = d.connectors.filter((c) => c.kind === 'sidecar' && c.workspaceId === w.id)
+  const admin = isAdmin(d)
   const [client, setClient] = useState<Client>('desktop')
   const agents = w.agentIds.map((id) => agentById(d, id)).filter((a) => a && a.status !== 'revoked') as NonNullable<ReturnType<typeof agentById>>[]
   const [agentId, setAgentId] = useState('')
@@ -152,11 +162,13 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
   const masked = agent ? `kh_live_••••${agent.tokenLast4}` : '<PASTE_AGENT_TOKEN>'
   const preview = configFor(kind, client, w, token ? masked : '<PASTE_AGENT_TOKEN>')
 
-  const expectFirstRequest = (source: 'download' | 'connector') => {
+  /** Direct: the agent picked above. Sidecar: the agent the sidecar acts as, with the call going through it. */
+  const expectFirstRequest = (source: 'download' | 'sidecar', sidecarId?: string) => {
     setVerify({ state: 'waiting' })
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => {
-      const a = agent ? agentById(d, agent.id) : null
+      const sc = sidecarId ? getDB().connectors.find((c) => c.id === sidecarId) : undefined
+      const a = sc ? agentById(getDB(), sc.agentId ?? '') : agent ? agentById(getDB(), agent.id) : null
       if (!a || a.status !== 'active') {
         let ev: AuditEvent | undefined
         update((dd) => {
@@ -167,7 +179,8 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
             actorKind: 'agent',
             actorId: a?.id,
             workspaceId: w.id,
-            object: `${w.name} · ${kind.toUpperCase()} connect`,
+            ...(sc ? { via: sc.name, viaId: sc.id } : {}),
+            object: `${w.name} · ${sc ? 'sidecar' : kind.toUpperCase()} connect`,
             result: a?.status === 'suspended' ? 'Agent suspended' : 'Token revoked',
             reason: a?.status === 'suspended' ? `Blocked: ${a.label} is suspended. Resume it on the Agents page, then run it again.` : 'Blocked: this token isn’t valid. Create a new agent and download a fresh config.',
           })
@@ -175,10 +188,10 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
         setVerify({ state: 'failed', event: ev })
         return
       }
-      actions.landFirstCall(w.id, a.id)
+      actions.landFirstCall(w.id, a.id, sc?.id)
       const ev = orgEvents(getDB()).find((e) => e.type === 'verification' && e.workspaceId === w.id)
       setVerify({ state: 'success', event: ev })
-    }, source === 'connector' ? FIRST_REQUEST_AFTER_MS / 2 : FIRST_REQUEST_AFTER_MS)
+    }, source === 'sidecar' ? FIRST_REQUEST_AFTER_MS / 2 : FIRST_REQUEST_AFTER_MS)
   }
 
   const onDownload = () => {
@@ -198,7 +211,7 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
         onChange={setTab}
         options={[
           { value: 'direct', label: 'Direct' },
-          { value: 'connector', label: 'Connector' },
+          { value: 'sidecar', label: 'Sidecar' },
         ]}
         className="-mt-0.5 [&>button]:font-semibold"
       />
@@ -270,7 +283,56 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
           )}
         </div>
       ) : (
-        <EnrollPanel workspaceId={w.id} showWait={false} intro="Route this workspace's traffic through your own network. Run this on a machine inside it:" onEnrolled={() => expectFirstRequest('connector')} />
+        <div className="flex flex-col gap-4">
+          <div className="text-sm2 leading-relaxed text-zinc-400">
+            A sidecar runs next to your app or agent harness and acts as one agent of this workspace. The app calls the sidecar as if it were calling the service; the sidecar fetches the key for the
+            tool slot and forwards the call with it. Keys never enter the app’s memory or disk, and the app holds no Keyhole token.
+          </div>
+          {sidecars.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {sidecars.map((sc) => {
+                const a = agentById(d, sc.agentId ?? '')
+                return (
+                  <div key={sc.id} className="flex items-center gap-3 rounded-[10px] border border-edge bg-rail px-4 py-3">
+                    <Dot health={sc.health} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-medium">
+                        {sc.name} <span className="font-normal text-zinc-500">· as {a?.label ?? '—'}</span>
+                      </div>
+                      <div className="truncate text-xs text-zinc-500">
+                        {protocolList(sc)} · <span className="font-mono">{sc.listen}</span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        const cfg = sidecarAppConfig(sc.listen ?? '127.0.0.1:8787', sc.protocols ?? [])
+                        download(`${sc.name}.env`, cfg.env + (cfg.mcp ? `\n# MCP clients:\n# ${cfg.mcp.replace(/\n/g, '\n# ')}` : ''))
+                        actions.markConfigDownloaded()
+                        expectFirstRequest('sidecar', sc.id)
+                      }}
+                    >
+                      Download app config
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {!sidecars.length && !enrollingSidecar && <Card className="p-5 text-center text-[13px] text-zinc-400">No sidecars on this workspace yet.</Card>}
+          {admin &&
+            (enrollingSidecar ? (
+              <SidecarEnrollPanel workspaceId={w.id} onEnrolled={(id) => expectFirstRequest('sidecar', id)} />
+            ) : (
+              <Button className="self-start" onClick={() => setEnrollingSidecar(true)}>
+                Enroll a sidecar
+              </Button>
+            ))}
+          {!admin && <div className="text-xs text-zinc-500">Workspace admins enroll sidecars.</div>}
+          <div className="text-xs2 text-zinc-500">
+            Vault connectors, which reach vaults behind your firewall, are managed on the <Link to="/connectors">Connectors</Link> page.
+          </div>
+        </div>
       )}
       <div className="mt-auto border-t border-line pt-[18px]">
         <VerifyCard v={verify} w={w} last={lastVerified} />

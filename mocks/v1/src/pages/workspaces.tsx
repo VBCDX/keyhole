@@ -43,8 +43,11 @@ const WS_COLS = '1.4fr 1.2fr 1.6fr 1fr 1.2fr'
 
 function wsHealth(d: ReturnType<typeof useDB>, w: Workspace) {
   const conns = d.connectors.filter((c) => c.workspaceId === w.id)
-  if (conns.some((c) => c.health === 'offline')) return { h: 'offline' as const, t: 'Vault connector offline' }
-  if (conns.some((c) => c.health === 'degraded')) return { h: 'degraded' as const, t: 'Vault connector degraded' }
+  const kind = (c: (typeof conns)[number]) => (c.kind === 'sidecar' ? 'Sidecar' : 'Vault connector')
+  const off = conns.find((c) => c.health === 'offline')
+  if (off) return { h: 'offline' as const, t: `${kind(off)} offline` }
+  const deg = conns.find((c) => c.health === 'degraded')
+  if (deg) return { h: 'degraded' as const, t: `${kind(deg)} degraded` }
   const missing = w.tools.some((t) => missingSlots(d, w, t).length)
   if (missing) return { h: 'degraded' as const, t: 'Missing key slot' }
   if (w.keyIds.some((id) => keyById(d, id)?.sourceRemoved)) return { h: 'degraded' as const, t: 'Key source removed' }
@@ -289,7 +292,8 @@ export function WorkspaceDetail() {
         typeToConfirm={w.name}
         rows={[
           ['Players', `${plural(w.userIds.length, 'user')} · ${plural(liveAgents, 'agent')} lose access`, 'amber'],
-          ['Vault connectors enrolled here', conns.map((c) => c.name).join(', ') || 'None', conns.length ? 'amber' : undefined],
+          ['Vault connectors enrolled here', conns.filter((c) => c.kind === 'vault').map((c) => c.name).join(', ') || 'None', conns.some((c) => c.kind === 'vault') ? 'amber' : undefined],
+          ['Sidecars enrolled here', conns.filter((c) => c.kind === 'sidecar').map((c) => c.name).join(', ') || 'None', conns.some((c) => c.kind === 'sidecar') ? 'amber' : undefined],
           ['Stores that route through them', routed.map((s) => `${s.name} → becomes unreachable`).join('; ') || 'None', routed.length ? 'amber' : undefined],
           ['Tools granted', String(w.tools.length)],
           ['Cabinets', String(d.cabinets.filter((c) => c.workspaceId === w.id).length)],

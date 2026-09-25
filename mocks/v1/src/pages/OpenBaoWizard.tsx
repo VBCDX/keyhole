@@ -49,7 +49,8 @@ function Wizard() {
   const [name, setName] = useState(editing?.name ?? 'Payments vault')
   const [address, setAddress] = useState(editing?.address ?? 'https://bao.acme.internal:8200')
   const [route, setRoute] = useState<'public' | 'connector'>(editing?.route && editing.route !== 'public' ? 'connector' : 'public')
-  const connectors = orgConnectors(d)
+  // Stores route through vault connectors only; sidecars are for apps.
+  const connectors = orgConnectors(d).filter((c) => c.kind === 'vault')
   const [connectorId, setConnectorId] = useState(editing?.route && editing.route !== 'public' ? editing.route : (connectors.find((c) => c.health !== 'offline')?.id ?? ''))
   const [enrolling, setEnrolling] = useState(false)
   const [auth, setAuth] = useState<'approle' | 'kubernetes' | 'token'>(editing?.auth ?? 'approle')

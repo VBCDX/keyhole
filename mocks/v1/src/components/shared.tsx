@@ -528,6 +528,10 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
   )
 }
 
+/** Sidecars bound to an agent: they act as it, so they stop working with it. */
+const sidecarsOf = (d: ReturnType<typeof useDB>, a: Agent | null) =>
+  a ? d.connectors.filter((c) => c.kind === 'sidecar' && c.agentId === a.id).map((c) => c.name).join(', ') : ''
+
 /** "billing-agent, docs-agent (keep working)" — agents belong to the organization. */
 export const createdAgentsLabel = (labels: string[]) => (labels.length ? `${labels.join(', ')} — unaffected; agents belong to the organization` : 'None')
 
@@ -567,8 +571,9 @@ export function SuspendAgentDialog({ agent, onClose }: { agent: Agent | null; on
       rows={[
         ['Last used', ago(agent?.lastUsedAt ?? null, now)],
         ['Workspaces', agent?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None'],
+        ['Sidecars acting as it', sidecarsOf(d, agent) || 'None', sidecarsOf(d, agent) ? 'amber' : undefined],
       ]}
-      body="Its requests are blocked and logged until you resume it. The token stays the same, so resuming needs no config change."
+      body="Its requests are blocked and logged until you resume it, including requests through its sidecars. The token stays the same, so resuming needs no config change."
       confirmLabel="Suspend agent"
       onConfirm={() => agent && actions.setAgentStatus(agent.id, 'suspended')}
     />
@@ -588,6 +593,7 @@ export function RevokeAgentDialog({ agent, onClose, lockLists }: { agent: Agent 
         ['Last used', ago(agent?.lastUsedAt ?? null, now), recent ? 'amber' : undefined],
         ['Workspaces affected', agent?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None'],
         ['Cabinets on its lock list', lockLists.join(', ') || 'None'],
+        ['Sidecars acting as it', sidecarsOf(d, agent) || 'None', sidecarsOf(d, agent) ? 'amber' : undefined],
       ]}
       body="Its next request is blocked and logged. Revoking can't be undone — create a new agent to reconnect."
       confirmLabel="Revoke token"
@@ -634,7 +640,10 @@ export function LogRow({ e, compact, expanded, onToggle, fresh }: { e: AuditEven
         <span className={cx('size-[7px] min-w-[7px] rounded-full', DOT[e.severity])} />
         {!compact && <span className={cx('rounded-full border px-2 py-0.5 text-2xs font-semibold', TYPE_TONE[e.type])}>{e.type}</span>}
         <span className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 text-zinc-300">{e.actor}</span>
+          <span className="shrink-0 text-zinc-300">
+            {e.actor}
+            {e.via && <span className="text-zinc-500"> via sidecar {e.via}</span>}
+          </span>
           <span className="text-zinc-600">→</span>
           <span className="truncate text-zinc-400">
             {e.object}
@@ -720,7 +729,7 @@ export function AuditLog({ events, scopeLabel, hideWorkspaceFilter, initialExpan
   const filtered = events.filter((e) => {
     if (q) {
       const s = q.toLowerCase()
-      if (![e.trk, e.actor, e.object, e.type, e.result, e.destination ?? ''].some((x) => x.toLowerCase().includes(s))) return false
+      if (![e.trk, e.actor, e.via ? `via sidecar ${e.via}` : '', e.object, e.type, e.result, e.destination ?? ''].some((x) => x.toLowerCase().includes(s))) return false
     }
     if (type && e.type !== type) return false
     if (actor && e.actor !== actor) return false
@@ -734,8 +743,8 @@ export function AuditLog({ events, scopeLabel, hideWorkspaceFilter, initialExpan
   })
 
   const exportCsv = () => {
-    const header = 'time,type,actor,object,destination,result,tracking_code\n'
-    const body = filtered.map((e) => [new Date(e.at).toISOString(), e.type, e.actor, e.object, e.destination ?? '', e.result, e.trk].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const header = 'time,type,actor,via_sidecar,object,destination,result,tracking_code\n'
+    const body = filtered.map((e) => [new Date(e.at).toISOString(), e.type, e.actor, e.via ?? '', e.object, e.destination ?? '', e.result, e.trk].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const url = URL.createObjectURL(new Blob([header + body], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url

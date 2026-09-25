@@ -2,8 +2,8 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ago, clock, expiringSoon, initials, maskToken, until } from '../lib/format'
 import { liveTick } from '../lib/simulate'
-import { actions, agentsCreatedBy, canManageMember, isActive, isSuspended, isAdmin, isAdminRole, isDemotion, isLastOwner, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, wsById } from '../lib/store'
-import type { Agent, AuditEvent, Role, User } from '../lib/types'
+import { actions, agentsCreatedBy, isActive, isAdmin, isAdminRole, isDemotion, isLastOwner, isSuspended, lastActiveInOrg, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, workspaceAdmins, wsById } from '../lib/store'
+import type { Agent, AuditEvent, Role, User, Workspace } from '../lib/types'
 import { CopyChip, TokenPanel } from './keyhole'
 import {
   Avatar,
@@ -16,6 +16,7 @@ import {
   Footer,
   Input,
   Menu,
+  type MenuItem,
   Modal,
   Row,
   Segmented,
@@ -132,7 +133,12 @@ export function ImpactDialog({
 /* ------------------------------------------------------------------ */
 /* The standard Users table — identical wherever it appears.           */
 /* ------------------------------------------------------------------ */
-export const USER_COLS = '1.5fr 1.8fr 1fr 1.1fr 1fr 1.4fr 36px'
+/*
+ * Players grids, shared with Dispatch (README › Shared with Dispatch): same columns, same ⋯ items in the
+ * same order. Unavailable items stay in the menu, aria-disabled, with the reason.
+ */
+export const USER_COLS = '1.4fr 1.7fr 0.9fr 0.9fr 0.95fr 1.6fr 36px'
+const USER_COLS_WS = '1.3fr 1.5fr 0.85fr 0.85fr 0.9fr 1.4fr 1.15fr 36px'
 
 type UserRow = { user: User; role: Role; invited: boolean }
 
@@ -155,7 +161,21 @@ export function useUserRows(filterWsId?: string): UserRow[] {
   }, [d, filterWsId])
 }
 
-export function UsersTable({ rows, className }: { rows: UserRow[]; className?: string }) {
+/** Member, Workspace admin, or Default admin (org) — the workspace Role column. */
+function workspaceRoleLabel(role: Role, userId: string, w: Workspace) {
+  if (isAdminRole(role)) return 'Default admin (org)'
+  return w.adminIds.includes(userId) ? 'Workspace admin' : 'Member'
+}
+
+/** "Production (admin), Staging, Incidents +2" — explicit memberships; org admins cover every workspace. */
+function workspaceList(d: ReturnType<typeof useDB>, u: User, role: Role) {
+  if (isAdminRole(role)) return 'All (org admin)'
+  const names = d.workspaces.filter((w) => w.orgId === d.currentOrgId && w.userIds.includes(u.id)).map((w) => `${w.name}${w.adminIds.includes(u.id) ? ' (admin)' : ''}`)
+  if (!names.length) return '—'
+  return names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ')
+}
+
+export function UsersTable({ rows, className, ws }: { rows: UserRow[]; className?: string; ws?: Workspace }) {
   const d = useDB()
   const nav = useNavigate()
   const now = useNow()
@@ -164,41 +184,52 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
   const [wsFor, setWsFor] = useState<UserRow | null>(null)
   const [removeFor, setRemoveFor] = useState<UserRow | null>(null)
   const [suspendFor, setSuspendFor] = useState<UserRow | null>(null)
+  const [resumeFor, setResumeFor] = useState<UserRow | null>(null)
   const [transferTo, setTransferTo] = useState<User | null>(null)
-  const workspaces = orgWorkspaces(d)
   const owner = myRole(d) === 'Owner'
-  const wsNames = (u: User, role: Role) => (isAdminRole(role) ? 'All (org admin)' : workspaces.filter((w) => w.userIds.includes(u.id)).map((w) => w.name).join(', ') || '—')
-  const invitedWs = (u: User) => d.invites.find((i) => i.email === u.email && i.orgId === d.currentOrgId)?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || '—'
+  const cols = ws ? USER_COLS_WS : USER_COLS
+  const invitedWs = (u: User) => {
+    const inv = d.invites.find((i) => i.email === u.email && i.orgId === d.currentOrgId)
+    return inv?.workspaceIds.map((id) => `${wsById(d, id)?.name}${inv.adminWorkspaceIds?.includes(id) ? ' (admin)' : ''}`).join(', ') || '—'
+  }
 
   const cabinetsManaged = removeFor ? d.cabinets.filter((c) => c.managedBy === removeFor.user.id && d.workspaces.some((w) => w.id === c.workspaceId && w.orgId === d.currentOrgId)) : []
-  const menuFor = (row: UserRow) => {
+
+  /** Why the current person can't manage this member, or null when they can. */
+  const blocked = (row: UserRow, action: 'role' | 'suspend' | 'remove'): string | null => {
     const { user: u, role } = row
-    if (u.id === d.currentUserId) {
-      // Your own row: only Owners get a menu, to transfer ownership or see why they can't step down.
-      if (role !== 'Owner') return null
-      const last = isLastOwner(d, u.id)
-      return [
-        last ? { label: 'Last Owner — transfer ownership to step down', disabled: true, onClick: () => {} } : { label: 'Change role', onClick: () => setRoleFor(row) },
-        last ? { label: 'Can’t remove the last Owner', disabled: true, onClick: () => {} } : null,
-      ]
-    }
-    if (!canManageMember(d, u.id)) return null
+    const self = u.id === d.currentUserId
+    if (role === 'Owner' && !owner) return 'Only Owners manage Owners'
+    if (self && action !== 'role') return 'Not for yourself'
+    if (self && !owner) return 'Not for yourself'
+    if (role === 'Owner' && isLastOwner(d, u.id)) return 'Last active Owner — transfer ownership first'
+    return null
+  }
+  const menuFor = (row: UserRow): (MenuItem | 'separator' | null)[] => {
+    const { user: u, role } = row
+    const self = u.id === d.currentUserId
+    const suspended = isSuspended(u, d.currentOrgId)
+    const transferReason = !owner ? 'Owners only' : self ? 'That’s you' : role === 'Owner' ? 'Already an Owner' : !isActive(u, d.currentOrgId) ? 'Not active in this organization' : null
     return [
-      { label: 'Change role', onClick: () => setRoleFor(row) },
-      isAdminRole(role) ? null : { label: 'Assign workspaces', onClick: () => setWsFor(row) },
-      owner && role !== 'Owner' && isActive(u, d.currentOrgId) ? { label: 'Transfer ownership', onClick: () => setTransferTo(u) } : null,
-      u.locked ? { label: u.unlockRequest ? 'Unlock requested' : 'Ask support to unlock', disabled: !!u.unlockRequest, onClick: () => actions.requestUnlock(u.id) } : null,
-      isSuspended(u, d.currentOrgId) ? { label: 'Reactivate', onClick: () => actions.setUserSuspended(u.id, false) } : { label: 'Suspend', onClick: () => setSuspendFor(row) },
-      { label: 'Remove', danger: true, onClick: () => setRemoveFor(row) },
+      { label: 'Change org role…', onClick: () => setRoleFor(row), disabled: !!blocked(row, 'role'), reason: blocked(row, 'role') ?? undefined },
+      { label: 'Assign workspaces…', onClick: () => setWsFor(row), disabled: isAdminRole(role), reason: 'Org admins administer every workspace' },
+      { label: 'Transfer ownership…', onClick: () => setTransferTo(u), disabled: !!transferReason, reason: transferReason ?? undefined },
+      suspended
+        ? { label: 'Resume…', onClick: () => setResumeFor(row), disabled: !!blocked(row, 'suspend'), reason: blocked(row, 'suspend') ?? undefined }
+        : { label: 'Suspend…', onClick: () => setSuspendFor(row), disabled: !!blocked(row, 'suspend'), reason: blocked(row, 'suspend') ?? undefined },
+      { label: 'Remove from organization…', danger: true, onClick: () => setRemoveFor(row), disabled: !!blocked(row, 'remove'), reason: blocked(row, 'remove') ?? undefined },
+      // Keyhole only, after the shared items.
+      'separator',
+      u.locked ? { label: u.unlockRequest ? 'Unlock requested' : 'Ask support to unlock', disabled: !!u.unlockRequest, reason: 'Already asked', onClick: () => actions.requestUnlock(u.id) } : null,
     ]
   }
 
   return (
     <>
-      <Table cols={USER_COLS} head={['Name', 'Email', 'Role', 'Status', 'Last active', 'Workspaces', '']} className={className}>
-        <ListBody cols={USER_COLS} what="users" empty={rows.length ? undefined : <div className="p-8 text-center text-[13px] text-zinc-400">No one here yet. Invite a teammate to share this workspace.</div>}>
+      <Table cols={cols} head={['Name', 'Email', 'Org role', 'Status', 'Last active (this org)', 'Workspaces', ...(ws ? ['Role'] : []), '']} className={className}>
+        <ListBody cols={cols} what="users" empty={rows.length ? undefined : <div className="p-8 text-center text-[13px] text-zinc-400">No one here yet. Invite a teammate to share this workspace.</div>}>
           {rows.map(({ user: u, role, invited }) => (
-            <Row key={u.id} cols={USER_COLS} onClick={invited ? undefined : () => nav(`/players/users/${u.id}`)}>
+            <Row key={u.id} cols={cols} onClick={invited ? undefined : () => nav(`/players/users/${u.id}`)}>
               <div className={cx('truncate font-medium', invited && 'text-zinc-400')}>{invited ? u.email : u.name}</div>
               <div className="truncate text-zinc-400">{u.email}</div>
               <div className="text-zinc-400">{role}</div>
@@ -213,11 +244,10 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
                   <StatusInline tone="green">Active</StatusInline>
                 )}
               </div>
-              <div className="text-zinc-500">{invited ? '—' : u.id === d.currentUserId ? 'Now' : ago(u.lastActive, now).replace(' ago', ' ago')}</div>
-              <div className="truncate text-zinc-400">{invited ? invitedWs(u) : wsNames(u, role)}</div>
-              <div className="text-right">
-                {admin && !invited && menuFor({ user: u, role, invited }) && <Menu items={menuFor({ user: u, role, invited })!} />}
-              </div>
+              <div className="text-zinc-500">{invited ? '—' : u.id === d.currentUserId ? 'Now' : ago(lastActiveInOrg(d, u.id), now)}</div>
+              <div className="truncate text-zinc-400">{invited ? invitedWs(u) : workspaceList(d, u, role)}</div>
+              {ws && <div className={cx(workspaceRoleLabel(role, u.id, ws) === 'Member' ? 'text-zinc-400' : 'text-zinc-200')}>{invited ? '—' : workspaceRoleLabel(role, u.id, ws)}</div>}
+              <div className="text-right">{admin && !invited && <Menu items={menuFor({ user: u, role, invited })} />}</div>
             </Row>
           ))}
         </ListBody>
@@ -228,28 +258,46 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
         onClose={() => setSuspendFor(null)}
         title={`Suspend ${suspendFor?.user.name}?`}
         rows={[
-          ['Workspaces', suspendFor ? wsNames(suspendFor.user, suspendFor.role) : ''],
+          ['Workspaces', suspendFor ? workspaceList(d, suspendFor.user, suspendFor.role) : ''],
           ['Agents they created', suspendFor ? createdAgentsLabel(agentsCreatedBy(d, suspendFor.user).map((a) => a.label)) : ''],
-          ['Last active', ago(suspendFor?.user.lastActive ?? null, now)],
+          ['Last active (this org)', ago(suspendFor ? lastActiveInOrg(d, suspendFor.user.id) : null, now)],
         ]}
-        body="They can’t use this organization until you reactivate them; their other organizations aren’t affected. Nothing they created or did changes: agents, grants, keys and cabinets keep working."
+        body="They can’t use this organization until you resume them; their other organizations aren’t affected. Nothing they created or did changes: agents, grants, keys and cabinets keep working."
         confirmLabel="Suspend user"
         onConfirm={() => suspendFor && actions.setUserSuspended(suspendFor.user.id, true)}
       />
+      <Modal open={!!resumeFor} onClose={() => setResumeFor(null)} title={`Resume ${resumeFor?.user.name}?`} width={440}>
+        <div className="text-sm2 text-zinc-400">They can use this organization again right away, with the workspaces and roles they had.</div>
+        <Footer>
+          <Button size="lg" onClick={() => setResumeFor(null)}>
+            Cancel
+          </Button>
+          <Button
+            size="lg"
+            variant="primary"
+            onClick={() => {
+              if (resumeFor) actions.setUserSuspended(resumeFor.user.id, false)
+              setResumeFor(null)
+            }}
+          >
+            Resume user
+          </Button>
+        </Footer>
+      </Modal>
       <ChangeRoleModal row={roleFor} onClose={() => setRoleFor(null)} />
       <TransferOwnershipDialog open={!!transferTo} to={transferTo} onClose={() => setTransferTo(null)} />
       <AssignWorkspacesModal row={wsFor} onClose={() => setWsFor(null)} />
       <ImpactDialog
         open={!!removeFor}
         onClose={() => setRemoveFor(null)}
-        title={`Remove ${removeFor?.user.name}?`}
+        title={`Remove ${removeFor?.user.name} from the organization?`}
         rows={[
-          ['Workspaces', removeFor ? wsNames(removeFor.user, removeFor.role) : ''],
+          ['Workspaces', removeFor ? workspaceList(d, removeFor.user, removeFor.role) : ''],
           ['Cabinets they manage', cabinetsManaged.length ? `${cabinetsManaged.map((c) => c.name).join(', ')} — keep working; admins take over management` : 'None'],
           ['Agents they created', removeFor ? createdAgentsLabel(agentsCreatedBy(d, removeFor.user).map((a) => a.label)) : ''],
-          ['Last active', ago(removeFor?.user.lastActive ?? null, now)],
+          ['Last active (this org)', ago(removeFor ? lastActiveInOrg(d, removeFor.user.id) : null, now)],
         ]}
-        body="They lose access to every workspace in this organization. Nothing they created or did changes — tools they granted stay granted, keys and connectors they added stay — and the audit log keeps their name on it."
+        body="They lose access to every workspace in this organization. Nothing they created or did changes — tools they granted stay granted, keys and vault connectors they added stay — and the audit log keeps their name on it."
         confirmLabel="Remove user"
         onConfirm={() => removeFor && actions.removeUser(removeFor.user.id)}
       />
@@ -376,27 +424,58 @@ export function TransferOwnershipDialog({ open, to, onClose }: { open: boolean; 
   )
 }
 
+type WsRole = 'member' | 'admin'
+
+/**
+ * Players › Assign workspaces, shared with Dispatch: each workspace gets a checkbox and a Member /
+ * Workspace admin role. This is how org admins delegate workspace admin to a regular user.
+ */
 function AssignWorkspacesModal({ row, onClose }: { row: UserRow | null; onClose: () => void }) {
   const d = useDB()
   const workspaces = orgWorkspaces(d)
-  const [sel, setSel] = useState<string[]>([])
+  const [sel, setSel] = useState<Record<string, WsRole>>({})
   useEffect(() => {
-    if (row) setSel(workspaces.filter((w) => w.userIds.includes(row.user.id)).map((w) => w.id))
+    if (row) setSel(Object.fromEntries(workspaces.filter((w) => w.userIds.includes(row.user.id)).map((w) => [w.id, w.adminIds.includes(row.user.id) ? 'admin' : 'member'])))
   }, [row]) // eslint-disable-line
-  const losing = row ? workspaces.filter((w) => w.userIds.includes(row.user.id) && !sel.includes(w.id)) : []
-  const theirCabinets = d.cabinets.filter((c) => c.managedBy === row?.user.id && losing.some((w) => w.id === c.workspaceId)).map((c) => c.name)
+  const id = row?.user.id ?? ''
+  const before = (w: Workspace): WsRole | null => (w.adminIds.includes(id) ? 'admin' : w.userIds.includes(id) ? 'member' : null)
+  const label = (r: WsRole | null) => (r === 'admin' ? 'workspace admin' : 'member')
+  const added = workspaces.filter((w) => !before(w) && sel[w.id])
+  const removed = workspaces.filter((w) => before(w) && !sel[w.id])
+  const changed = workspaces.filter((w) => before(w) && sel[w.id] && before(w) !== sel[w.id])
+  // Where they're the only explicit workspace admin and stop being one, the org admins take over by default.
+  const takeover = workspaces.filter((w) => before(w) === 'admin' && sel[w.id] !== 'admin' && workspaceAdmins(d, w).users.every((u) => u.id === id) && !workspaceAdmins(d, w).byDefault)
+  const released = d.cabinets.filter((c) => c.managedBy === id && removed.some((w) => w.id === c.workspaceId)).map((c) => c.name)
+  const reducing = removed.length > 0 || changed.some((w) => sel[w.id] === 'member')
+  const any = added.length + removed.length + changed.length > 0
   return (
-    <Modal open={!!row} onClose={onClose} title={`Workspaces for ${row?.user.name}`} width={460}>
-      <div className="flex flex-col gap-2 rounded-lg border border-edge bg-page p-3">
+    <Modal open={!!row} onClose={onClose} title={`Assign workspaces for ${row?.user.name}`} width={520}>
+      <div className="flex flex-col rounded-lg border border-edge bg-page">
         {workspaces.map((w) => (
-          <Checkbox key={w.id} checked={sel.includes(w.id)} onChange={(v) => setSel(v ? [...sel, w.id] : sel.filter((x) => x !== w.id))} label={w.name} />
+          <div key={w.id} className="flex items-center justify-between gap-3 border-b border-line px-3 py-2 last:border-b-0">
+            <Checkbox checked={!!sel[w.id]} onChange={(v) => setSel(v ? { ...sel, [w.id]: 'member' } : Object.fromEntries(Object.entries(sel).filter(([k]) => k !== w.id)))} label={w.name} />
+            <select
+              aria-label={`Role in ${w.name}`}
+              disabled={!sel[w.id]}
+              value={sel[w.id] ?? 'member'}
+              onChange={(e) => setSel({ ...sel, [w.id]: e.target.value as WsRole })}
+              className="rounded-md border border-edge bg-panel px-2 py-1 text-xs text-zinc-300 outline-none focus:border-zinc-500 disabled:opacity-40"
+            >
+              <option value="member">Member</option>
+              <option value="admin">Workspace admin</option>
+            </select>
+          </div>
         ))}
       </div>
-      {losing.length > 0 && (
+      <div className="-mt-1 text-xs text-zinc-500">A workspace admin manages that workspace’s members, exposed keys, tool grants, connection methods, cabinets and connectors — nothing org-level.</div>
+      {any && (
         <ImpactRows
           rows={[
-            ['Loses access to', losing.map((w) => w.name).join(', '), 'amber'],
-            ['Cabinets they manage there', theirCabinets.length ? `${theirCabinets.join(', ')} — keep working; admins take over management` : 'None'],
+            ['Added', added.map((w) => `${w.name} (${label(sel[w.id])})`).join(', ') || 'None'],
+            ['Removed', removed.map((w) => w.name).join(', ') || 'None', removed.length ? 'amber' : undefined],
+            ['Role changes', changed.map((w) => `${w.name}: ${label(before(w))} → ${label(sel[w.id])}`).join('; ') || 'None', changed.some((w) => sel[w.id] === 'member') ? 'amber' : undefined],
+            ['Default admins take over', takeover.length ? `${takeover.map((w) => w.name).join(', ')} — org admins, by default` : 'None'],
+            ['Cabinets they manage there', released.length ? `${released.join(', ')} — keep working; admins take over management` : 'None'],
           ]}
         />
       )}
@@ -406,13 +485,60 @@ function AssignWorkspacesModal({ row, onClose }: { row: UserRow | null; onClose:
         </Button>
         <Button
           size="lg"
-          variant={losing.length ? 'danger' : 'primary'}
+          variant={reducing ? 'danger' : 'primary'}
+          disabled={!any}
           onClick={() => {
             if (row) actions.setUserWorkspaces(row.user.id, sel)
             onClose()
           }}
         >
-          Save workspaces
+          Apply changes
+        </Button>
+      </Footer>
+    </Modal>
+  )
+}
+
+/** Players › Agents › Assign workspaces. Agents are members; in Keyhole they don't hold workspace admin. */
+function AssignAgentWorkspacesModal({ agent, onClose }: { agent: Agent | null; onClose: () => void }) {
+  const d = useDB()
+  const workspaces = orgWorkspaces(d)
+  // Remounted per agent (keyed by its id), so the selection starts from its current workspaces.
+  const [sel, setSel] = useState<string[]>(() => [...(agent?.workspaceIds ?? [])])
+  const added = workspaces.filter((w) => sel.includes(w.id) && !agent?.workspaceIds.includes(w.id))
+  const removed = workspaces.filter((w) => !sel.includes(w.id) && agent?.workspaceIds.includes(w.id))
+  const sidecars = d.connectors.filter((c) => c.kind === 'sidecar' && c.agentId === agent?.id && removed.some((w) => w.id === c.workspaceId)).map((c) => c.name)
+  return (
+    <Modal open={!!agent} onClose={onClose} title={`Assign workspaces for ${agent?.label}`} width={480}>
+      <div className="flex flex-col gap-2 rounded-lg border border-edge bg-page p-3">
+        {workspaces.map((w) => (
+          <Checkbox key={w.id} checked={sel.includes(w.id)} onChange={(v) => setSel(v ? [...sel, w.id] : sel.filter((x) => x !== w.id))} label={w.name} />
+        ))}
+      </div>
+      {added.length + removed.length > 0 && (
+        <ImpactRows
+          rows={[
+            ['Added', added.map((w) => w.name).join(', ') || 'None'],
+            ['Removed', removed.map((w) => w.name).join(', ') || 'None', removed.length ? 'amber' : undefined],
+            ['Sidecars acting as it there', sidecars.length ? `${sidecars.join(', ')} — refused from the next request` : 'None', sidecars.length ? 'amber' : undefined],
+          ]}
+        />
+      )}
+      <div className="text-xs text-zinc-500">Its token stays the same: it can call a workspace’s tools from its next request.</div>
+      <Footer>
+        <Button size="lg" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          size="lg"
+          variant={removed.length ? 'danger' : 'primary'}
+          disabled={!added.length && !removed.length}
+          onClick={() => {
+            if (agent) actions.setAgentWorkspaces(agent.id, sel)
+            onClose()
+          }}
+        >
+          Apply changes
         </Button>
       </Footer>
     </Modal>
@@ -422,9 +548,10 @@ function AssignWorkspacesModal({ row, onClose }: { row: UserRow | null; onClose:
 /* ------------------------------------------------------------------ */
 /* The standard Agents table — identical wherever it appears.          */
 /* ------------------------------------------------------------------ */
-export const AGENT_COLS = '1.4fr 1.6fr 0.9fr 1.1fr 1fr 1fr 1fr 0.8fr 36px'
+export const AGENT_COLS = '1.25fr 1fr 0.85fr 1.15fr 1.1fr 0.9fr 1.3fr 0.8fr 0.7fr 36px'
+const AGENT_COLS_WS = '1.2fr 0.95fr 0.8fr 1.1fr 1.05fr 0.85fr 1.2fr 0.75fr 0.65fr 0.7fr 36px'
 
-export function AgentsTable({ agents, className, emptyText }: { agents: Agent[]; className?: string; emptyText?: ReactNode }) {
+export function AgentsTable({ agents, className, emptyText, ws }: { agents: Agent[]; className?: string; emptyText?: ReactNode; ws?: Workspace }) {
   const d = useDB()
   const nav = useNavigate()
   const now = useNow()
@@ -433,19 +560,34 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
   const [rotated, setRotated] = useState<{ agent: Agent; token: string } | null>(null)
   const [rotateFor, setRotateFor] = useState<Agent | null>(null)
   const [suspendFor, setSuspendFor] = useState<Agent | null>(null)
+  const [resumeFor, setResumeFor] = useState<Agent | null>(null)
   const [revokeFor, setRevokeFor] = useState<Agent | null>(null)
-  const wsNames = (a: Agent) => a.workspaceIds.map((id) => wsById(d, id)?.name).filter(Boolean).join(', ') || '—'
+  const [assignFor, setAssignFor] = useState<Agent | null>(null)
+  const cols = ws ? AGENT_COLS_WS : AGENT_COLS
+  const wsNames = (a: Agent) => {
+    const names = a.workspaceIds.map((id) => wsById(d, id)?.name).filter(Boolean) as string[]
+    return names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ') || '—'
+  }
   const lockLists = (a: Agent) => d.cabinets.filter((c) => Array.isArray(c.access) && c.access.some((p) => p.kind === 'agent' && p.id === a.id)).map((c) => c.name)
+  const menuFor = (a: Agent): (MenuItem | 'separator' | null)[] => {
+    const revoked = a.status === 'revoked' ? 'Revoked — create a new agent instead' : undefined
+    return [
+      { label: 'Assign workspaces…', onClick: () => setAssignFor(a), disabled: !!revoked, reason: revoked },
+      { label: 'Rotate token…', onClick: () => setRotateFor(a), disabled: !!revoked, reason: revoked },
+      a.status === 'suspended' ? { label: 'Resume…', onClick: () => setResumeFor(a) } : { label: 'Suspend…', onClick: () => setSuspendFor(a), disabled: !!revoked, reason: revoked },
+      { label: 'Revoke…', danger: true, onClick: () => setRevokeFor(a), disabled: !!revoked, reason: revoked ? 'Already revoked' : undefined },
+    ]
+  }
 
   return (
     <>
-      <Table cols={AGENT_COLS} head={['Label', 'Token', 'Status', 'Created', 'Expiry', 'Last used', 'Workspaces', 'Rate limit', '']} className={className}>
-        <ListBody cols={AGENT_COLS} what="agents" empty={agents.length ? undefined : <div className="p-10 text-center text-[13px] text-zinc-400">{emptyText ?? 'No agents yet. Create one to let an AI assistant or program connect.'}</div>}>
+      <Table cols={cols} head={['Label', 'Agent ID', 'Status', 'Token', 'Created', 'Last used', 'Workspaces', 'Expiry', 'Rate limit', ...(ws ? ['Role'] : []), '']} className={className}>
+        <ListBody cols={cols} what="agents" empty={agents.length ? undefined : <div className="p-10 text-center text-[13px] text-zinc-400">{emptyText ?? 'No agents yet. Create one to let an AI assistant or program connect.'}</div>}>
           {agents.map((a) => {
             const revoked = a.status === 'revoked'
             const soon = !revoked && expiringSoon(a.expiresAt, now)
             return (
-              <Row key={a.id} cols={AGENT_COLS} onClick={() => nav(`/players/agents/${a.id}`)} className={cx(revoked && 'text-zinc-500')}>
+              <Row key={a.id} cols={cols} onClick={() => nav(`/players/agents/${a.id}`)} className={cx(revoked && 'text-zinc-500')}>
                 <div className="min-w-0" onClick={(e) => editing === a.id && e.stopPropagation()}>
                   {editing === a.id ? (
                     <input
@@ -473,7 +615,7 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
                             e.stopPropagation()
                             setEditing(a.id)
                           }}
-                          className="text-2xs text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-zinc-300"
+                          className="text-2xs text-zinc-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-zinc-300"
                         >
                           ✎
                         </button>
@@ -481,29 +623,21 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
                     </span>
                   )}
                 </div>
-                {/* Masked only, and nothing to copy: the full token was shown once, at creation. */}
-                <div className={cx('masked-token text-xs', revoked ? 'text-zinc-600' : 'text-zinc-400')}>{maskToken(a.tokenLast4)}</div>
+                <div className="truncate font-mono text-xs text-zinc-500">{a.id}</div>
                 <div>
                   {a.status === 'active' ? <StatusInline tone="green">Active</StatusInline> : a.status === 'suspended' ? <StatusInline tone="amber">Suspended</StatusInline> : <StatusInline tone="gray">Revoked</StatusInline>}
                 </div>
-                <div className="text-zinc-400">
-                  {ago(a.createdAt, now)} · {a.createdBy === d.users.find((u) => u.id === d.currentUserId)?.name ? 'you' : a.createdBy.split(' ')[0]}
+                {/* Masked only, and nothing to copy: the full token was shown once, at creation. */}
+                <div className={cx('masked-token truncate text-xs', revoked ? 'text-zinc-600' : 'text-zinc-400')}>{maskToken(a.tokenLast4)}</div>
+                <div className="truncate text-zinc-400">
+                  {a.createdBy === d.users.find((u) => u.id === d.currentUserId)?.name ? 'You' : a.createdBy} · {ago(a.createdAt, now).toLowerCase()}
                 </div>
-                <div className={cx(soon ? 'font-medium text-amber-400' : 'text-zinc-400', revoked && '!text-zinc-600')}>{revoked ? '—' : a.expiresAt ? until(a.expiresAt, now) : 'None'}</div>
                 <div className="text-zinc-500">{ago(a.lastUsedAt, now)}</div>
                 <div className="truncate text-zinc-400">{wsNames(a)}</div>
+                <div className={cx(soon ? 'font-medium text-amber-400' : 'text-zinc-400', revoked && '!text-zinc-600')}>{revoked ? '—' : a.expiresAt ? until(a.expiresAt, now) : 'None'}</div>
                 <div className="text-zinc-400">{a.rateLimit ? `${a.rateLimit}/min` : '—'}</div>
-                <div className="text-right">
-                  {admin && !revoked && (
-                    <Menu
-                      items={[
-                        { label: 'Rotate token', onClick: () => setRotateFor(a) },
-                        a.status === 'suspended' ? { label: 'Resume', onClick: () => actions.setAgentStatus(a.id, 'active') } : { label: 'Suspend', onClick: () => setSuspendFor(a) },
-                        { label: 'Revoke token', danger: true, onClick: () => setRevokeFor(a) },
-                      ]}
-                    />
-                  )}
-                </div>
+                {ws && <div className="text-zinc-400">Member</div>}
+                <div className="text-right">{admin && <Menu items={menuFor(a)} />}</div>
               </Row>
             )
           })}
@@ -521,12 +655,35 @@ export function AgentsTable({ agents, className, emptyText }: { agents: Agent[];
           />
         )}
       </Modal>
+      <Modal open={!!resumeFor} onClose={() => setResumeFor(null)} title={`Resume ${resumeFor?.label}?`} width={440}>
+        <div className="text-sm2 text-zinc-400">Its next request is accepted again, with the same token and workspaces. Sidecars acting as it work again too.</div>
+        <Footer>
+          <Button size="lg" onClick={() => setResumeFor(null)}>
+            Cancel
+          </Button>
+          <Button
+            size="lg"
+            variant="primary"
+            onClick={() => {
+              if (resumeFor) actions.setAgentStatus(resumeFor.id, 'active')
+              setResumeFor(null)
+            }}
+          >
+            Resume agent
+          </Button>
+        </Footer>
+      </Modal>
+      <AssignAgentWorkspacesModal key={assignFor?.id ?? 'none'} agent={assignFor} onClose={() => setAssignFor(null)} />
       <RotateAgentDialog agent={rotateFor} onClose={() => setRotateFor(null)} onRotated={(agent, token) => setRotated({ agent, token })} />
       <SuspendAgentDialog agent={suspendFor} onClose={() => setSuspendFor(null)} />
       <RevokeAgentDialog agent={revokeFor} onClose={() => setRevokeFor(null)} lockLists={revokeFor ? lockLists(revokeFor) : []} />
     </>
   )
 }
+
+/** Sidecars bound to an agent: they act as it, so they stop working with it. */
+const sidecarsOf = (d: ReturnType<typeof useDB>, a: Agent | null) =>
+  a ? d.connectors.filter((c) => c.kind === 'sidecar' && c.agentId === a.id).map((c) => c.name).join(', ') : ''
 
 /** "billing-agent, docs-agent (keep working)" — agents belong to the organization. */
 export const createdAgentsLabel = (labels: string[]) => (labels.length ? `${labels.join(', ')} — unaffected; agents belong to the organization` : 'None')
@@ -567,8 +724,9 @@ export function SuspendAgentDialog({ agent, onClose }: { agent: Agent | null; on
       rows={[
         ['Last used', ago(agent?.lastUsedAt ?? null, now)],
         ['Workspaces', agent?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None'],
+        ['Sidecars acting as it', sidecarsOf(d, agent) || 'None', sidecarsOf(d, agent) ? 'amber' : undefined],
       ]}
-      body="Its requests are blocked and logged until you resume it. The token stays the same, so resuming needs no config change."
+      body="Its requests are blocked and logged until you resume it, including requests through its sidecars. The token stays the same, so resuming needs no config change."
       confirmLabel="Suspend agent"
       onConfirm={() => agent && actions.setAgentStatus(agent.id, 'suspended')}
     />
@@ -588,6 +746,7 @@ export function RevokeAgentDialog({ agent, onClose, lockLists }: { agent: Agent 
         ['Last used', ago(agent?.lastUsedAt ?? null, now), recent ? 'amber' : undefined],
         ['Workspaces affected', agent?.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None'],
         ['Cabinets on its lock list', lockLists.join(', ') || 'None'],
+        ['Sidecars acting as it', sidecarsOf(d, agent) || 'None', sidecarsOf(d, agent) ? 'amber' : undefined],
       ]}
       body="Its next request is blocked and logged. Revoking can't be undone — create a new agent to reconnect."
       confirmLabel="Revoke token"
@@ -633,8 +792,17 @@ export function LogRow({ e, compact, expanded, onToggle, fresh }: { e: AuditEven
         <span className={cx('shrink-0 font-mono text-xs2 text-zinc-500', blocked ? 'w-[61px]' : 'w-16')}>{clock(e.at)}</span>
         <span className={cx('size-[7px] min-w-[7px] rounded-full', DOT[e.severity])} />
         {!compact && <span className={cx('rounded-full border px-2 py-0.5 text-2xs font-semibold', TYPE_TONE[e.type])}>{e.type}</span>}
+        {/* Org, workspace and player events both apps show. */}
+        {e.shared && (
+          <span title="Shared with Dispatch" className="shrink-0 rounded-full border border-chip px-2 py-0.5 text-2xs font-semibold text-zinc-400">
+            Shared{e.source ? ` · ${e.source}` : ''}
+          </span>
+        )}
         <span className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 text-zinc-300">{e.actor}</span>
+          <span className="shrink-0 text-zinc-300">
+            {e.actor}
+            {e.via && <span className="text-zinc-500"> via sidecar {e.via}</span>}
+          </span>
           <span className="text-zinc-600">→</span>
           <span className="truncate text-zinc-400">
             {e.object}
@@ -720,9 +888,9 @@ export function AuditLog({ events, scopeLabel, hideWorkspaceFilter, initialExpan
   const filtered = events.filter((e) => {
     if (q) {
       const s = q.toLowerCase()
-      if (![e.trk, e.actor, e.object, e.type, e.result, e.destination ?? ''].some((x) => x.toLowerCase().includes(s))) return false
+      if (![e.trk, e.actor, e.via ? `via sidecar ${e.via}` : '', e.object, e.type, e.result, e.destination ?? ''].some((x) => x.toLowerCase().includes(s))) return false
     }
-    if (type && e.type !== type) return false
+    if (type === 'shared' ? !e.shared : type && e.type !== type) return false
     if (actor && e.actor !== actor) return false
     if (ws && e.workspaceId !== ws) return false
     if (result === 'ok' && e.severity !== 'ok') return false
@@ -734,8 +902,8 @@ export function AuditLog({ events, scopeLabel, hideWorkspaceFilter, initialExpan
   })
 
   const exportCsv = () => {
-    const header = 'time,type,actor,object,destination,result,tracking_code\n'
-    const body = filtered.map((e) => [new Date(e.at).toISOString(), e.type, e.actor, e.object, e.destination ?? '', e.result, e.trk].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const header = 'time,type,actor,via_sidecar,object,destination,result,tracking_code\n'
+    const body = filtered.map((e) => [new Date(e.at).toISOString(), e.type, e.actor, e.via ?? '', e.object, e.destination ?? '', e.result, e.trk].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const url = URL.createObjectURL(new Blob([header + body], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url
@@ -760,6 +928,7 @@ export function AuditLog({ events, scopeLabel, hideWorkspaceFilter, initialExpan
               {t}
             </option>
           ))}
+          <option value="shared">Shared with Dispatch</option>
         </Filter>
         <Filter value={actor} onChange={setActor} label="Actor">
           {actors.map((a) => (
@@ -830,7 +999,7 @@ export function AuditLog({ events, scopeLabel, hideWorkspaceFilter, initialExpan
         )}
       </div>
       <div className="mt-2.5 text-xs2 text-zinc-600">
-        Logs kept 90 days on this plan.
+        Logs kept 90 days on this plan. Shows Keyhole’s events plus the org, workspace and player events shared with Dispatch (marked Shared).
         {role === 'user' && ' You see activity in your workspaces and your own actions.'}
       </div>
     </div>

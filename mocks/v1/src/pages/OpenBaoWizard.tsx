@@ -49,7 +49,8 @@ function Wizard() {
   const [name, setName] = useState(editing?.name ?? 'Payments vault')
   const [address, setAddress] = useState(editing?.address ?? 'https://bao.acme.internal:8200')
   const [route, setRoute] = useState<'public' | 'connector'>(editing?.route && editing.route !== 'public' ? 'connector' : 'public')
-  const connectors = orgConnectors(d)
+  // Stores route through vault connectors only; sidecars are for apps.
+  const connectors = orgConnectors(d).filter((c) => c.kind === 'vault')
   const [connectorId, setConnectorId] = useState(editing?.route && editing.route !== 'public' ? editing.route : (connectors.find((c) => c.health !== 'offline')?.id ?? ''))
   const [enrolling, setEnrolling] = useState(false)
   const [auth, setAuth] = useState<'approle' | 'kubernetes' | 'token'>(editing?.auth ?? 'approle')
@@ -95,7 +96,7 @@ function Wizard() {
   // The step list lets people jump ahead, so the test and Finish/Save re-check every earlier step.
   const missingInfo: (string | null)[] = [
     !name.trim() || !/^https?:\/\/\S+$/.test(address) ? 'Add a name and a vault address that starts with https://.' : null,
-    route === 'connector' && !connectorId ? 'Pick a connector.' : route === 'connector' && !connectors.some((c) => c.id === connectorId) ? 'Its connector was revoked — pick another route.' : null,
+    route === 'connector' && !connectorId ? 'Pick a vault connector.' : route === 'connector' && !connectors.some((c) => c.id === connectorId) ? 'Its vault connector was revoked — pick another route.' : null,
     !authOk ? (auth === 'token' ? 'Paste a token.' : auth === 'approle' ? 'Paste the role ID and secret ID.' : 'Enter the Kubernetes role.') : null,
     !path.trim() || !(Number(cache) >= 0) ? 'Add a secrets path and a cache time.' : null,
     !cert && !skipVerify ? 'Upload the vault’s certificate, or skip verification.' : null,
@@ -126,7 +127,7 @@ function Wizard() {
   const keyNames = [`${seg}/api_key`, `${seg}/webhook_secret`, `${seg}/refund_key`, `${seg}/ledger_token`]
 
   const settings = { name: name.trim(), address, route: route === 'public' ? 'public' : connectorId, auth, path, cacheSeconds: Number(cache), certName: skipVerify ? null : cert, skipVerify }
-  const routeLabel = (r?: string) => (r === 'public' ? 'Internet' : `Connector ${connectors.find((c) => c.id === r)?.name ?? '(revoked)'}`)
+  const routeLabel = (r?: string) => (r === 'public' ? 'Internet' : `Vault connector ${connectors.find((c) => c.id === r)?.name ?? '(revoked)'}`)
   const certLabel = (c?: string | null, skip?: boolean) => (skip ? 'Not verified' : (c ?? '—'))
   // Edit mode: what the tested settings change about the saved store.
   const changes: [string, string][] = !editing
@@ -204,15 +205,15 @@ function Wizard() {
                   </div>
                 )}
               </OptionCard>
-              {route === 'public' && k8sPublic && maxStep >= 2 && <Callout tone="amber">Kubernetes sign-in only works through a Keyhole connector. Pick a connector here, or choose another sign-in method on the next step.</Callout>}
-              <OptionCard name="route" checked={route === 'connector'} onSelect={() => setRoute('connector')} title="Through a Keyhole connector">
+              {route === 'public' && k8sPublic && maxStep >= 2 && <Callout tone="amber">Kubernetes sign-in only works through a Keyhole vault connector. Pick one here, or choose another sign-in method on the next step.</Callout>}
+              <OptionCard name="route" checked={route === 'connector'} onSelect={() => setRoute('connector')} title="Through a Keyhole vault connector">
                 {route === 'connector' ? (
                   <>
                     <div className="mt-0.5 text-xs text-zinc-500">Traffic to the vault goes through your own network.</div>
                     {connectors.length ? (
                       <div className="mt-2.5">
-                        <Select aria-label="Connector" value={connectorId} onChange={(e) => setConnectorId(e.target.value)} className="bg-panel">
-                          <option value="">Pick a connector…</option>
+                        <Select aria-label="Vault connector" value={connectorId} onChange={(e) => setConnectorId(e.target.value)} className="bg-panel">
+                          <option value="">Pick a vault connector…</option>
                           {connectors.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.health === 'healthy' ? '●' : c.health === 'degraded' ? '◐' : '○'} {c.name} · {d.workspaces.find((w) => w.id === c.workspaceId)?.name}
@@ -220,18 +221,18 @@ function Wizard() {
                             </option>
                           ))}
                         </Select>
-                        {connectors.find((c) => c.id === connectorId)?.health === 'offline' && <div className="mt-1.5 text-xs text-amber-400">This connector is offline — Keyhole won’t reach the vault through it until it reports in.</div>}
+                        {connectors.find((c) => c.id === connectorId)?.health === 'offline' && <div className="mt-1.5 text-xs text-amber-400">This vault connector is offline — Keyhole won’t reach the vault through it until it reports in.</div>}
                       </div>
                     ) : (
-                      <div className="mt-1.5 text-xs text-zinc-500">No connectors enrolled yet.</div>
+                      <div className="mt-1.5 text-xs text-zinc-500">No vault connectors enrolled yet.</div>
                     )}
                     <button type="button" onClick={() => setEnrolling(true)} className="mt-2 text-xs text-brass hover:text-brass-light">
-                      Enroll a new connector
+                      Enroll a new vault connector
                     </button>
                   </>
                 ) : (
                   <div className="mt-0.5 text-xs text-zinc-500">
-                    For vaults behind your firewall. Pick an enrolled connector, or{' '}
+                    For vaults behind your firewall. Pick an enrolled vault connector, or{' '}
                     <button
                       type="button"
                       className="text-brass hover:text-brass-light"
@@ -278,7 +279,7 @@ function Wizard() {
                   </Field>
                   {k8sPublic ? (
                     <Callout tone="amber">
-                      Keyhole signs in with the connector’s service-account token, so this works only through a Keyhole connector running in your cluster. This store is set to reach the vault over the internet.{' '}
+                      Keyhole signs in with the vault connector’s service-account token, so this works only through a Keyhole connector running in your cluster. This store is set to reach the vault over the internet.{' '}
                       <button
                         type="button"
                         className="text-brass hover:text-brass-light"
@@ -287,11 +288,11 @@ function Wizard() {
                           go(1)
                         }}
                       >
-                        Use a connector instead
+                        Use a vault connector instead
                       </button>
                     </Callout>
                   ) : (
-                    <Callout tone="neutral">Keyhole signs in with the connector’s service-account token, so this works only through a Keyhole connector running in your cluster.</Callout>
+                    <Callout tone="neutral">Keyhole signs in with the vault connector’s service-account token, so this works only through a Keyhole vault connector running in your cluster.</Callout>
                   )}
                 </>
               )}
@@ -464,7 +465,7 @@ function Wizard() {
         </div>
       </div>
 
-      <SlideOver open={enrolling} onClose={() => setEnrolling(false)} width={520} title="Enroll connector">
+      <SlideOver open={enrolling} onClose={() => setEnrolling(false)} width={520} title="Enroll vault connector">
         <EnrollPanel
           onEnrolled={(id) => {
             setConnectorId(id)
@@ -478,10 +479,10 @@ function Wizard() {
 }
 
 const FAIL = {
-  needsConnector: { title: 'Needs a connector', short: 'Kubernetes sign-in only works through a Keyhole connector in your cluster.' },
+  needsConnector: { title: 'Needs a vault connector', short: 'Kubernetes sign-in only works through a Keyhole vault connector in your cluster.' },
   sealed: { title: 'Sealed', short: 'Your OpenBao is sealed — unseal it and try again.' },
   denied: { title: 'Not allowed', short: "This login can't read that path — here's an example policy to fix it." },
-  unreachable: { title: "Can't reach", short: 'No route to that address — check it, or connect through a Keyhole connector.' },
+  unreachable: { title: "Can't reach", short: 'No route to that address — check it, or connect through a Keyhole vault connector.' },
 }
 
 function FailureCard({ outcome, path, showPolicy, onPolicy, onConnector }: { outcome: Exclude<Outcome, 'ok'>; path: string; showPolicy: boolean; onPolicy: () => void; onConnector: () => void }) {
@@ -518,9 +519,9 @@ function FailureCard({ outcome, path, showPolicy, onPolicy, onConnector }: { out
         )}
         {outcome === 'needsConnector' && (
           <div className="mt-1 text-sm2 leading-relaxed text-zinc-300">
-            Keyhole signs in with the connector’s service-account token, so Kubernetes sign-in can’t work over the internet.{' '}
+            Keyhole signs in with the vault connector’s service-account token, so Kubernetes sign-in can’t work over the internet.{' '}
             <button type="button" onClick={onConnector} className="text-brass hover:text-brass-light">
-              Use a connector instead
+              Use a vault connector instead
             </button>
             , or pick another sign-in method.
           </div>
@@ -529,7 +530,7 @@ function FailureCard({ outcome, path, showPolicy, onPolicy, onConnector }: { out
           <div className="mt-1 text-sm2 leading-relaxed text-zinc-300">
             No route to that address — check it, or{' '}
             <button type="button" onClick={onConnector} className="text-brass hover:text-brass-light">
-              connect through a Keyhole connector
+              connect through a Keyhole vault connector
             </button>
             .
           </div>

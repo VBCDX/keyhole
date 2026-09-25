@@ -14,7 +14,7 @@ import { AgentDetail, AgentsPage, UserDetail, UsersPage } from './pages/players'
 import { StoreDetail, StoresTab } from './pages/stores'
 import { ToolEditor } from './pages/ToolEditor'
 import { ToolsPage } from './pages/tools'
-import { WorkspaceDetail, WorkspacesList, WsAudit, WsCabinets, WsConnect, WsSummary, WsTools } from './pages/workspaces'
+import { WorkspaceDetail, WorkspacesList, WsAudit, WsCabinets, WsConnect, WsMembers, WsSummary, WsTools } from './pages/workspaces'
 
 function Locked() {
   const u = me(useDB())
@@ -128,6 +128,7 @@ function Routed() {
         <Route path="workspaces/:wsId" element={<WorkspaceDetail />}>
           <Route index element={<Navigate to="summary" replace />} />
           <Route path="summary" element={<WsSummary />} />
+          <Route path="members" element={<WsMembers />} />
           <Route path="tools" element={<WsTools />} />
           <Route path="cabinets" element={<WsCabinets />} />
           <Route path="connect" element={<WsConnect />} />

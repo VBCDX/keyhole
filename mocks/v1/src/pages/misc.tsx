@@ -111,7 +111,7 @@ function InviteBannerLite() {
 /* Settings                                                            */
 /* ------------------------------------------------------------------ */
 const NOTIFS: [string, string][] = [
-  ['connectorOffline', 'Connector offline'],
+  ['connectorOffline', 'Connector offline (vault or sidecar)'],
   ['storeUnhealthy', 'Store unhealthy'],
   ['verificationFailed', 'Verification failed'],
   ['tokenExpiring', 'Token expiring'],

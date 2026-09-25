@@ -1,5 +1,5 @@
 import { trackingCode } from './format'
-import { agentById, canSeeWorkspace, liveTool, log, missingSlots, toolById, update } from './store'
+import { agentById, canSeeWorkspace, liveTool, log, missingSlots, sidecarFor, toolById, update } from './store'
 import type { DB } from './types'
 
 /**
@@ -21,13 +21,26 @@ export function liveTick() {
     if (!candidates.length) return
 
     const ops = candidates.find((c) => agentById(d, c.agentId)?.label === 'ops-agent' && toolById(d, c.toolId)?.catalog === 'stripe')
-    const pick = ops && Math.random() < 0.55 ? ops : candidates[Math.floor(Math.random() * candidates.length)]
+    // Agents that run behind a sidecar get a steady share, so its traffic shows up in a busy workspace.
+    const behindSidecar = candidates.filter((c) => sidecarFor(d, c.agentId, c.wsId))
+    const r = Math.random()
+    const pick =
+      ops && r < 0.45
+        ? ops
+        : behindSidecar.length && r < 0.7
+          ? behindSidecar[Math.floor(Math.random() * behindSidecar.length)]
+          : candidates[Math.floor(Math.random() * candidates.length)]
     const a = agentById(d, pick.agentId)!
     const t = toolById(d, pick.toolId)!
     const ws = workspaces.find((w) => w.id === pick.wsId)!
     const eff = liveTool(t)!
     const host = new URL(eff.baseUrl).host
     a.lastUsedAt = Date.now()
+    // An agent with a sidecar in this workspace sends about half its calls through it.
+    const sc = sidecarFor(d, a.id, ws.id)
+    const through = sc && Math.random() < 0.5 ? sc : null
+    const via = through ? { via: through.name, viaId: through.id } : {}
+    const route: [string, string] = through ? ['Sidecar', through.name] : ['Route', 'Direct']
 
     if (pick === ops) {
       const allowed = eff.actions.some((x) => x.path === '/v1/payouts')
@@ -41,6 +54,7 @@ export function liveTick() {
           object: t.displayName,
           destination: host,
           workspaceId: ws.id,
+          ...via,
           result: 'Blocked',
           reason: `Blocked: path /v1/payouts isn't allowed for the tool "${t.displayName}".`,
           detail: [
@@ -61,8 +75,9 @@ export function liveTick() {
         object: t.displayName,
         destination: host,
         workspaceId: ws.id,
+        ...via,
         result: `200 · ${120 + Math.floor(Math.random() * 120)} ms`,
-        detail: [['Action', 'GET /v1/payouts'], ['Workspace', ws.name], ['Tool version', `v${eff.version}`]],
+        detail: [['Action', 'GET /v1/payouts'], ['Workspace', ws.name], ['Tool version', `v${eff.version}`], route],
       })
       return
     }
@@ -78,9 +93,10 @@ export function liveTick() {
       object: t.displayName,
       destination: host,
       workspaceId: ws.id,
+      ...via,
       result: `${status} · ${110 + Math.floor(Math.random() * 260)} ms`,
       trk: trackingCode(),
-      detail: [['Action', `${act.method} ${act.path}`], ['Workspace', ws.name], ['Route', 'Direct']],
+      detail: [['Action', `${act.method} ${act.path}`], ['Workspace', ws.name], route],
     })
   })
 }

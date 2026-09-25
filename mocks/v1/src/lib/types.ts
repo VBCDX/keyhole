@@ -37,6 +37,8 @@ export interface Invite {
   email: string
   role: Role
   workspaceIds: string[]
+  /** Of workspaceIds, the ones they join as workspace admin. */
+  adminWorkspaceIds?: string[]
   invitedBy: string
   invitedAt: number
   expiresAt: number
@@ -145,6 +147,8 @@ export interface Workspace {
   mcp: boolean
   keyIds: string[]
   userIds: string[]
+  /** Explicit workspace admins (a subset of userIds). None set: the org's admins are its admins by default. */
+  adminIds: string[]
   agentIds: string[]
   tools: WorkspaceTool[]
   createdAt: number
@@ -185,17 +189,39 @@ export interface Cabinet {
 
 export type ConnectorHealth = 'healthy' | 'degraded' | 'offline'
 
+export type SidecarProtocol = 'http' | 'https' | 'sse' | 'mcp'
+
+/**
+ * Two kinds of installed keyholed:
+ * - a vault connector reaches vaults behind the customer's firewall (stores route through it);
+ * - a sidecar runs next to an app or agent harness, bound to one agent in one workspace. The app calls
+ *   the sidecar locally; the sidecar fetches the key for the tool slot and proxies the call with the
+ *   secret injected, so the app never holds it.
+ */
 export interface Connector {
   id: string
   orgId: string
+  kind: 'vault' | 'sidecar'
   name: string
   workspaceId: string
+  /** Sidecar only: the agent it acts as. That agent's grants, limits, expiry and status apply. */
+  agentId?: string
+  /** Sidecar only: what it exposes locally. */
+  protocols?: SidecarProtocol[]
+  /** Sidecar only: local listen address, e.g. 127.0.0.1:8787. */
+  listen?: string
+  /** Sidecar only: the host it reports from. */
+  host?: string
+  /** Sidecar only: traffic before the modelled log rows (like DB.statsBase). */
+  requestsBase?: number
   version: string
   health: ConnectorHealth
   lastSeen: number
   ip: string | null
   enrolledBy: string
   enrolledAt: number
+  /** Last time its credential was rotated; the previous one keeps working for 10 minutes. */
+  rotatedAt?: number
 }
 
 export type EventType =
@@ -223,6 +249,13 @@ export interface AuditEvent {
   trk: string
   reason?: string
   detail?: [string, string][]
+  /** Shared with Dispatch: org, workspace and player events both apps show, marked "Shared". */
+  shared?: boolean
+  /** For shared events recorded by the other app. */
+  source?: 'Dispatch'
+  /** Set when the request came through a sidecar: its name at the time, and its id. */
+  via?: string
+  viaId?: string
   /** Link target for the "fix" in an expanded blocked row */
   fix?: { label: string; to: string }
 }

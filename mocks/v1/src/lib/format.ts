@@ -17,6 +17,8 @@ export const uid = (prefix = 'id') => `${prefix}_${rand(ALNUM, 8)}`
 export const trackingCode = () => `trk_${rand(ALNUM, 8)}`
 export const newToken = () => `kh_live_${rand(B62, 24)}`
 export const newEnrollmentToken = () => `kh_enr_${rand(B62, 20)}`
+/** A running connector's own credential (vault connector or sidecar). Shown once, like agent tokens. */
+export const newConnectorToken = () => `kh_conn_${rand(B62, 24)}`
 
 /** The one mask style: prefix + last four. */
 export const maskToken = (last4: string) => `kh_live_••••${last4}`

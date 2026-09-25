@@ -23,23 +23,69 @@ A **Prototype controls** pill sits at the bottom left. It isn't part of the prod
 
 - **Scenario**: *New org (Flow 1)* starts Acme Corp empty, for the golden path. *Populated (Flows 2–8)* loads
   stores, a connector fleet, agents, cabinets, and audit history. Switching scenarios resets all data.
-- **View as**: Dana (Owner), Ravi (userAdmin), Mia (user), Sam (invited, for the invitation flow), Noor
-  (Owner of a second organization, Northwind Labs, where Mia is also a member), or Keyhole support (superAdmin,
-  the separate support console).
+- **View as**: Dana (Owner), Ravi (userAdmin), Mia (user; workspace admin of Incidents), Sam (invited, for the
+  invitation flow), Leo (Owner of Northwind Labs, where Mia is also a member), Noor (userAdmin of Northwind Labs), or
+  Keyhole support (superAdmin, the separate support console).
 - **List state**: force every list into its loading-skeleton or error state.
 
 | Flow | Where to start |
 |---|---|
 | 1 · Golden path | New org → Home checklist → Add key → Tools › Install Stripe (a draft) → Publish v1 → New workspace → Add tool (slot matching) → New agent (one-time token) → Workspace › Connect › MCP → Download config → first call lands |
 | 2 · OpenBao, public | Organizations › Stores › Add store › OpenBao. The first test finds the vault **Sealed**, and *Test again* passes. A path outside `secret/` gives **Not allowed**. An address containing `unreachable` gives **Can't reach**. |
-| 3 · OpenBao via connector | Same wizard, step 2 › *Through a Keyhole connector* › *Enroll a new connector* › Generate token. The heartbeat arrives in about 6 s and the new connector is picked. |
+| 3 · OpenBao via vault connector | Same wizard, step 2 › *Through a Keyhole vault connector* › *Enroll a new vault connector* › Generate token. The heartbeat arrives in about 6 s and the new vault connector is picked. Connectors › ⋯ › *Rotate token…* issues a new credential, shown once. |
 | 4 · Invite + locked cabinet | Members › Invite user. View as Sam › Accept. Workspace › Cabinets › New cabinet › Only these players (people + agents). |
 | 5 · Grant with missing slot | Organizations › Tools › Grant, then tick Staging: *Missing: `stripe_secret`* › Expose a key › Use this key › Grant. The exposure is staged and only applied on Grant; Production shows as already granted with its current mapping. |
 | 6 · Revoke | Players › Agents › billing-agent › Revoke token. Its next attempt appears in the log as blocked about 4 s later. |
 | 7 · Live debugging | Audit › Live. ops-agent streams red rows. Expand one › *Open the tool's actions* › add `GET /v1/payouts` › Publish › back to Live, and the rows turn green. |
 | 8 · Support lock | View as Keyhole support › search `mia` › Lock account (a reason or ticket ID is required). View as Dana › Audit shows the support action and its reason; Players › Users › Mia › *Ask support to unlock*, which support then sees on Mia's record. |
+| 9 · Sidecar | Workspace › Connect › MCP › *Sidecar* › *Enroll a sidecar* (acts as billing-agent) › Generate token. The heartbeat arrives in about 6 s, then the first request lands *via sidecar*. Connectors lists both types; a sidecar's ⋯ offers Rename, Rotate token…, Rebind agent… and Revoke…. |
+| 10 · Delegate workspace admin | Players › Users › Mia › ⋯ › *Assign workspaces…* › Production: *Workspace admin* › preview › Apply. View as Mia: she manages Production's Members, keys, tools, connection methods, cabinets and connectors, but not stores, tools, agents or org settings. |
 
 State persists in `localStorage` (`keyhole-mocks-v1`). Resetting the scenario clears it.
+
+## Connectors: vault connectors and sidecars
+
+Both are installed copies of `keyholed`, enrolled with a single-use token that expires after 15 minutes. Both report
+health, and their credentials can be rotated (the old one keeps working for 10 minutes; the new one is shown once).
+
+| | Vault connector | Sidecar |
+|---|---|---|
+| Runs | Inside your network, near your vault | Next to one app or agent harness |
+| Used by | Stores: Keyhole reaches an OpenBao vault behind your firewall through it | Apps: they call the sidecar locally (HTTP, HTTPS, SSE or MCP) as if calling the service directly |
+| Identity | The workspace it's enrolled in | One agent of one workspace; that agent's grants, rate limit, expiry and status apply |
+| Secrets | Read from the vault and cached by Keyhole | Fetched for the tool slot and injected into the forwarded call; never in the app's memory or on its disk |
+| In the log | "Vault connector enrolled", heartbeats | Requests read "billing-agent via sidecar pay-api-01" |
+| Managed in | Connectors, OpenBao wizard step 2 | Connectors, Workspace › Connect › Sidecar |
+
+## Shared with Dispatch
+
+Keyhole and Dispatch share one set of organizations, workspaces and players, and the screens that manage them work
+the same in both apps. The permission model below applies to both.
+
+- **Shared seed:** `src/lib/suite.ts` holds the organizations, people, workspaces, workspace memberships (member or
+  workspace admin) and agent records, with the same IDs in both repos. Keyhole layers its own content on top in
+  `src/lib/seed.ts`: stores, keys, tools, connectors and `kh_live_…` tokens. Incidents and Docs site have no Keyhole
+  content yet, so they show Keyhole's empty states.
+- **Navigation and org switcher:** same order (Home, Organizations, Workspaces, *Tools*, Players, *Connectors*,
+  Audit, Settings) and the same switcher (role, suspended and invited markers, pending invitations, keyboard use).
+  Organizations keep the shared tabs (Overview, Members, Agents, Workspaces, Audit) plus Keyhole's Stores and Tools.
+- **Players grids:** Users (Name, Email, Org role, Status, Last active, Workspaces with "(admin)", ⋯) and Agents
+  (Label, Agent ID, Status, Token, Created, Last used, Workspaces, then Keyhole's Expiry and Rate limit, ⋯), with the
+  same ⋯ items in the same order. Unavailable items stay in the menu, `aria-disabled`, with the reason.
+- **Assign workspaces… and Invite user:** each workspace gets a Member / Workspace admin role, and changes are
+  previewed (added, removed, role changes, default admins taking over) and audited in each workspace.
+- **Workspace › Members:** the same grids filtered to the workspace, with a Role column (Member, Workspace admin,
+  Default admin (org)). Workspace admins add, remove and delegate here; org admins can also do it from Players, and
+  both paths write the same log rows.
+- **Workspace admin (Keyhole's scope):** manages its workspace's members, exposed keys, tool grants and slots,
+  connection methods, cabinets and connectors. It can't manage stores, create keys, tools or agents, or change org
+  settings. With no explicit workspace admin, the org's active Owners and userAdmins are its admins by default.
+- **Audit:** every log shows Keyhole's events plus the shared org, workspace and player events (invites, role and
+  membership changes, suspensions, workspaces, agent records), marked *Shared*. Events recorded by Dispatch read
+  *Shared · Dispatch*. Scoping for the `user` role still applies.
+
+Keyhole-only: stores and keys, tools and cabinets, vault connectors and sidecars, test calls and the traffic log,
+the support console's lock and unlock.
 
 ## Ground rules the prototype enforces
 

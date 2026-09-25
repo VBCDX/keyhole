@@ -84,12 +84,13 @@ export function OrgDetail() {
       <PageTitle actions={onStoresList && isAdmin(d) ? <Button variant="primary" onClick={() => nav(`${base}/stores?add=store`)}>Add store</Button> : undefined}>{o.name}</PageTitle>
       <Tabs
         tabs={[
+          // The shared tabs (same in Dispatch), then Keyhole's own Stores and Tools, then Audit.
           { to: `${base}/overview`, label: 'Overview' },
-          { to: `${base}/stores`, label: 'Stores' },
           { to: `${base}/members`, label: 'Members' },
           { to: `${base}/agents`, label: 'Agents' },
-          { to: `${base}/tools`, label: 'Tools' },
           { to: `${base}/workspaces`, label: 'Workspaces' },
+          { to: `${base}/stores`, label: 'Stores' },
+          { to: `${base}/tools`, label: 'Tools' },
           { to: `${base}/audit`, label: 'Audit' },
         ]}
       />
@@ -227,12 +228,13 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
   const ws = orgWorkspaces(d)
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Role>('user')
-  const [sel, setSel] = useState<string[]>([])
+  /** Workspace → role, shared with Dispatch's invite dialog. */
+  const [sel, setSel] = useState<Record<string, 'member' | 'admin'>>({})
   useEffect(() => {
     if (open) {
       setEmail('')
       setRole('user')
-      setSel(ws[0] ? [ws[0].id] : [])
+      setSel(ws[0] ? { [ws[0].id]: 'member' } : {})
     }
   }, [open]) // eslint-disable-line
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -242,7 +244,7 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
       <Field label="Email" error={already ? `${email} is already a member or has a pending invite.` : null}>
         <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mia@acme.com" autoFocus />
       </Field>
-      <Field label="Role">
+      <Field label="Org role">
         <Segmented<Role>
           value={role}
           onChange={setRole}
@@ -252,11 +254,33 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
           ]}
         />
       </Field>
-      <Field label="Workspaces">
-        <div className="flex flex-col gap-2 rounded-lg border border-edge bg-page p-3">
-          {ws.length ? ws.map((w) => <Checkbox key={w.id} checked={sel.includes(w.id)} onChange={(v) => setSel(v ? [...sel, w.id] : sel.filter((x) => x !== w.id))} label={w.name} />) : <span className="text-xs text-zinc-500">No workspaces yet — they’ll only see Home until you add them to one.</span>}
-        </div>
-      </Field>
+      {role === 'user' ? (
+        <Field label="Workspaces">
+          <div className="flex flex-col rounded-lg border border-edge bg-page">
+            {ws.length ? (
+              ws.map((w) => (
+                <div key={w.id} className="flex items-center justify-between gap-3 border-b border-line px-3 py-2 last:border-b-0">
+                  <Checkbox checked={!!sel[w.id]} onChange={(v) => setSel(v ? { ...sel, [w.id]: 'member' } : Object.fromEntries(Object.entries(sel).filter(([k]) => k !== w.id)))} label={w.name} />
+                  <select
+                    aria-label={`Role in ${w.name}`}
+                    disabled={!sel[w.id]}
+                    value={sel[w.id] ?? 'member'}
+                    onChange={(e) => setSel({ ...sel, [w.id]: e.target.value as 'member' | 'admin' })}
+                    className="rounded-md border border-edge bg-panel px-2 py-1 text-xs text-zinc-300 outline-none focus:border-zinc-500 disabled:opacity-40"
+                  >
+                    <option value="member">Member</option>
+                    <option value="admin">Workspace admin</option>
+                  </select>
+                </div>
+              ))
+            ) : (
+              <span className="p-3 text-xs text-zinc-500">No workspaces yet — they’ll only see Home until you add them to one.</span>
+            )}
+          </div>
+        </Field>
+      ) : (
+        <div className="text-xs text-zinc-500">A userAdmin administers every workspace in the organization.</div>
+      )}
       <div className="text-xs text-zinc-500">They sign in with Google. The invite expires in 7 days.</div>
       <Footer>
         <Button size="lg" onClick={onClose}>
@@ -267,7 +291,8 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
           variant="primary"
           disabled={!valid || already}
           onClick={() => {
-            actions.invite({ email, role, workspaceIds: sel })
+            const ids = role === 'user' ? Object.keys(sel) : []
+            actions.invite({ email, role, workspaceIds: ids, adminWorkspaceIds: ids.filter((id) => sel[id] === 'admin') })
             onClose()
           }}
         >

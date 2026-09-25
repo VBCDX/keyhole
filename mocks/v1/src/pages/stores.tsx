@@ -14,8 +14,8 @@ function storeHealth(d: ReturnType<typeof useDB>, s: SecretStore) {
   if (s.health === 'unreachable') return { dot: 'error' as const, text: 'Can’t reach', tone: 'text-red-400' }
   if (s.health === 'denied') return { dot: 'error' as const, text: 'Not allowed', tone: 'text-red-400' }
   // A route through a connector that no longer exists can't reach anything.
-  if (s.route && s.route !== 'public' && !conn) return { dot: 'error' as const, text: 'Connector revoked', tone: 'text-red-400' }
-  if (conn?.health === 'offline') return { dot: 'degraded' as const, text: `Connector ${conn.name} offline`, tone: 'text-amber-400' }
+  if (s.route && s.route !== 'public' && !conn) return { dot: 'error' as const, text: 'Vault connector revoked', tone: 'text-red-400' }
+  if (conn?.health === 'offline') return { dot: 'degraded' as const, text: `Vault connector ${conn.name} offline`, tone: 'text-amber-400' }
   // Reachable, but anyone on the path could read the traffic — never shown as plain healthy.
   if (s.skipVerify) return { dot: 'degraded' as const, text: 'Unverified TLS', tone: 'text-amber-400' }
   return { dot: 'healthy' as const, text: '', tone: '' }
@@ -241,7 +241,7 @@ export function StoreDetail() {
       </div>
     )
   const keys = d.keys.filter((k) => k.storeId === s.id)
-  const route = s.route === 'public' ? 'Reachable from the internet' : s.route ? `Through connector ${orgConnectors(d).find((c) => c.id === s.route)?.name ?? '(revoked)'}` : ''
+  const route = s.route === 'public' ? 'Reachable from the internet' : s.route ? `Through vault connector ${orgConnectors(d).find((c) => c.id === s.route)?.name ?? '(revoked)'}` : ''
 
   const impactFor = (k: Key) => {
     const uses = keyUsage(d, k.id)

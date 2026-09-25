@@ -1,26 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import { HEARTBEAT_AFTER_MS, enrollmentExpiry, useCountdown } from '../lib/enroll'
 import { newEnrollmentToken } from '../lib/format'
-import { actions, orgConnectors, orgWorkspaces, useDB } from '../lib/store'
+import { actions, canAdminWorkspace, orgConnectors, orgWorkspaces, useDB } from '../lib/store'
 import { CopyChip, KeyholeIcon } from './keyhole'
 import { Button, Field, Select } from './ui'
 
-const HEARTBEAT_AFTER_MS = 6000
-
-function useCountdown(until: number | null) {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    if (!until) return
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [until])
-  if (!until) return null
-  const s = Math.max(0, Math.round((until - now) / 1000))
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
-
 /**
- * The command-and-token panel, shared by Connectors → Enroll, the OpenBao
- * wizard, and the Connect tab's Connector route.
+ * The vault connector command-and-token panel, shared by Connectors → Enroll
+ * and the OpenBao wizard. (Sidecars have their own panel.)
  */
 export function EnrollPanel({
   workspaceId,
@@ -36,7 +23,8 @@ export function EnrollPanel({
   intro?: string
 }) {
   const d = useDB()
-  const workspaces = orgWorkspaces(d)
+  // Only workspaces the viewer administers (org admins: all of them).
+  const workspaces = orgWorkspaces(d).filter((w) => canAdminWorkspace(d, w.id))
   const [wsId, setWsId] = useState(workspaceId ?? workspaces[0]?.id ?? '')
   const ws = workspaces.find((w) => w.id === (workspaceId ?? wsId))
   const [token, setToken] = useState<string | null>(null)
@@ -48,12 +36,12 @@ export function EnrollPanel({
 
   const generate = () => {
     setToken(newEnrollmentToken())
-    setExpires(Date.now() + 15 * 60_000)
+    setExpires(enrollmentExpiry())
     setEnrolled(null)
     window.clearTimeout(timer.current)
     // In the prototype, the connector "runs" and reports in a few seconds later.
     timer.current = window.setTimeout(() => {
-      const n = orgConnectors(d).length + 1
+      const n = orgConnectors(d).filter((c) => c.kind === 'vault').length + 1
       const id = actions.enrollConnector({ name: `edge-${String(n).padStart(2, '0')}`, workspaceId: ws?.id ?? '' })
       setEnrolled(id)
       setToken(null)
@@ -111,7 +99,7 @@ export function EnrollPanel({
             <KeyholeIcon pulse />
             <div>
               <div className="text-[13px] font-semibold">Waiting for the first heartbeat…</div>
-              <div className="mt-0.5 text-xs text-zinc-500">This turns green the moment the connector reports in.</div>
+              <div className="mt-0.5 text-xs text-zinc-500">This turns green the moment the vault connector reports in.</div>
             </div>
           </div>
         ))}

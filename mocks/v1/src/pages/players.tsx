@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ago, initials, maskToken, until } from '../lib/format'
-import { actions, agentById, canSeeWorkspace, isAdmin, isAdminRole, isSuspended, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
+import { actions, agentById, canSeeWorkspace, isAdmin, isAdminRole, isSuspended, lastActiveInOrg, orgAgents, orgWorkspaces, useDB, useNow, userById, visibleEvents, wsById } from '../lib/store'
 import type { Agent } from '../lib/types'
 import { TokenPanel } from '../components/keyhole'
 import { AgentsTable, AuditLog, NoAccess, RevokeAgentDialog, RotateAgentDialog, SuspendAgentDialog, UsersTable, useUserRows } from '../components/shared'
@@ -43,7 +43,7 @@ export function UserDetail() {
         <div>
           <h1 className="m-0 text-lg font-semibold tracking-[-0.01em]">{u.name}</h1>
           <div className="text-xs text-zinc-500">
-            {u.email} · {role} · {u.id === d.currentUserId ? 'active now' : `last active ${ago(u.lastActive, now).toLowerCase()}`}
+            {u.email} · {role} · {u.id === d.currentUserId ? 'active now' : `last active here ${ago(lastActiveInOrg(d, u.id), now).toLowerCase()}`}
           </div>
         </div>
         <span className="ml-auto">{u.locked ? <StatusInline tone="amber">Locked by support</StatusInline> : isSuspended(u, d.currentOrgId) ? <StatusInline tone="amber">Suspended</StatusInline> : <StatusInline tone="green">Active</StatusInline>}</span>
@@ -71,6 +71,7 @@ export function UserDetail() {
             {ws.length ? ws.map((w) => (
               <Link key={w.id} to={`/workspaces/${w.id}/summary`} className="rounded-md border border-edge bg-rail px-2.5 py-1 text-[13px] text-zinc-300 hover:text-white">
                 {w.name}
+                {w.adminIds.includes(u.id) && !isAdminRole(role) && <span className="text-zinc-500"> · admin</span>}
               </Link>
             )) : <span className="text-sm2 text-zinc-500">None</span>}
           </div>

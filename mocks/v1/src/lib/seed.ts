@@ -1,6 +1,7 @@
 import { CATALOG } from './catalog'
 import { DAY, HOUR, MIN } from './format'
-import type { AuditEvent, DB, Tool } from './types'
+import { SUITE_AGENTS, SUITE_USERS, SUITE_WORKSPACES } from './suite'
+import type { Agent, AuditEvent, DB, Tool, User, Workspace } from './types'
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 
@@ -69,8 +70,57 @@ export function freshDB(): DB {
   }
 }
 
+/* Keyhole's layer on top of the shared suite seed (src/lib/suite.ts): sessions, workspace content, agent tokens. */
+function keyholeOverlay(now: number) {
+  const users: Record<string, { lastActive: number | null; sessions: User['sessions'] }> = {
+    u_dana: { lastActive: now, sessions: dana(now).sessions },
+    u_ravi: { lastActive: now - 2 * HOUR, sessions: [{ device: 'ThinkPad', place: 'Austin', at: now - 2 * HOUR }] },
+    u_mia: { lastActive: now - 3 * HOUR, sessions: [{ device: 'MacBook Air', place: 'Seattle', at: now - 3 * HOUR }, { device: 'Pixel 8', place: 'Seattle', at: now - 5 * HOUR }] },
+    u_sam: { lastActive: null, sessions: [{ device: 'Chromebook', place: 'Denver', at: now - 10 * MIN }] },
+    u_jo: { lastActive: now - 6 * DAY, sessions: [] },
+    u_leo: { lastActive: now - 4 * HOUR, sessions: [{ device: 'Framework', place: 'Oslo', at: now - 4 * HOUR }] },
+    u_noor: { lastActive: now - 1 * DAY, sessions: [{ device: 'MacBook Pro', place: 'Lisbon', at: now - 1 * DAY }] },
+  }
+  const empty = { https: false, mcp: false, keyIds: [], tools: [] }
+  const workspaces: Record<string, Pick<Workspace, 'slug' | 'https' | 'mcp' | 'keyIds' | 'tools' | 'createdAt'>> = {
+    ws_prod: {
+      slug: 'ws_1a2b', https: false, mcp: true,
+      keyIds: ['k_stripe', 'k_gh', 'k_bao1', 'k_old'],
+      tools: [
+        { toolId: 't_stripe', slotMap: { stripe_secret: 'k_stripe' }, enabled: true, perMinute: 60 },
+        { toolId: 't_github', slotMap: { github_token: 'k_gh' }, enabled: true, perMinute: 30 },
+      ],
+      createdAt: now - 50 * DAY,
+    },
+    ws_staging: { slug: 'ws_7c3d', https: true, mcp: false, keyIds: ['k_slack', 'k_gh'], tools: [{ toolId: 't_github', slotMap: { github_token: 'k_gh' }, enabled: true, perMinute: 30 }], createdAt: now - 40 * DAY },
+    ws_sandbox: { slug: 'ws_5e9f', ...empty, createdAt: now - 20 * DAY },
+    // No Keyhole content yet: these show Keyhole's normal empty states.
+    ws_incidents: { slug: 'ws_3k8m', ...empty, createdAt: now - 12 * DAY },
+    ws_docs: { slug: 'ws_9d2p', ...empty, createdAt: now - 90 * DAY },
+  }
+  const agent = (tokenLast4: string, status: Agent['status'], createdDaysAgo: number, expiresInDays: number | null, lastUsedAt: number | null, rateLimit: number | null) => ({
+    tokenLast4, status, createdAt: now - createdDaysAgo * DAY, expiresAt: expiresInDays == null ? null : now + expiresInDays * DAY, lastUsedAt, rateLimit,
+  })
+  const agents: Record<string, Omit<Agent, 'id' | 'orgId' | 'label' | 'createdBy' | 'workspaceIds'>> = {
+    ag_billing: agent('6TpE', 'active', 3, 87, now - 2 * MIN, 60),
+    ag_ops: agent('r7Qm', 'active', 81, 9, now - 2 * MIN - 27_000, 30),
+    ag_docs: agent('X2dk', 'active', 25, null, now - 3 * MIN, null),
+    ag_planner: agent('pL4n', 'active', 30, 60, now - 40 * MIN, 30),
+    ag_builder: agent('bU1d', 'active', 30, 60, now - 55 * MIN, 30),
+    ag_reviewer: agent('rV9w', 'active', 30, 60, now - 2 * HOUR, 20),
+    ag_deployer: agent('dP7y', 'active', 28, 30, now - 5 * HOUR, 10),
+    ag_scraper: agent('wS3c', 'active', 12, 90, now - 1 * DAY, 20),
+    ag_triage: agent('tR6g', 'active', 12, null, now - 6 * HOUR, 30),
+    ag_report: agent('hN4s', 'suspended', 45, 200, now - 8 * DAY, 10),
+    ag_oldci: agent('Pw9a', 'revoked', 120, null, now - 30 * DAY, null),
+    ag_docsbot: agent('dB2t', 'active', 60, null, now - 2 * DAY, 20),
+  }
+  return { users, workspaces, agents }
+}
+
 export function populatedDB(): DB {
   const now = Date.now()
+  const { users: KEYHOLE_USERS, workspaces: KEYHOLE_WORKSPACES, agents: KEYHOLE_AGENTS } = keyholeOverlay(now)
   const stripe = CATALOG[0].tool
   const github = CATALOG[1].tool
   const slack = CATALOG[2].tool
@@ -111,7 +161,7 @@ export function populatedDB(): DB {
   const ev = (
     id: string,
     ago: number,
-    e: Omit<AuditEvent, 'id' | 'at' | 'orgId'>,
+    e: Omit<AuditEvent, 'id' | 'at' | 'orgId'> & { orgId?: string },
   ): AuditEvent => ({ id, at: now - ago, orgId: 'org_acme', ...e })
 
   const stripeReq = {
@@ -124,7 +174,7 @@ export function populatedDB(): DB {
   }
 
   const events: AuditEvent[] = [
-    ev('ev_1', 2 * MIN, { ...stripeReq, actor: 'billing-agent', actorId: 'ag_billing', result: '200 · 164 ms', trk: 'trk_2b8xm4c1', detail: [['Action', 'GET /v1/charges'], ['Workspace', 'Production'], ['Route', 'Direct']] }),
+    ev('ev_1', 2 * MIN, { ...stripeReq, actor: 'billing-agent', actorId: 'ag_billing', via: 'pay-api-01', viaId: 'sc_payapi01', result: '200 · 164 ms', trk: 'trk_2b8xm4c1', detail: [['Action', 'GET /v1/charges'], ['Workspace', 'Production'], ['Sidecar', 'pay-api-01']] }),
     ev('ev_2', 2 * MIN + 27_000, {
       type: 'blocked',
       severity: 'blocked',
@@ -147,9 +197,14 @@ export function populatedDB(): DB {
     ev('ev_7', 1 * HOUR + 5 * MIN, { type: 'error', severity: 'warn', actorKind: 'agent', actor: 'docs-agent', actorId: 'ag_docs', object: 'GitHub issues', destination: 'api.github.com', workspaceId: 'ws_staging', result: '502 · upstream timeout', trk: 'trk_5r2kd9w4', reason: 'The destination didn’t answer within 10 s. Keyhole did not retry.' }),
     ev('ev_8', 2 * HOUR, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Ravi Mehta', actorId: 'u_ravi', object: 'Granted GitHub issues to Staging', result: 'Done', trk: 'trk_3m6pt8k2' }),
     ev('ev_9', 3 * HOUR, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Mia Chen', actorId: 'u_mia', workspaceId: 'ws_prod', object: "Created cabinet Mia's billing set (locked)", result: 'Done', trk: 'trk_7x2nb4q9' }),
-    ev('ev_10', 2 * DAY, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Dana Keller', actorId: 'u_dana', object: 'Invited sam@acme.com as user', result: 'Done', trk: 'trk_9b3ws6h1' }),
+    ev('ev_13', 5 * HOUR, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Ravi Mehta', actorId: 'u_ravi', workspaceId: 'ws_incidents', object: 'Added triage-bot to Incidents', result: 'Done', trk: 'trk_5sh4r3dx', shared: true, source: 'Dispatch', detail: [['Workspace access', 'none → member'], ['From', 'Dispatch']] }),
+    ev('ev_10', 2 * DAY, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Dana Keller', actorId: 'u_dana', object: 'Invited sam@acme.com as user', result: 'Done', trk: 'trk_9b3ws6h1', shared: true }),
+    ev('ev_14', 4 * HOUR, { orgId: 'org_nw', type: 'admin', severity: 'info', actorKind: 'user', actor: 'Leo Park', actorId: 'u_leo', workspaceId: 'ws_docs', object: 'Granted GitHub issues to Docs site', result: 'Done', trk: 'trk_4n8lp2w6' }),
+    ev('ev_15', 1 * DAY, { orgId: 'org_nw', type: 'admin', severity: 'info', actorKind: 'user', actor: 'Noor Haddad', actorId: 'u_noor', workspaceId: 'ws_docs', object: 'Added docs-bot to Docs site', result: 'Done', trk: 'trk_8q3nh5d1', shared: true, detail: [['Workspace access', 'none → member']] }),
+    ev('ev_16', 2 * DAY + 3 * HOUR, { orgId: 'org_nw', type: 'admin', severity: 'info', actorKind: 'user', actor: 'Mia Chen', actorId: 'u_mia', object: 'Signed in', result: 'Done', trk: 'trk_6m1ch7r4' }),
     ev('ev_11', 3 * DAY, { type: 'verification', severity: 'ok', actorKind: 'agent', actor: 'billing-agent', actorId: 'ag_billing', object: 'First request verified', workspaceId: 'ws_prod', result: '200 · 182 ms', trk: 'trk_1v8rf5k3' }),
     ev('ev_12', 3 * DAY + HOUR, { type: 'connection', severity: 'ok', actorKind: 'connector', actor: 'edge-01', object: 'Connector enrolled', workspaceId: 'ws_prod', result: 'First heartbeat', trk: 'trk_2e7yl4c6' }),
+    ev('ev_17', 6 * DAY, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Jo Reyes', actorId: 'u_jo', object: 'Signed in', result: 'Done', trk: 'trk_3j9ry5e2' }),
   ]
 
   return {
@@ -163,14 +218,12 @@ export function populatedDB(): DB {
       { id: 'org_acme', name: 'Acme Corp', createdAt: now - 60 * DAY },
       { id: 'org_nw', name: 'Northwind Labs', createdAt: now - 200 * DAY },
     ],
-    users: [
-      dana(now),
-      { id: 'u_ravi', name: 'Ravi Mehta', email: 'ravi@acme.com', roles: { org_acme: 'userAdmin' }, status: 'active', locked: false, lastActive: now - 2 * HOUR, sessions: [{ device: 'ThinkPad', place: 'Austin', at: now - 2 * HOUR }] },
-      { id: 'u_mia', name: 'Mia Chen', email: 'mia@acme.com', roles: { org_acme: 'user', org_nw: 'user' }, status: 'active', locked: false, lastActive: now - 3 * HOUR, sessions: [{ device: 'MacBook Air', place: 'Seattle', at: now - 3 * HOUR }, { device: 'Pixel 8', place: 'Seattle', at: now - 5 * HOUR }] },
-      { id: 'u_jo', name: 'Jo Reyes', email: 'jo@acme.com', roles: { org_acme: 'user' }, status: 'active', suspended: { org_acme: true }, locked: false, lastActive: now - 6 * DAY, sessions: [] },
-      { id: 'u_noor', name: 'Noor Haddad', email: 'noor@northwind.dev', roles: { org_nw: 'Owner' }, status: 'active', locked: false, lastActive: now - 1 * DAY, sessions: [{ device: 'MacBook Pro', place: 'Lisbon', at: now - 1 * DAY }] },
-      { id: 'u_sam', name: 'Sam Ortiz', email: 'sam@acme.com', roles: {}, status: 'invited', locked: false, lastActive: null, sessions: [{ device: 'Chromebook', place: 'Denver', at: now - 10 * MIN }] },
-    ],
+    users: SUITE_USERS.map((u) => {
+      const k = KEYHOLE_USERS[u.id]
+      // Keyhole keeps Sam's invitation flow: he's seeded as a pending invite rather than a member.
+      const roles = u.id === 'u_sam' ? {} : { ...u.roles }
+      return { id: u.id, name: u.name, email: u.email, roles, ...(u.suspended ? { suspended: { ...u.suspended } } : {}), status: u.id === 'u_sam' ? 'invited' : 'active', locked: false, lastActive: k.lastActive, sessions: k.sessions }
+    }),
     invites: [
       { id: 'inv_sam', orgId: 'org_acme', email: 'sam@acme.com', role: 'user', workspaceIds: ['ws_prod'], invitedBy: 'Dana Keller', invitedAt: now - 2 * DAY, expiresAt: now + 5 * DAY },
     ],
@@ -198,47 +251,36 @@ export function populatedDB(): DB {
       { id: 'k_old', orgId: 'org_acme', name: 'billing/api_key', storeId: 'st_removed', length: 40, createdAt: now - 70 * DAY, rotatedAt: null, expiresAt: null, rotationReminderDays: null, notes: 'From the retired "Old vault" store', sourceRemoved: true },
     ],
     tools,
-    workspaces: [
-      {
-        id: 'ws_prod', orgId: 'org_acme', slug: 'ws_1a2b', name: 'Production', https: false, mcp: true,
-        keyIds: ['k_stripe', 'k_gh', 'k_bao1', 'k_old'],
-        userIds: ['u_dana', 'u_ravi', 'u_mia'],
-        agentIds: ['ag_billing', 'ag_ops', 'ag_docs', 'ag_report'],
-        tools: [
-          { toolId: 't_stripe', slotMap: { stripe_secret: 'k_stripe' }, enabled: true, perMinute: 60 },
-          { toolId: 't_github', slotMap: { github_token: 'k_gh' }, enabled: true, perMinute: 30 },
-        ],
-        createdAt: now - 50 * DAY,
-      },
-      {
-        id: 'ws_staging', orgId: 'org_acme', slug: 'ws_7c3d', name: 'Staging', https: true, mcp: false,
-        keyIds: ['k_slack', 'k_gh'],
-        userIds: ['u_ravi', 'u_jo'],
-        agentIds: ['ag_docs'],
-        tools: [{ toolId: 't_github', slotMap: { github_token: 'k_gh' }, enabled: true, perMinute: 30 }],
-        createdAt: now - 40 * DAY,
-      },
-      {
-        id: 'ws_sandbox', orgId: 'org_acme', slug: 'ws_5e9f', name: 'Sandbox', https: false, mcp: false,
-        keyIds: [], userIds: ['u_ravi'], agentIds: ['ag_oldci'], tools: [], createdAt: now - 20 * DAY,
-      },
-    ],
-    agents: [
-      { id: 'ag_billing', orgId: 'org_acme', label: 'billing-agent', tokenLast4: '6TpE', status: 'active', createdAt: now - 3 * DAY, createdBy: 'Dana Keller', expiresAt: now + 87 * DAY, lastUsedAt: now - 2 * MIN, workspaceIds: ['ws_prod'], rateLimit: 60 },
-      { id: 'ag_ops', orgId: 'org_acme', label: 'ops-agent', tokenLast4: 'r7Qm', status: 'active', createdAt: now - 81 * DAY, createdBy: 'Ravi Mehta', expiresAt: now + 9 * DAY, lastUsedAt: now - 2 * MIN - 27_000, workspaceIds: ['ws_prod'], rateLimit: 30 },
-      { id: 'ag_docs', orgId: 'org_acme', label: 'docs-agent', tokenLast4: 'X2dk', status: 'active', createdAt: now - 25 * DAY, createdBy: 'Ravi Mehta', expiresAt: null, lastUsedAt: now - 3 * MIN, workspaceIds: ['ws_prod', 'ws_staging'], rateLimit: null },
-      { id: 'ag_report', orgId: 'org_acme', label: 'reporting-bot', tokenLast4: 'hN4s', status: 'suspended', createdAt: now - 45 * DAY, createdBy: 'Dana Keller', expiresAt: now + 200 * DAY, lastUsedAt: now - 8 * DAY, workspaceIds: ['ws_prod'], rateLimit: 10 },
-      { id: 'ag_oldci', orgId: 'org_acme', label: 'old-ci', tokenLast4: 'Pw9a', status: 'revoked', createdAt: now - 120 * DAY, createdBy: 'Ravi Mehta', expiresAt: null, lastUsedAt: now - 30 * DAY, workspaceIds: ['ws_sandbox'], rateLimit: null },
-    ],
+    workspaces: SUITE_WORKSPACES.map((w) => ({
+      id: w.id,
+      orgId: w.orgId,
+      name: w.name,
+      userIds: w.members.map((m) => m.userId),
+      adminIds: w.members.filter((m) => m.role === 'admin').map((m) => m.userId),
+      agentIds: [...w.agentIds],
+      ...KEYHOLE_WORKSPACES[w.id],
+    })),
+    agents: SUITE_AGENTS.map((a) => ({
+      id: a.id,
+      orgId: a.orgId,
+      label: a.label,
+      createdBy: a.createdBy,
+      workspaceIds: SUITE_WORKSPACES.filter((w) => w.agentIds.includes(a.id)).map((w) => w.id),
+      ...KEYHOLE_AGENTS[a.id],
+    })),
     cabinets: [
       { id: 'cb_mia', workspaceId: 'ws_prod', name: "Mia's billing set", createdBy: 'u_mia', managedBy: 'u_mia', keyIds: ['k_mia1', 'k_mia2'], tools: [{ toolId: 't_stripe', slotMap: { stripe_secret: 'k_mia1' } }], access: [{ kind: 'user', id: 'u_mia' }, { kind: 'agent', id: 'ag_billing' }], createdAt: now - 3 * HOUR },
       { id: 'cb_team', workspaceId: 'ws_prod', name: 'Team sandbox', createdBy: 'u_ravi', managedBy: 'u_ravi', keyIds: ['k_gh'], tools: [{ toolId: 't_github', slotMap: { github_token: 'k_gh' } }, { toolId: 't_stripe', slotMap: { stripe_secret: null } }], access: 'everyone', createdAt: now - 10 * DAY },
       { id: 'cb_legacy', workspaceId: 'ws_prod', name: 'Legacy imports', createdBy: null, managedBy: null, keyIds: ['k_legacy_c'], tools: [], access: 'everyone', createdAt: now - 90 * DAY },
     ],
     connectors: [
-      { id: 'cn_edge01', orgId: 'org_acme', name: 'edge-01', workspaceId: 'ws_prod', version: '1.4.2', health: 'healthy', lastSeen: now - 20_000, ip: '10.2.14.7', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },
-      { id: 'cn_edge02', orgId: 'org_acme', name: 'edge-02', workspaceId: 'ws_staging', version: '1.4.0', health: 'degraded', lastSeen: now - 90_000, ip: '10.2.14.9', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },
-      { id: 'cn_lab', orgId: 'org_acme', name: 'lab-runner', workspaceId: 'ws_sandbox', version: '1.3.9', health: 'offline', lastSeen: now - 2 * HOUR, ip: null, enrolledBy: 'Ravi M.', enrolledAt: now - 14 * DAY },
+      { id: 'cn_edge01', orgId: 'org_acme', kind: 'vault', name: 'edge-01', workspaceId: 'ws_prod', version: '1.4.2', health: 'healthy', lastSeen: now - 20_000, ip: '10.2.14.7', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },
+      { id: 'cn_edge02', orgId: 'org_acme', kind: 'vault', name: 'edge-02', workspaceId: 'ws_staging', version: '1.4.0', health: 'degraded', lastSeen: now - 90_000, ip: '10.2.14.9', enrolledBy: 'Dana K.', enrolledAt: now - 3 * DAY },
+      { id: 'cn_lab', orgId: 'org_acme', kind: 'vault', name: 'lab-runner', workspaceId: 'ws_sandbox', version: '1.3.9', health: 'offline', lastSeen: now - 2 * HOUR, ip: null, enrolledBy: 'Ravi M.', enrolledAt: now - 14 * DAY },
+      {
+        id: 'sc_payapi01', orgId: 'org_acme', kind: 'sidecar', name: 'pay-api-01', workspaceId: 'ws_prod', agentId: 'ag_billing', protocols: ['http', 'mcp'], listen: '127.0.0.1:8787',
+        host: 'pay-api-7f9c.prod.acme.internal', requestsBase: 1284, version: '1.5.0', health: 'healthy', lastSeen: now - 12_000, ip: '10.2.30.14', enrolledBy: 'Dana K.', enrolledAt: now - 2 * DAY,
+      },
     ],
     events,
     notifications: { ...DEFAULT_NOTIFICATIONS },

@@ -6,14 +6,15 @@ import {
   actions,
   agentById,
   autoMatch,
+  canAdminWorkspace,
   canSeeWorkspace,
-  isAdmin,
   filledSlot,
+  isActive,
+  isAdmin,
   isAdminRole,
   keyById,
   liveTool,
   missingSlots,
-  orgAdmins,
   orgAgents,
   orgEvents,
   orgKeys,
@@ -27,6 +28,8 @@ import {
   useDB,
   userById,
   visibleEvents,
+  workspaceAdmins,
+  workspacePeople,
   wsById,
 } from '../lib/store'
 import type { Key, Workspace } from '../lib/types'
@@ -168,7 +171,7 @@ function PlayerPicker({ users, agents, onUsers, onAgents }: { users: string[]; a
         {people.map((u) =>
           // Org admins administer every workspace by default; they can't be unticked here.
           isAdminRole(u.roles[d.currentOrgId]) ? (
-            <Checkbox key={u.id} checked disabled label={<span>{u.name} <span className="text-xs2 text-zinc-500">· {u.roles[d.currentOrgId]}, admin by default</span></span>} />
+            <Checkbox key={u.id} checked disabled label={<span>{u.name} <span className="text-xs2 text-zinc-500">· Default admin (org)</span></span>} />
           ) : (
             <Checkbox key={u.id} checked={users.includes(u.id)} onChange={(v) => onUsers(v ? [...users, u.id] : users.filter((x) => x !== u.id))} label={u.name} />
           ),
@@ -278,6 +281,7 @@ export function WorkspaceDetail() {
       <Tabs
         tabs={[
           { to: `${base}/summary`, label: 'Summary' },
+          { to: `${base}/members`, label: 'Members' },
           { to: `${base}/tools`, label: 'Tools' },
           { to: `${base}/cabinets`, label: 'Cabinets' },
           { to: `${base}/connect`, label: 'Connect' },
@@ -324,25 +328,28 @@ export function useWorkspace() {
   return wsById(d, wsId!)!
 }
 
+/** "Workspace admins: Mia Chen" or "Workspace admins: Dana Keller (Owner), Ravi Mehta (userAdmin) — org admins, by default." */
+function WorkspaceAdminsLine({ w }: { w: Workspace }) {
+  const d = useDB()
+  const { users, byDefault } = workspaceAdmins(d, w)
+  return (
+    <div className="text-xs text-zinc-500">
+      Workspace admins:{' '}
+      <span className="text-zinc-300">{byDefault ? users.map((u) => `${u.name} (${u.roles[w.orgId]})`).join(', ') || 'none active' : users.map((u) => u.name).join(', ')}</span>
+      {byDefault ? ' — org admins, by default.' : '. Org admins can administer it too.'}
+    </div>
+  )
+}
+
 export function WsSummary() {
   const d = useDB()
   const w = useWorkspace()
-  const rows = useUserRows(w.id)
   const [editKeys, setEditKeys] = useState(false)
   const [keys, setKeys] = useState<string[]>([])
   const [confirmKeys, setConfirmKeys] = useState(false)
-  const [editPlayers, setEditPlayers] = useState(false)
-  const [pu, setPu] = useState<string[]>([])
-  const [pa, setPa] = useState<string[]>([])
-  const admin = isAdmin(d)
-  // Keyhole has no per-workspace admin role: the org's Owners and userAdmins are every workspace's admins.
-  const wsAdmins = orgAdmins(d)
-  // Manage access: who would lose access (org admins keep it regardless).
-  const losingIds = w.userIds.filter((id) => !pu.includes(id) && !isAdminRole(userById(d, id)?.roles[d.currentOrgId]))
-  const losingPeople = losingIds.map((id) => userById(d, id)?.name ?? id)
-  const losingAgents = w.agentIds.filter((id) => !pa.includes(id) && agentById(d, id)?.status !== 'revoked').map((id) => agentById(d, id)?.label ?? id)
-  const losingCabinets = d.cabinets.filter((c) => c.workspaceId === w.id && !!c.managedBy && losingIds.includes(c.managedBy)).map((c) => c.name)
+  const admin = canAdminWorkspace(d, w.id)
   const agents = w.agentIds.map((id) => agentById(d, id)).filter(Boolean) as NonNullable<ReturnType<typeof agentById>>[]
+  const people = workspacePeople(d, w)
   const impact = unexposeImpact(d, w.id, keys)
   const saveKeys = () => {
     actions.setWorkspaceKeys(w.id, keys)
@@ -384,30 +391,14 @@ export function WsSummary() {
         <div className="mt-1.5 text-xs2 text-zinc-600">Names only — values are never shown.</div>
       </div>
       <div>
-        <div className="mb-1 flex items-center justify-between">
-          <div className="eyebrow">Users</div>
-          {admin && (
-            <button
-              className="text-sm2 text-brass hover:text-brass-light"
-              onClick={() => {
-                setPu(w.userIds)
-                setPa(w.agentIds)
-                setEditPlayers(true)
-              }}
-            >
-              Manage access
-            </button>
-          )}
+        <div className="eyebrow mb-2">Members</div>
+        <div className="flex flex-col gap-1">
+          <WorkspaceAdminsLine w={w} />
+          <div className="text-xs text-zinc-500">
+            {plural(people.length, 'person', 'people')} · {plural(agents.filter((a) => a.status !== 'revoked').length, 'agent')} ·{' '}
+            <Link to={`/workspaces/${w.id}/members`}>See members</Link>
+          </div>
         </div>
-        <div className="mb-2.5 text-xs text-zinc-500">
-          Workspace admins:{' '}
-          <span className="text-zinc-300">{wsAdmins.map((u) => `${u.name} (${u.roles[d.currentOrgId]})`).join(', ')}</span> — org admins, by default.
-        </div>
-        <UsersTable rows={rows} />
-      </div>
-      <div>
-        <div className="eyebrow mb-2.5">Agents</div>
-        <AgentsTable agents={agents} emptyText={<>No agents on this workspace yet. <Link to="/players/agents?new=1">Create one on the Agents page.</Link></>} />
       </div>
 
       <Modal open={editKeys} onClose={() => setEditKeys(false)} width={560} title={`Which keys does “${w.name}” expose?`}>
@@ -435,34 +426,139 @@ export function WsSummary() {
         confirmLabel="Stop exposing"
         onConfirm={saveKeys}
       />
-      <Modal open={editPlayers} onClose={() => setEditPlayers(false)} width={560} title={`Who gets access to “${w.name}”?`}>
-        <PlayerPicker users={pu} agents={pa} onUsers={setPu} onAgents={setPa} />
-        {(losingPeople.length > 0 || losingAgents.length > 0) && (
-          <ImpactRows
-            rows={[
-              ['People losing access', losingPeople.join(', ') || 'None', losingPeople.length ? 'amber' : undefined],
-              ['Agents losing access', losingAgents.join(', ') || 'None', losingAgents.length ? 'amber' : undefined],
-              ['Cabinets they manage here', losingCabinets.length ? `${losingCabinets.join(', ')} — keep working; admins take over management` : 'None'],
-            ]}
-          />
-        )}
-        <Footer>
-          <Button size="lg" onClick={() => setEditPlayers(false)}>
-            Cancel
-          </Button>
-          <Button
-            size="lg"
-            variant={losingPeople.length || losingAgents.length ? 'danger' : 'primary'}
-            onClick={() => {
-              actions.setWorkspacePlayers(w.id, pu, pa)
-              setEditPlayers(false)
-            }}
-          >
-            Save access
-          </Button>
-        </Footer>
-      </Modal>
     </div>
+  )
+}
+
+/**
+ * Workspace › Members, shared with Dispatch: the Users and Agents grids filtered to this workspace with a
+ * Role column. Workspace admins (and org admins) add and remove members and delegate workspace admin here;
+ * Players › Assign workspaces… is the org-level path to the same changes and writes the same log rows.
+ */
+export function WsMembers() {
+  const d = useDB()
+  const w = useWorkspace()
+  const rows = useUserRows(w.id)
+  const admin = canAdminWorkspace(d, w.id)
+  const [editing, setEditing] = useState(false)
+  const agents = w.agentIds.map((id) => agentById(d, id)).filter(Boolean) as NonNullable<ReturnType<typeof agentById>>[]
+  return (
+    <div className="mt-5 flex max-w-[1240px] flex-col gap-7">
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <div className="eyebrow">People</div>
+          {admin && (
+            <Button size="sm" variant="primary" onClick={() => setEditing(true)}>
+              Manage members
+            </Button>
+          )}
+        </div>
+        <div className="mb-2.5">
+          <WorkspaceAdminsLine w={w} />
+        </div>
+        <UsersTable rows={rows} ws={w} />
+      </div>
+      <div>
+        <div className="eyebrow mb-2.5">Agents</div>
+        <AgentsTable agents={agents} ws={w} emptyText={<>No agents on this workspace yet.{admin ? ' Add one with Manage members.' : ''}</>} />
+      </div>
+      <ManageMembersModal key={String(editing)} open={editing} onClose={() => setEditing(false)} w={w} />
+    </div>
+  )
+}
+
+type MemberRole = 'member' | 'admin'
+
+function ManageMembersModal({ open, onClose, w }: { open: boolean; onClose: () => void; w: Workspace }) {
+  const d = useDB()
+  const people = d.users.filter((u) => u.roles[w.orgId])
+  const bots = orgAgents(d).filter((a) => a.status !== 'revoked')
+  // Remounted each time it opens (see WsMembers), so it starts from the workspace's current members.
+  const [sel, setSel] = useState<Record<string, MemberRole>>(() =>
+    Object.fromEntries(w.userIds.filter((id) => !isAdminRole(userById(d, id)?.roles[w.orgId])).map((id) => [id, w.adminIds.includes(id) ? 'admin' : 'member'])),
+  )
+  const [pa, setPa] = useState<string[]>(() => [...w.agentIds])
+  const before = (id: string): MemberRole | null => (w.adminIds.includes(id) ? 'admin' : w.userIds.includes(id) ? 'member' : null)
+  const label = (r: MemberRole | null) => (r === 'admin' ? 'workspace admin' : 'member')
+  const editable = people.filter((u) => !isAdminRole(u.roles[w.orgId]))
+  const name = (id: string) => userById(d, id)?.name ?? id
+  const added = editable.filter((u) => !before(u.id) && sel[u.id]).map((u) => `${u.name} (${label(sel[u.id])})`)
+  const removed = editable.filter((u) => before(u.id) && !sel[u.id]).map((u) => u.id)
+  const changed = editable.filter((u) => before(u.id) && sel[u.id] && before(u.id) !== sel[u.id]).map((u) => u.id)
+  const agentsAdded = pa.filter((id) => !w.agentIds.includes(id)).map((id) => agentById(d, id)?.label)
+  const agentsRemoved = w.agentIds.filter((id) => !pa.includes(id) && agentById(d, id)?.status !== 'revoked').map((id) => agentById(d, id)?.label)
+  const explicitAfter = editable.filter((u) => sel[u.id] === 'admin' && isActive(u, w.orgId))
+  const takeover = !workspaceAdmins(d, w).byDefault && !explicitAfter.length
+  const released = d.cabinets.filter((c) => c.workspaceId === w.id && !!c.managedBy && removed.includes(c.managedBy)).map((c) => c.name)
+  const reducing = removed.length > 0 || agentsRemoved.length > 0 || changed.some((id) => sel[id] === 'member')
+  const any = added.length + removed.length + changed.length + agentsAdded.length + agentsRemoved.length > 0
+  return (
+    <Modal open={open} onClose={onClose} width={600} title={`Members of ${w.name}`}>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <div className="eyebrow-sm">People</div>
+          {people.map((u) =>
+            // Org admins are this workspace's admins by default; nothing to change here.
+            isAdminRole(u.roles[w.orgId]) ? (
+              <Checkbox key={u.id} checked disabled label={<span>{u.name} <span className="text-xs2 text-zinc-500">· Default admin (org)</span></span>} />
+            ) : (
+              <div key={u.id} className="flex items-center justify-between gap-2">
+                <Checkbox checked={!!sel[u.id]} onChange={(v) => setSel(v ? { ...sel, [u.id]: 'member' } : Object.fromEntries(Object.entries(sel).filter(([k]) => k !== u.id)))} label={u.name} />
+                <select
+                  aria-label={`Role of ${u.name}`}
+                  disabled={!sel[u.id]}
+                  value={sel[u.id] ?? 'member'}
+                  onChange={(e) => setSel({ ...sel, [u.id]: e.target.value as MemberRole })}
+                  className="rounded-md border border-edge bg-panel px-2 py-0.5 text-xs text-zinc-300 outline-none focus:border-zinc-500 disabled:opacity-40"
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Workspace admin</option>
+                </select>
+              </div>
+            ),
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="eyebrow-sm">Agents</div>
+          {bots.length ? (
+            bots.map((a) => <Checkbox key={a.id} checked={pa.includes(a.id)} onChange={(v) => setPa(v ? [...pa, a.id] : pa.filter((x) => x !== a.id))} label={<span className="font-mono text-sm2">{a.label}</span>} />)
+          ) : (
+            <span className="text-xs text-zinc-500">No agents in this organization. Org admins create them.</span>
+          )}
+        </div>
+      </div>
+      {any && (
+        <ImpactRows
+          rows={[
+            ['Added', [...added, ...agentsAdded].join(', ') || 'None'],
+            ['Removed', [...removed.map(name), ...agentsRemoved].join(', ') || 'None', removed.length + agentsRemoved.length ? 'amber' : undefined],
+            ['Role changes', changed.map((id) => `${name(id)}: ${label(before(id))} → ${label(sel[id])}`).join('; ') || 'None', changed.some((id) => sel[id] === 'member') ? 'amber' : undefined],
+            ['Default admins take over', takeover ? 'Yes — the org’s admins, by default' : 'No'],
+            ['Cabinets they manage here', released.length ? `${released.join(', ')} — keep working; admins take over management` : 'None'],
+          ]}
+        />
+      )}
+      <Footer>
+        <Button size="lg" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          size="lg"
+          variant={reducing ? 'danger' : 'primary'}
+          disabled={!any}
+          onClick={() => {
+            actions.setWorkspaceMembers(
+              w.id,
+              Object.entries(sel).map(([userId, role]) => ({ userId, role })),
+              pa,
+            )
+            onClose()
+          }}
+        >
+          Apply changes
+        </Button>
+      </Footer>
+    </Modal>
   )
 }
 
@@ -474,7 +570,8 @@ const WT_COLS = '1.4fr 2fr 70px 130px 110px 36px'
 export function WsTools() {
   const d = useDB()
   const w = useWorkspace()
-  const admin = isAdmin(d)
+  // Workspace admins manage tool grants, slots, toggles and limits here; org admins too.
+  const admin = canAdminWorkspace(d, w.id)
   const [adding, setAdding] = useState(false)
   const [results, setResults] = useState<Record<string, ReturnType<typeof testCall>>>({})
   const [removing, setRemoving] = useState<string | null>(null)

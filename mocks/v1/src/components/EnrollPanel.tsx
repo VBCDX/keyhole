@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { HEARTBEAT_AFTER_MS, enrollmentExpiry, useCountdown } from '../lib/enroll'
 import { newEnrollmentToken } from '../lib/format'
-import { actions, orgConnectors, orgWorkspaces, useDB } from '../lib/store'
+import { actions, canAdminWorkspace, orgConnectors, orgWorkspaces, useDB } from '../lib/store'
 import { CopyChip, KeyholeIcon } from './keyhole'
 import { Button, Field, Select } from './ui'
 
@@ -23,7 +23,8 @@ export function EnrollPanel({
   intro?: string
 }) {
   const d = useDB()
-  const workspaces = orgWorkspaces(d)
+  // Only workspaces the viewer administers (org admins: all of them).
+  const workspaces = orgWorkspaces(d).filter((w) => canAdminWorkspace(d, w.id))
   const [wsId, setWsId] = useState(workspaceId ?? workspaces[0]?.id ?? '')
   const ws = workspaces.find((w) => w.id === (workspaceId ?? wsId))
   const [token, setToken] = useState<string | null>(null)

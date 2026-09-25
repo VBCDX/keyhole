@@ -21,7 +21,7 @@ import type {
 } from './types'
 
 const LS_KEY = 'keyhole-mocks-v1'
-const VERSION = 6
+const VERSION = 7
 
 function load(): DB {
   try {
@@ -145,7 +145,69 @@ const adminIn = (d: DB, orgId: string | undefined) => inMyOrg(d, orgId) && isAdm
 /** Admins manage every cabinet; a member manages the ones assigned to them while they can use the workspace. */
 function canManageCabinet(d: DB, c: Cabinet) {
   const w = d.workspaces.find((x) => x.id === c.workspaceId)
-  return !!w && inMyOrg(d, w.orgId) && (isAdmin(d) || (c.managedBy === d.currentUserId && hasWorkspaceAccess(d, d.currentUserId, w.id)))
+  return !!w && inMyOrg(d, w.orgId) && (canAdminWorkspace(d, w.id) || (c.managedBy === d.currentUserId && hasWorkspaceAccess(d, d.currentUserId, w.id)))
+}
+
+/** Adds or removes an agent from a workspace, keeping both sides in step, with one shared log row. */
+function applyAgentMembership(d: DB, w: Workspace, agentId: string, member: boolean) {
+  const a = d.agents.find((x) => x.id === agentId)
+  if (!a || a.orgId !== w.orgId || w.agentIds.includes(a.id) === member) return
+  w.agentIds = member ? [...w.agentIds, a.id] : w.agentIds.filter((x) => x !== a.id)
+  a.workspaceIds = member ? [...a.workspaceIds, w.id] : a.workspaceIds.filter((x) => x !== w.id)
+  const sidecars = member ? [] : d.connectors.filter((c) => c.kind === 'sidecar' && c.agentId === a.id && c.workspaceId === w.id).map((c) => c.name)
+  log(d, {
+    object: member ? `Added ${a.label} to ${w.name}` : `Removed ${a.label} from ${w.name}`,
+    workspaceId: w.id,
+    shared: true,
+    detail: [['Workspace access', member ? 'none → member' : 'member → none'], ...(sidecars.length ? [['Sidecars acting as it here', `${sidecars.join(', ')} — refused from the next request`] as [string, string]] : [])],
+  })
+}
+
+/**
+ * Workspace admins (rule 2). Keyhole's workspace-admin role manages one workspace: its members, the keys it
+ * exposes, tool grants and slots, connection methods, cabinets, and connectors enrolled to it. It never
+ * reaches org-level things: stores, creating keys, tools or agents, or org settings.
+ */
+export const isExplicitWorkspaceAdmin = (d: DB, userId: string, w: Workspace) => w.adminIds.includes(userId) && hasWorkspaceAccess(d, userId, w.id)
+/** Who administers a workspace: its explicit workspace admins, or — when there are none — the org's active admins. */
+export function workspaceAdmins(d: DB, w: Workspace) {
+  const explicit = d.users.filter((u) => isExplicitWorkspaceAdmin(d, u.id, w))
+  return explicit.length ? { users: explicit, byDefault: false } : { users: d.users.filter((u) => isAdminRole(u.roles[w.orgId]) && isActive(u, w.orgId)), byDefault: true }
+}
+/** Org admins administer every workspace (rule 1); a workspace admin administers theirs. */
+export function canAdminWorkspace(d: DB, wsId: string) {
+  const w = d.workspaces.find((x) => x.id === wsId)
+  if (!w || !inMyOrg(d, w.orgId)) return false
+  return isAdmin(d) || isExplicitWorkspaceAdmin(d, d.currentUserId, w)
+}
+const wsAdminIn = (d: DB, w: Workspace | undefined) => !!w && canAdminWorkspace(d, w.id)
+
+/**
+ * One membership change, written the same whichever path made it (Players › Assign workspaces or the
+ * workspace's Members tab). role null removes. Org admins are admins by default and aren't changed here.
+ */
+function applyMembership(d: DB, w: Workspace, userId: string, role: 'member' | 'admin' | null) {
+  const u = d.users.find((x) => x.id === userId)
+  if (!u?.roles[w.orgId] || isAdminRole(u.roles[w.orgId])) return
+  const before: 'member' | 'admin' | null = w.adminIds.includes(userId) ? 'admin' : w.userIds.includes(userId) ? 'member' : null
+  if (before === role) return
+  const label = (r: 'member' | 'admin' | null) => (r === 'admin' ? 'workspace admin' : r === 'member' ? 'member' : 'none')
+  const hadExplicit = workspaceAdmins(d, w).byDefault === false
+  w.userIds = role ? Array.from(new Set([...w.userIds, userId])) : w.userIds.filter((x) => x !== userId)
+  w.adminIds = role === 'admin' ? Array.from(new Set([...w.adminIds, userId])) : w.adminIds.filter((x) => x !== userId)
+  const released = settleCabinetManagement(d)
+  const takeover = hadExplicit && workspaceAdmins(d, w).byDefault
+  const object = !before ? `Added ${u.name} to ${w.name} as ${label(role)}` : !role ? `Removed ${u.name} from ${w.name}` : `Made ${u.name} ${label(role)} of ${w.name}`
+  log(d, {
+    object,
+    workspaceId: w.id,
+    shared: true,
+    detail: [
+      ['Workspace role', `${label(before)} → ${label(role)}`],
+      ...(takeover ? [['Workspace admins', 'Org admins, by default'] as [string, string]] : []),
+      ...(released.length ? [['Cabinets now managed by admins', released.join(', ')] as [string, string]] : []),
+    ],
+  })
 }
 
 export const protocolList = (c: Connector) => (c.protocols ?? []).map((p) => p.toUpperCase()).join(' · ')
@@ -565,16 +627,16 @@ export const actions = {
     const id = uid('ws')
     update((d) => {
       if (!adminIn(d, d.currentOrgId)) return
-      d.workspaces.push({ id, orgId: d.currentOrgId, slug: 'ws_' + id.slice(-4), name: w.name, https: false, mcp: false, keyIds: w.keyIds, userIds: w.userIds, agentIds: w.agentIds, tools: [], createdAt: Date.now() })
+      d.workspaces.push({ id, orgId: d.currentOrgId, slug: 'ws_' + id.slice(-4), name: w.name, https: false, mcp: false, keyIds: w.keyIds, userIds: w.userIds, adminIds: [], agentIds: w.agentIds, tools: [], createdAt: Date.now() })
       for (const a of d.agents) if (w.agentIds.includes(a.id) && !a.workspaceIds.includes(id)) a.workspaceIds.push(id)
-      log(d, { object: `Created workspace ${w.name}` })
+      log(d, { shared: true, object: `Created workspace ${w.name}` })
     })
     return id
   },
   exposeKey(wsId: string, keyId: string) {
     update((d) => {
       const w = wsById(d, wsId)
-      if (!w || !adminIn(d, w.orgId) || keyById(d, keyId)?.orgId !== w.orgId || w.keyIds.includes(keyId)) return
+      if (!w || !wsAdminIn(d, w) || keyById(d, keyId)?.orgId !== w.orgId || w.keyIds.includes(keyId)) return
       w.keyIds.push(keyId)
       log(d, { object: `Exposed ${keyById(d, keyId)?.name} in ${w.name}`, workspaceId: wsId })
     })
@@ -582,7 +644,7 @@ export const actions = {
   setWorkspaceKeys(wsId: string, keyIds: string[]) {
     update((d) => {
       const w = wsById(d, wsId)
-      if (!w || !adminIn(d, w.orgId) || keyIds.some((id) => keyById(d, id)?.orgId !== w.orgId)) return
+      if (!w || !wsAdminIn(d, w) || keyIds.some((id) => keyById(d, id)?.orgId !== w.orgId)) return
       const { removed, slots, cabinets } = unexposeImpact(d, wsId, keyIds)
       const added = keyIds.filter((id) => !w.keyIds.includes(id))
       w.keyIds = keyIds
@@ -610,7 +672,7 @@ export const actions = {
     update((d) => {
       const w = wsById(d, wsId)
       const t = toolById(d, toolId)
-      if (!w || !t || t.orgId !== w.orgId || !adminIn(d, w.orgId)) return
+      if (!w || !t || t.orgId !== w.orgId || !wsAdminIn(d, w)) return
       const existing = w.tools.find((x) => x.toolId === toolId)
       const keyName = (id: string | null | undefined) => (id ? (keyById(d, id)?.name ?? id) : 'Missing')
       const detail: [string, string][] = [
@@ -627,7 +689,7 @@ export const actions = {
     update((d) => {
       const w = wsById(d, wsId)
       const wt = w?.tools.find((x) => x.toolId === toolId)
-      if (!w || !wt || !adminIn(d, w.orgId)) return
+      if (!w || !wt || !wsAdminIn(d, w)) return
       const tool = toolById(d, toolId)?.displayName ?? 'Tool'
       const keyName = (id: string | null | undefined) => (id ? (keyById(d, id)?.name ?? id) : 'Missing')
       // Every change to who can reach which key is logged with its before → after.
@@ -649,7 +711,7 @@ export const actions = {
   removeWorkspaceTool(wsId: string, toolId: string) {
     update((d) => {
       const w = wsById(d, wsId)
-      if (!w || !adminIn(d, w.orgId)) return
+      if (!w || !wsAdminIn(d, w)) return
       w.tools = w.tools.filter((x) => x.toolId !== toolId)
       log(d, { object: `Removed ${toolById(d, toolId)?.displayName} from ${w.name}`, workspaceId: wsId })
     })
@@ -657,35 +719,22 @@ export const actions = {
   setConnection(wsId: string, kind: 'https' | 'mcp', on: boolean) {
     update((d) => {
       const w = wsById(d, wsId)
-      if (!w || !adminIn(d, w.orgId)) return
+      if (!w || !wsAdminIn(d, w)) return
       if (w[kind] === on) return
       w[kind] = on
       log(d, { object: `Turned ${kind.toUpperCase()} ${on ? 'on' : 'off'} for ${w.name}`, workspaceId: wsId, detail: [[kind.toUpperCase(), on ? 'Off → On' : 'On → Off']] })
     })
   },
-  setWorkspacePlayers(wsId: string, userIds: string[], agentIds: string[]) {
+  /** The workspace's Members tab: people with their workspace role, and agents. */
+  setWorkspaceMembers(wsId: string, members: { userId: string; role: 'member' | 'admin' }[], agentIds: string[]) {
     update((d) => {
       const w = wsById(d, wsId)
-      if (!w || !adminIn(d, w.orgId)) return
-      // Only people and agents of the workspace's own organization can be added to it.
-      userIds = userIds.filter((id) => userById(d, id)?.roles[w.orgId])
+      if (!w || !wsAdminIn(d, w)) return
+      const want = new Map(members.map((m) => [m.userId, m.role]))
+      for (const id of new Set([...w.userIds, ...want.keys()])) applyMembership(d, w, id, want.get(id) ?? null)
+      // Only agents of the workspace's own organization can be added to it.
       agentIds = agentIds.filter((id) => agentById(d, id)?.orgId === w.orgId)
-      const refs = (u: string[], a: string[]): PlayerRef[] => [...u.map((id) => ({ kind: 'user' as const, id })), ...a.map((id) => ({ kind: 'agent' as const, id }))]
-      const diff = playerDiff(d, refs(w.userIds, w.agentIds), refs(userIds, agentIds))
-      if (diff.detail.length) {
-        const one = diff.added.length + diff.removed.length === 1
-        const object = one ? (diff.added.length ? `Added ${diff.added[0]} to ${w.name}` : `Removed ${diff.removed[0]} from ${w.name}`) : `Changed who can use ${w.name}`
-        log(d, { object, workspaceId: wsId, detail: diff.detail })
-      }
-      w.userIds = userIds
-      w.agentIds = agentIds
-      const released = settleCabinetManagement(d)
-      if (released.length) log(d, { object: `Admins now manage ${released.join(', ')}`, workspaceId: wsId, detail: [['Managed by', 'Former member → org admins']] })
-      for (const a of d.agents) {
-        const has = a.workspaceIds.includes(wsId)
-        if (agentIds.includes(a.id) && !has) a.workspaceIds.push(wsId)
-        if (!agentIds.includes(a.id) && has) a.workspaceIds = a.workspaceIds.filter((x) => x !== wsId)
-      }
+      for (const id of new Set([...w.agentIds, ...agentIds])) applyAgentMembership(d, w, id, agentIds.includes(id))
     })
   },
   deleteWorkspace(wsId: string) {
@@ -706,7 +755,7 @@ export const actions = {
       if (vaults.length) detail.push(['Vault connectors revoked', vaults.map((c) => c.name).join(', ')])
       if (sidecars.length) detail.push(['Sidecars revoked', sidecars.map((c) => c.name).join(', ')])
       if (routed.length) detail.push(['Stores now unreachable', routed.map((s) => s.name).join(', ')])
-      log(d, { object: `Deleted workspace ${w.name}`, detail: detail.length ? detail : undefined })
+      log(d, { shared: true, object: `Deleted workspace ${w.name}`, detail: detail.length ? detail : undefined })
     })
   },
 
@@ -733,7 +782,7 @@ export const actions = {
       }
       d.agents.push(agent)
       for (const w of d.workspaces) if (a.workspaceIds.includes(w.id) && !w.agentIds.includes(id)) w.agentIds.push(id)
-      log(d, { object: `Created agent ${a.label}`, detail: [['Workspaces', a.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None']] })
+      log(d, { shared: true, object: `Created agent ${a.label}`, detail: [['Workspaces', a.workspaceIds.map((id) => wsById(d, id)?.name).join(', ') || 'None']] })
     })
     return { id, token }
   },
@@ -754,7 +803,7 @@ export const actions = {
     update((d) => {
       const a = agentById(d, id)
       if (!a || !adminIn(d, a.orgId) || !label.trim() || label.trim() === a.label) return
-      log(d, { object: `Renamed agent ${a.label} → ${label.trim()}` })
+      log(d, { shared: true, object: `Renamed agent ${a.label} → ${label.trim()}` })
       a.label = label.trim()
     })
   },
@@ -799,18 +848,18 @@ export const actions = {
   },
 
   /* People */
-  invite(i: { email: string; role: Role; workspaceIds: string[] }) {
+  invite(i: { email: string; role: Role; workspaceIds: string[]; adminWorkspaceIds?: string[] }) {
     update((d) => {
       if (!adminIn(d, d.currentOrgId)) return
       const id = uid('inv')
-      d.invites.push({ id, orgId: d.currentOrgId, email: i.email, role: i.role, workspaceIds: i.workspaceIds, invitedBy: me(d).name, invitedAt: Date.now(), expiresAt: Date.now() + 7 * DAY })
+      d.invites.push({ id, orgId: d.currentOrgId, email: i.email, role: i.role, workspaceIds: i.workspaceIds, adminWorkspaceIds: i.adminWorkspaceIds?.filter((id) => i.workspaceIds.includes(id)), invitedBy: me(d).name, invitedAt: Date.now(), expiresAt: Date.now() + 7 * DAY })
       let u = d.users.find((x) => x.email === i.email)
       if (!u) {
         u = { id: uid('u'), name: i.email.split('@')[0].replace(/^./, (c) => c.toUpperCase()), email: i.email, roles: {}, status: 'invited', locked: false, lastActive: null, sessions: [] }
         d.users.push(u)
       }
       ;(d.incomingInvites[u.id] ??= []).push({ id, orgName: org(d)!.name, orgId: d.currentOrgId, invitedBy: me(d).name, role: i.role, expiresAt: Date.now() + 7 * DAY })
-      log(d, { object: `Invited ${i.email} as ${i.role}` })
+      log(d, { object: `Invited ${i.email} as ${i.role}`, shared: true, detail: i.workspaceIds.length ? [['Workspaces', i.workspaceIds.map((id) => `${wsById(d, id)?.name}${i.adminWorkspaceIds?.includes(id) ? ' (admin)' : ''}`).join(', ')]] : undefined })
     })
   },
   resendInvite(inviteId: string) {
@@ -818,7 +867,7 @@ export const actions = {
       const inv = d.invites.find((x) => x.id === inviteId)
       if (!inv || !adminIn(d, inv.orgId)) return
       inv.expiresAt = Date.now() + 7 * DAY
-      log(d, { object: `Resent invite to ${inv.email}`, orgId: inv.orgId })
+      log(d, { shared: true, object: `Resent invite to ${inv.email}`, orgId: inv.orgId })
     })
   },
   revokeInvite(inviteId: string) {
@@ -828,7 +877,7 @@ export const actions = {
       d.invites = d.invites.filter((x) => x.id !== inviteId)
       for (const k in d.incomingInvites) d.incomingInvites[k] = d.incomingInvites[k].filter((x) => x.id !== inviteId)
       // The person's record stays: accounts are never deleted here, so "Created by" and history keep resolving.
-      log(d, { object: `Revoked invite for ${inv.email}` })
+      log(d, { shared: true, object: `Revoked invite for ${inv.email}` })
     })
   },
   acceptInvite(inviteId: string) {
@@ -840,11 +889,15 @@ export const actions = {
       u.roles[inc.orgId] = inc.role
       u.status = 'active'
       u.lastActive = Date.now()
-      for (const w of d.workspaces) if (inv?.workspaceIds.includes(w.id) && !w.userIds.includes(u.id)) w.userIds.push(u.id)
+      for (const w of d.workspaces)
+        if (inv?.workspaceIds.includes(w.id)) {
+          if (!w.userIds.includes(u.id)) w.userIds.push(u.id)
+          if (inv.adminWorkspaceIds?.includes(w.id) && !w.adminIds.includes(u.id)) w.adminIds.push(u.id)
+        }
       d.invites = d.invites.filter((x) => x.id !== inviteId)
       d.incomingInvites[u.id] = d.incomingInvites[u.id].filter((x) => x.id !== inviteId)
       d.currentOrgId = inc.orgId
-      log(d, { object: `${u.name} joined as ${inc.role}`, orgId: inc.orgId })
+      log(d, { shared: true, object: `${u.name} joined as ${inc.role}`, orgId: inc.orgId })
     })
   },
   declineInvite(inviteId: string) {
@@ -853,7 +906,7 @@ export const actions = {
       d.incomingInvites[u.id] = (d.incomingInvites[u.id] ?? []).filter((x) => x.id !== inviteId)
       const inv = d.invites.find((x) => x.id === inviteId)
       d.invites = d.invites.filter((x) => x.id !== inviteId)
-      if (inv) log(d, { object: `${u.email} declined the invite`, orgId: inv.orgId })
+      if (inv) log(d, { shared: true, object: `${u.email} declined the invite`, orgId: inv.orgId })
     })
   },
   changeRole(userId: string, role: Role) {
@@ -868,7 +921,7 @@ export const actions = {
       if ((role === 'Owner' && myRole(d) !== 'Owner') || (before === 'Owner' && isLastOwner(d, userId))) return
       u.roles[d.currentOrgId] = role
       const released = settleCabinetManagement(d)
-      log(d, { object: `Changed ${u.name}'s role to ${role}`, detail: [['Role', `${before} → ${role}`], ...(released.length ? [['Cabinets now managed by admins', released.join(', ')] as [string, string]] : [])] })
+      log(d, { shared: true, object: `Changed ${u.name}'s role to ${role}`, detail: [['Role', `${before} → ${role}`], ...(released.length ? [['Cabinets now managed by admins', released.join(', ')] as [string, string]] : [])] })
     })
   },
   setUserSuspended(userId: string, suspended: boolean) {
@@ -878,7 +931,7 @@ export const actions = {
       // Only this membership changes: the person's other organizations, and their logs, are untouched.
       if (isSuspended(u, d.currentOrgId) === suspended) return
       const label = (s: boolean) => (s ? 'suspended' : 'active')
-      log(d, { object: `${suspended ? 'Suspended' : 'Reactivated'} ${u.name}`, detail: [['Status in this organization', `${label(!suspended)} → ${label(suspended)}`]] })
+      log(d, { shared: true, object: `${suspended ? 'Suspended' : 'Reactivated'} ${u.name}`, detail: [['Status in this organization', `${label(!suspended)} → ${label(suspended)}`]] })
       if (suspended) u.suspended = { ...u.suspended, [d.currentOrgId]: true }
       else if (u.suspended) delete u.suspended[d.currentOrgId]
     })
@@ -893,7 +946,7 @@ export const actions = {
       to.roles[d.currentOrgId] = 'Owner'
       from.roles[d.currentOrgId] = 'userAdmin'
       log(d, {
-        object: `Transferred ownership of ${org(d)?.name} to ${to.name}`,
+        shared: true, object: `Transferred ownership of ${org(d)?.name} to ${to.name}`,
         detail: [
           [to.name, `${before} → Owner`],
           [from.name, 'Owner → userAdmin'],
@@ -901,27 +954,19 @@ export const actions = {
       })
     })
   },
-  setUserWorkspaces(userId: string, wsIds: string[]) {
+  /** Players › Assign workspaces: one person's role in each workspace (absent = not a member). One log row per workspace. */
+  setUserWorkspaces(userId: string, roles: Record<string, 'member' | 'admin'>) {
     update((d) => {
       if (!adminIn(d, d.currentOrgId) || !userById(d, userId)?.roles[d.currentOrgId]) return
-      const name = userById(d, userId)?.name
-      // One entry per workspace, so each workspace's own log shows who joined or left it.
-      for (const w of d.workspaces.filter((x) => x.orgId === d.currentOrgId)) {
-        const has = w.userIds.includes(userId)
-        if (wsIds.includes(w.id) && !has) {
-          w.userIds.push(userId)
-          log(d, { object: `Added ${name} to ${w.name}`, workspaceId: w.id, detail: [['Access', 'None → member']] })
-        }
-        if (!wsIds.includes(w.id) && has) {
-          w.userIds = w.userIds.filter((x) => x !== userId)
-          const released = settleCabinetManagement(d)
-          log(d, {
-            object: `Removed ${name} from ${w.name}`,
-            workspaceId: w.id,
-            detail: [['Access', 'Member → none'], ...(released.length ? [['Cabinets now managed by admins', released.join(', ')] as [string, string]] : [])],
-          })
-        }
-      }
+      for (const w of d.workspaces.filter((x) => x.orgId === d.currentOrgId)) applyMembership(d, w, userId, roles[w.id] ?? null)
+    })
+  },
+  /** Players › Agents › Assign workspaces. */
+  setAgentWorkspaces(agentId: string, wsIds: string[]) {
+    update((d) => {
+      const a = agentById(d, agentId)
+      if (!a || !adminIn(d, a.orgId)) return
+      for (const w of d.workspaces.filter((x) => x.orgId === a.orgId)) applyAgentMembership(d, w, a.id, wsIds.includes(w.id))
     })
   },
   /**
@@ -938,10 +983,14 @@ export const actions = {
       delete u.roles[d.currentOrgId]
       // Suspension belongs to the membership, so it goes with it.
       if (u.suspended) delete u.suspended[d.currentOrgId]
-      for (const w of d.workspaces) if (w.orgId === d.currentOrgId) w.userIds = w.userIds.filter((x) => x !== userId)
+      for (const w of d.workspaces)
+        if (w.orgId === d.currentOrgId) {
+          w.userIds = w.userIds.filter((x) => x !== userId)
+          w.adminIds = w.adminIds.filter((x) => x !== userId)
+        }
       const released = settleCabinetManagement(d)
       log(d, {
-        object: `Removed ${u.name} from the organization`,
+        shared: true, object: `Removed ${u.name} from the organization`,
         detail: [
           ['Role', `${role} → removed`],
           ['Workspaces', isAdminRole(role) ? 'All (as an org admin)' : lost.join(', ') || 'None'],
@@ -989,7 +1038,7 @@ export const actions = {
   reassignCabinet(id: string, managerId: string) {
     update((d) => {
       const c = d.cabinets.find((x) => x.id === id)
-      if (!c || !adminIn(d, wsById(d, c.workspaceId)?.orgId) || !hasWorkspaceAccess(d, managerId, c.workspaceId)) return
+      if (!c || !wsAdminIn(d, wsById(d, c.workspaceId)) || !hasWorkspaceAccess(d, managerId, c.workspaceId)) return
       const before = userById(d, c.managedBy)?.name ?? 'Org admins'
       c.managedBy = managerId
       log(d, { object: `${userById(d, managerId)?.name} now manages ${c.name}`, workspaceId: c.workspaceId, detail: [['Managed by', `${before} → ${userById(d, managerId)?.name}`]] })
@@ -1009,7 +1058,7 @@ export const actions = {
   enrollConnector(c: { name: string; workspaceId: string }) {
     const id = uid('cn')
     update((d) => {
-      if (!adminIn(d, wsById(d, c.workspaceId)?.orgId)) return
+      if (!wsAdminIn(d, wsById(d, c.workspaceId))) return
       d.connectors.push({ id, orgId: d.currentOrgId, kind: 'vault', name: c.name, workspaceId: c.workspaceId, version: '1.4.2', health: 'healthy', lastSeen: Date.now(), ip: `10.2.14.${20 + Math.floor(Math.random() * 60)}`, enrolledBy: me(d).name.replace(/(\w+) (\w).*/, '$1 $2.'), enrolledAt: Date.now() })
       // The person who issued the enrollment token is attributed; the heartbeat is the connector's own.
       log(d, { object: `Enrolled vault connector ${c.name} in ${wsById(d, c.workspaceId)?.name ?? 'a workspace'}`, workspaceId: c.workspaceId })
@@ -1023,7 +1072,7 @@ export const actions = {
     update((d) => {
       const w = wsById(d, c.workspaceId)
       const a = agentById(d, c.agentId)
-      if (!w || !adminIn(d, w.orgId) || !a || a.orgId !== w.orgId || !w.agentIds.includes(a.id) || !c.protocols.length) return
+      if (!w || !wsAdminIn(d, w) || !a || a.orgId !== w.orgId || !w.agentIds.includes(a.id) || !c.protocols.length) return
       const host = `${c.name.replace(/[^a-z0-9-]/gi, '').toLowerCase() || 'app'}-${Math.random().toString(16).slice(2, 6)}.${w.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.internal`
       d.connectors.push({ id, orgId: w.orgId, kind: 'sidecar', name: c.name, workspaceId: w.id, agentId: a.id, protocols: c.protocols, listen: c.listen, host, requestsBase: 0, version: '1.5.0', health: 'healthy', lastSeen: Date.now(), ip: `10.2.30.${20 + Math.floor(Math.random() * 60)}`, enrolledBy: me(d).name.replace(/(\w+) (\w).*/, '$1 $2.'), enrolledAt: Date.now() })
       log(d, { object: `Enrolled sidecar ${c.name} in ${w.name} for ${a.label}`, workspaceId: w.id, detail: [['Agent', a.label], ['Protocols', c.protocols.map((p) => p.toUpperCase()).join(', ')], ['Listens on', c.listen]] })
@@ -1037,7 +1086,7 @@ export const actions = {
       const c = d.connectors.find((x) => x.id === id)
       const w = c && wsById(d, c.workspaceId)
       const a = agentById(d, agentId)
-      if (!c || c.kind !== 'sidecar' || !w || !adminIn(d, w.orgId) || !a || a.status !== 'active' || !w.agentIds.includes(a.id) || c.agentId === a.id) return
+      if (!c || c.kind !== 'sidecar' || !w || !wsAdminIn(d, w) || !a || a.status !== 'active' || !w.agentIds.includes(a.id) || c.agentId === a.id) return
       const before = agentById(d, c.agentId ?? '')?.label ?? '—'
       c.agentId = a.id
       log(d, { object: `Rebound sidecar ${c.name} to ${a.label}`, workspaceId: w.id, detail: [['Agent', `${before} → ${a.label}`]] })
@@ -1046,7 +1095,7 @@ export const actions = {
   /** New credential for a running connector. Checked before minting; the token is returned once and never stored. */
   rotateConnector(id: string) {
     const c = db.connectors.find((x) => x.id === id)
-    if (!c || !adminIn(db, c.orgId)) return null
+    if (!c || !wsAdminIn(db, wsById(db, c.workspaceId))) return null
     const token = newConnectorToken()
     update((d) => {
       const x = d.connectors.find((y) => y.id === id)
@@ -1059,7 +1108,7 @@ export const actions = {
   renameConnector(id: string, name: string) {
     update((d) => {
       const c = d.connectors.find((x) => x.id === id)
-      if (!c || !adminIn(d, c.orgId) || !name.trim() || name.trim() === c.name) return
+      if (!c || !wsAdminIn(d, wsById(d, c.workspaceId)) || !name.trim() || name.trim() === c.name) return
       log(d, { object: `Renamed ${connectorKind(c)} ${c.name} → ${name.trim()}`, workspaceId: c.workspaceId })
       c.name = name.trim()
     })
@@ -1067,7 +1116,7 @@ export const actions = {
   revokeConnector(id: string) {
     update((d) => {
       const c = d.connectors.find((x) => x.id === id)
-      if (!c || !adminIn(d, c.orgId)) return
+      if (!c || !wsAdminIn(d, wsById(d, c.workspaceId))) return
       d.connectors = d.connectors.filter((x) => x.id !== id)
       for (const s of d.stores) if (s.route === id) s.health = 'unreachable'
       log(d, { object: `Revoked ${connectorKind(c)} ${c.name}`, workspaceId: c.workspaceId })
@@ -1108,7 +1157,7 @@ export const actions = {
       u.unlockRequest = undefined
       if (locked) u.sessions = []
       for (const orgId of Object.keys(u.roles))
-        log(d, { orgId, type: 'support', actor: 'Keyhole support', actorKind: 'support', actorId: 'support', object: `${locked ? 'Locked' : 'Unlocked'} account ${u.email}`, detail: [['Reason or ticket', reason]] })
+        log(d, { shared: true, orgId, type: 'support', actor: 'Keyhole support', actorKind: 'support', actorId: 'support', object: `${locked ? 'Locked' : 'Unlocked'} account ${u.email}`, detail: [['Reason or ticket', reason]] })
     })
   },
   signOutEverywhere(userId: string, reason?: string) {
@@ -1125,7 +1174,7 @@ export const actions = {
             actor: 'Keyhole support',
             actorKind: 'support',
             actorId: 'support',
-            object: `Signed ${u.email} out everywhere (${was} session${was === 1 ? '' : 's'})`,
+            shared: true, object: `Signed ${u.email} out everywhere (${was} session${was === 1 ? '' : 's'})`,
             detail: reason ? [['Reason or ticket', reason]] : undefined,
           })
     })
@@ -1145,7 +1194,7 @@ export const actions = {
       if (!u || d.currentUserId !== 'support') return
       for (const inv of d.invites.filter((x) => x.email === u.email)) {
         inv.expiresAt = Date.now() + 7 * DAY
-        log(d, { orgId: inv.orgId, type: 'support', actor: 'Keyhole support', actorKind: 'support', actorId: 'support', object: `Resent invite to ${u.email}` })
+        log(d, { shared: true, orgId: inv.orgId, type: 'support', actor: 'Keyhole support', actorKind: 'support', actorId: 'support', object: `Resent invite to ${u.email}` })
       }
     })
   },
@@ -1169,7 +1218,7 @@ export const actions = {
     update((d) => {
       const o = org(d)
       if (!o || !name.trim() || myRole(d) !== 'Owner' || !inMyOrg(d, o.id)) return
-      log(d, { object: `Renamed organization ${o.name} → ${name.trim()}` })
+      log(d, { shared: true, object: `Renamed organization ${o.name} → ${name.trim()}` })
       o.name = name.trim()
     })
   },

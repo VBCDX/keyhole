@@ -71,6 +71,7 @@ export function UserDetail() {
             {ws.length ? ws.map((w) => (
               <Link key={w.id} to={`/workspaces/${w.id}/summary`} className="rounded-md border border-edge bg-rail px-2.5 py-1 text-[13px] text-zinc-300 hover:text-white">
                 {w.name}
+                {w.adminIds.includes(u.id) && !isAdminRole(role) && <span className="text-zinc-500"> · admin</span>}
               </Link>
             )) : <span className="text-sm2 text-zinc-500">None</span>}
           </div>

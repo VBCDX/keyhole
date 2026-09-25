@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ago, plural } from '../lib/format'
-import { actions, agentById, connectorKind, isAdmin, protocolList, orgWorkspaces, sidecarRequests24h, useDB, useNow, visibleConnectors, wsById } from '../lib/store'
+import { actions, agentById, canAdminWorkspace, connectorKind, protocolList, orgWorkspaces, sidecarRequests24h, useDB, useNow, visibleConnectors, wsById } from '../lib/store'
 import type { Connector } from '../lib/types'
 import { EnrollPanel } from '../components/EnrollPanel'
 import { TokenPanel } from '../components/keyhole'
@@ -38,9 +38,9 @@ export function ConnectorHealth({ c }: { c: Connector }) {
 export function Connectors() {
   const d = useDB()
   const now = useNow()
-  const admin = isAdmin(d)
-  // Who may manage a connector: admins of its workspace (org admins today).
-  const canManage = (c: Connector) => admin && orgWorkspaces(d).some((w) => w.id === c.workspaceId)
+  // Org admins, and workspace admins for connectors enrolled to their workspace, manage connectors.
+  const canManage = (c: Connector) => canAdminWorkspace(d, c.workspaceId)
+  const admin = orgWorkspaces(d).some((w) => canAdminWorkspace(d, w.id))
   const all = visibleConnectors(d)
   const [filter, setFilter] = useState<Filter>('all')
   const list = all.filter((c) => filter === 'all' || c.kind === filter)

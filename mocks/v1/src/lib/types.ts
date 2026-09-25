@@ -37,6 +37,8 @@ export interface Invite {
   email: string
   role: Role
   workspaceIds: string[]
+  /** Of workspaceIds, the ones they join as workspace admin. */
+  adminWorkspaceIds?: string[]
   invitedBy: string
   invitedAt: number
   expiresAt: number
@@ -145,6 +147,8 @@ export interface Workspace {
   mcp: boolean
   keyIds: string[]
   userIds: string[]
+  /** Explicit workspace admins (a subset of userIds). None set: the org's admins are its admins by default. */
+  adminIds: string[]
   agentIds: string[]
   tools: WorkspaceTool[]
   createdAt: number
@@ -245,6 +249,10 @@ export interface AuditEvent {
   trk: string
   reason?: string
   detail?: [string, string][]
+  /** Shared with Dispatch: org, workspace and player events both apps show, marked "Shared". */
+  shared?: boolean
+  /** For shared events recorded by the other app. */
+  source?: 'Dispatch'
   /** Set when the request came through a sidecar: its name at the time, and its id. */
   via?: string
   viaId?: string

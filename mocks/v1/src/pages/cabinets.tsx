@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { initials, plural } from '../lib/format'
-import { actions, agentById, hasWorkspaceAccess, isAdmin, isAdminRole, keyById, liveTool, me, orgTools, toolById, useDB, userById, workspacePeople } from '../lib/store'
+import { actions, agentById, hasWorkspaceAccess, isAdminRole, keyById, liveTool, me, orgTools, toolById, useDB, userById, workspacePeople, canAdminWorkspace } from '../lib/store'
 import type { Cabinet, PlayerRef, Workspace } from '../lib/types'
 import { ImpactDialog, ImpactRows } from '../components/shared'
 import { SECRET_LINE, SecretField } from '../components/keyhole'
@@ -19,7 +19,8 @@ function LockGlyph() {
 export function CabinetsTab() {
   const d = useDB()
   const w = useWorkspace()
-  const admin = isAdmin(d)
+  // Workspace admins manage every cabinet in their workspace, like org admins.
+  const admin = canAdminWorkspace(d, w.id)
   const cabinets = d.cabinets.filter((c) => c.workspaceId === w.id)
   const [creating, setCreating] = useState(false)
   const [lockFor, setLockFor] = useState<Cabinet | null>(null)

@@ -511,8 +511,9 @@ export function Footer({ children, className }: { children: ReactNode; className
   return <div className={cx('flex justify-end gap-2 border-t border-line pt-4', className)}>{children}</div>
 }
 
-/** Tiny popover menu for row actions. */
-export function Menu({ items, label = 'Actions' }: { items: ({ label: string; onClick: () => void; danger?: boolean; disabled?: boolean } | null)[]; label?: string }) {
+export type MenuItem = { label: string; onClick: () => void; danger?: boolean; disabled?: boolean; reason?: string }
+/** Tiny popover menu for row actions. 'separator' divides shared items from app-specific ones. */
+export function Menu({ items, label = 'Actions' }: { items: (MenuItem | 'separator' | null)[]; label?: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -522,35 +523,52 @@ export function Menu({ items, label = 'Actions' }: { items: ({ label: string; on
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [open])
+  // Drop leading, trailing and doubled separators left behind by conditional items.
+  const shown = items.filter((it): it is MenuItem | 'separator' => it !== null).filter((it, i, all) => it !== 'separator' || (i > 0 && i < all.length - 1 && all[i - 1] !== 'separator'))
   return (
-    <div ref={ref} className="relative inline-block" onClick={(e) => e.stopPropagation()}>
+    <div
+      ref={ref}
+      className="relative inline-block"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && open) {
+          e.preventDefault()
+          setOpen(false)
+          trigger.current?.focus()
+        }
+      }}
+    >
       <button ref={trigger} type="button" aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)} className="rounded-md px-2 py-0.5 text-zinc-500 hover:bg-line hover:text-zinc-200">
         ⋯
       </button>
       {open && (
-        <div className="absolute top-full right-0 z-30 mt-1 min-w-44 rounded-lg border border-edge bg-panel p-1 shadow-xl">
-          {items.filter(Boolean).map((it) => (
-            <button
-              key={it!.label}
-              type="button"
-              // aria-disabled rather than disabled: the item stays reachable by Tab, so its label
-              // (often the reason it's unavailable) is still read out.
-              aria-disabled={it!.disabled || undefined}
-              onClick={() => {
-                if (it!.disabled) return
-                // Park focus on the trigger so a dialog opened from here can hand it back.
-                trigger.current?.focus()
-                setOpen(false)
-                it!.onClick()
-              }}
-              className={cx(
-                'block w-full rounded-md px-3 py-1.5 text-left text-[13px] aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent',
-                it!.danger ? 'text-red-400 hover:bg-red-500/10' : 'text-zinc-300 hover:bg-line',
-              )}
-            >
-              {it!.label}
-            </button>
-          ))}
+        <div className="absolute top-full right-0 z-30 mt-1 min-w-52 rounded-lg border border-edge bg-panel p-1 shadow-xl">
+          {shown.map((it, i) =>
+            it === 'separator' ? (
+              <div key={`sep${i}`} role="separator" className="my-1 border-t border-line" />
+            ) : (
+              <button
+                key={it.label}
+                type="button"
+                // aria-disabled rather than disabled: the item stays reachable by Tab, so its reason is still read out.
+                aria-disabled={it.disabled || undefined}
+                onClick={() => {
+                  if (it.disabled) return
+                  // Park focus on the trigger so a dialog opened from here can hand it back.
+                  trigger.current?.focus()
+                  setOpen(false)
+                  it.onClick()
+                }}
+                className={cx(
+                  'block w-full rounded-md px-3 py-1.5 text-left text-[13px] aria-disabled:cursor-default aria-disabled:hover:bg-transparent',
+                  it.danger ? 'text-red-400 hover:bg-red-500/10' : 'text-zinc-300 hover:bg-line',
+                )}
+              >
+                <span className={cx(it.disabled && 'opacity-40')}>{it.label}</span>
+                {it.disabled && it.reason && <span className="block text-2xs text-zinc-500">{it.reason}</span>}
+              </button>
+            ),
+          )}
         </div>
       )}
     </div>

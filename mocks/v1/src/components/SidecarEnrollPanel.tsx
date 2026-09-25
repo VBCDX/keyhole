@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { newEnrollmentToken } from '../lib/format'
-import { actions, agentById, orgConnectors, orgWorkspaces, useDB } from '../lib/store'
+import { actions, canAdminWorkspace, agentById, orgConnectors, orgWorkspaces, useDB } from '../lib/store'
 import type { SidecarProtocol } from '../lib/types'
 import { HEARTBEAT_AFTER_MS, enrollmentExpiry, sidecarAppConfig, useCountdown } from '../lib/enroll'
 import { CopyChip, KeyholeIcon } from './keyhole'
@@ -19,7 +19,8 @@ const PROTOCOLS: { id: SidecarProtocol; label: string }[] = [
  */
 export function SidecarEnrollPanel({ workspaceId, onEnrolled }: { workspaceId?: string; onEnrolled?: (id: string) => void }) {
   const d = useDB()
-  const workspaces = orgWorkspaces(d)
+  // Only workspaces the viewer administers (org admins: all of them).
+  const workspaces = orgWorkspaces(d).filter((w) => canAdminWorkspace(d, w.id))
   const [wsId, setWsId] = useState(workspaceId ?? workspaces[0]?.id ?? '')
   const ws = workspaces.find((w) => w.id === (workspaceId ?? wsId))
   const agents = (ws?.agentIds ?? []).map((id) => agentById(d, id)).filter((a) => a?.status === 'active') as NonNullable<ReturnType<typeof agentById>>[]

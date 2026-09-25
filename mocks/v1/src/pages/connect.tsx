@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ago } from '../lib/format'
-import { actions, agentById, getDB, isAdmin, liveTool, log, orgEvents, protocolList, sessionTokenFor, toolById, update, useDB, useNow } from '../lib/store'
+import { actions, agentById, getDB, liveTool, log, orgEvents, protocolList, sessionTokenFor, toolById, update, useDB, useNow, canAdminWorkspace } from '../lib/store'
 import type { AuditEvent, Workspace } from '../lib/types'
 import { SidecarEnrollPanel } from '../components/SidecarEnrollPanel'
 import { sidecarAppConfig } from '../lib/enroll'
@@ -139,7 +139,7 @@ function ConnectPanel({ kind, w, open, onClose }: { kind: Kind; w: Workspace; op
   const [tab, setTab] = useState<'direct' | 'sidecar'>('direct')
   const [enrollingSidecar, setEnrollingSidecar] = useState(false)
   const sidecars = d.connectors.filter((c) => c.kind === 'sidecar' && c.workspaceId === w.id)
-  const admin = isAdmin(d)
+  const admin = canAdminWorkspace(d, w.id)
   const [client, setClient] = useState<Client>('desktop')
   const agents = w.agentIds.map((id) => agentById(d, id)).filter((a) => a && a.status !== 'revoked') as NonNullable<ReturnType<typeof agentById>>[]
   const [agentId, setAgentId] = useState('')
@@ -345,7 +345,7 @@ export function ConnectTab() {
   const d = useDB()
   const now = useNow()
   const w = useWorkspace()
-  const admin = isAdmin(d)
+  const admin = canAdminWorkspace(d, w.id)
   const [panel, setPanel] = useState<Kind | null>(null)
   const [turningOff, setTurningOff] = useState<Kind | null>(null)
   const active = w.agentIds.map((id) => agentById(d, id)).filter((a) => a?.status === 'active').map((a) => a!.label)

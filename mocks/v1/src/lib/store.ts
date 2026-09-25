@@ -21,7 +21,7 @@ import type {
 } from './types'
 
 const LS_KEY = 'keyhole-mocks-v1'
-const VERSION = 7
+const VERSION = 8
 
 function load(): DB {
   try {
@@ -265,6 +265,9 @@ export const orgWorkspaces = (d: DB) => {
   return all.filter((w) => w.userIds.includes(d.currentUserId))
 }
 export const orgEvents = (d: DB) => d.events.filter((e) => e.orgId === d.currentOrgId)
+/** Last active *in this organization*, from its own audit log. Activity in other organizations is never shown. */
+export const lastActiveInOrg = (d: DB, userId: string): number | null =>
+  orgEvents(d).reduce<number | null>((m, e) => (e.actorKind === 'user' && e.actorId === userId && (m === null || e.at > m) ? e.at : m), null)
 /** Connectors the current person may see: all for admins, those enrolled in their own workspaces for `user`. */
 export const visibleConnectors = (d: DB) => orgConnectors(d).filter((c) => isAdmin(d) || canSeeWorkspace(d, c.workspaceId))
 /** Whether the current person may open a workspace: admins any in the org, `user` only their own. */

@@ -161,7 +161,7 @@ export function populatedDB(): DB {
   const ev = (
     id: string,
     ago: number,
-    e: Omit<AuditEvent, 'id' | 'at' | 'orgId'>,
+    e: Omit<AuditEvent, 'id' | 'at' | 'orgId'> & { orgId?: string },
   ): AuditEvent => ({ id, at: now - ago, orgId: 'org_acme', ...e })
 
   const stripeReq = {
@@ -199,8 +199,12 @@ export function populatedDB(): DB {
     ev('ev_9', 3 * HOUR, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Mia Chen', actorId: 'u_mia', workspaceId: 'ws_prod', object: "Created cabinet Mia's billing set (locked)", result: 'Done', trk: 'trk_7x2nb4q9' }),
     ev('ev_13', 5 * HOUR, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Ravi Mehta', actorId: 'u_ravi', workspaceId: 'ws_incidents', object: 'Added triage-bot to Incidents', result: 'Done', trk: 'trk_5sh4r3dx', shared: true, source: 'Dispatch', detail: [['Workspace access', 'none → member'], ['From', 'Dispatch']] }),
     ev('ev_10', 2 * DAY, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Dana Keller', actorId: 'u_dana', object: 'Invited sam@acme.com as user', result: 'Done', trk: 'trk_9b3ws6h1', shared: true }),
+    ev('ev_14', 4 * HOUR, { orgId: 'org_nw', type: 'admin', severity: 'info', actorKind: 'user', actor: 'Leo Park', actorId: 'u_leo', workspaceId: 'ws_docs', object: 'Granted GitHub issues to Docs site', result: 'Done', trk: 'trk_4n8lp2w6' }),
+    ev('ev_15', 1 * DAY, { orgId: 'org_nw', type: 'admin', severity: 'info', actorKind: 'user', actor: 'Noor Haddad', actorId: 'u_noor', workspaceId: 'ws_docs', object: 'Added docs-bot to Docs site', result: 'Done', trk: 'trk_8q3nh5d1', shared: true, detail: [['Workspace access', 'none → member']] }),
+    ev('ev_16', 2 * DAY + 3 * HOUR, { orgId: 'org_nw', type: 'admin', severity: 'info', actorKind: 'user', actor: 'Mia Chen', actorId: 'u_mia', object: 'Signed in', result: 'Done', trk: 'trk_6m1ch7r4' }),
     ev('ev_11', 3 * DAY, { type: 'verification', severity: 'ok', actorKind: 'agent', actor: 'billing-agent', actorId: 'ag_billing', object: 'First request verified', workspaceId: 'ws_prod', result: '200 · 182 ms', trk: 'trk_1v8rf5k3' }),
     ev('ev_12', 3 * DAY + HOUR, { type: 'connection', severity: 'ok', actorKind: 'connector', actor: 'edge-01', object: 'Connector enrolled', workspaceId: 'ws_prod', result: 'First heartbeat', trk: 'trk_2e7yl4c6' }),
+    ev('ev_17', 6 * DAY, { type: 'admin', severity: 'info', actorKind: 'user', actor: 'Jo Reyes', actorId: 'u_jo', object: 'Signed in', result: 'Done', trk: 'trk_3j9ry5e2' }),
   ]
 
   return {

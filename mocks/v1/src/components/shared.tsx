@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ago, clock, expiringSoon, initials, maskToken, until } from '../lib/format'
 import { liveTick } from '../lib/simulate'
-import { actions, agentsCreatedBy, isActive, isAdmin, isAdminRole, isDemotion, isLastOwner, isSuspended, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, workspaceAdmins, wsById } from '../lib/store'
+import { actions, agentsCreatedBy, isActive, isAdmin, isAdminRole, isDemotion, isLastOwner, isSuspended, lastActiveInOrg, myRole, org, orgAdmins, orgWorkspaces, useDB, useNow, workspaceAdmins, wsById } from '../lib/store'
 import type { Agent, AuditEvent, Role, User, Workspace } from '../lib/types'
 import { CopyChip, TokenPanel } from './keyhole'
 import {
@@ -226,7 +226,7 @@ export function UsersTable({ rows, className, ws }: { rows: UserRow[]; className
 
   return (
     <>
-      <Table cols={cols} head={['Name', 'Email', 'Org role', 'Status', 'Last active', 'Workspaces', ...(ws ? ['Role'] : []), '']} className={className}>
+      <Table cols={cols} head={['Name', 'Email', 'Org role', 'Status', 'Last active (this org)', 'Workspaces', ...(ws ? ['Role'] : []), '']} className={className}>
         <ListBody cols={cols} what="users" empty={rows.length ? undefined : <div className="p-8 text-center text-[13px] text-zinc-400">No one here yet. Invite a teammate to share this workspace.</div>}>
           {rows.map(({ user: u, role, invited }) => (
             <Row key={u.id} cols={cols} onClick={invited ? undefined : () => nav(`/players/users/${u.id}`)}>
@@ -244,7 +244,7 @@ export function UsersTable({ rows, className, ws }: { rows: UserRow[]; className
                   <StatusInline tone="green">Active</StatusInline>
                 )}
               </div>
-              <div className="text-zinc-500">{invited ? '—' : u.id === d.currentUserId ? 'Now' : ago(u.lastActive, now)}</div>
+              <div className="text-zinc-500">{invited ? '—' : u.id === d.currentUserId ? 'Now' : ago(lastActiveInOrg(d, u.id), now)}</div>
               <div className="truncate text-zinc-400">{invited ? invitedWs(u) : workspaceList(d, u, role)}</div>
               {ws && <div className={cx(workspaceRoleLabel(role, u.id, ws) === 'Member' ? 'text-zinc-400' : 'text-zinc-200')}>{invited ? '—' : workspaceRoleLabel(role, u.id, ws)}</div>}
               <div className="text-right">{admin && !invited && <Menu items={menuFor({ user: u, role, invited })} />}</div>
@@ -260,7 +260,7 @@ export function UsersTable({ rows, className, ws }: { rows: UserRow[]; className
         rows={[
           ['Workspaces', suspendFor ? workspaceList(d, suspendFor.user, suspendFor.role) : ''],
           ['Agents they created', suspendFor ? createdAgentsLabel(agentsCreatedBy(d, suspendFor.user).map((a) => a.label)) : ''],
-          ['Last active', ago(suspendFor?.user.lastActive ?? null, now)],
+          ['Last active (this org)', ago(suspendFor ? lastActiveInOrg(d, suspendFor.user.id) : null, now)],
         ]}
         body="They can’t use this organization until you resume them; their other organizations aren’t affected. Nothing they created or did changes: agents, grants, keys and cabinets keep working."
         confirmLabel="Suspend user"
@@ -295,7 +295,7 @@ export function UsersTable({ rows, className, ws }: { rows: UserRow[]; className
           ['Workspaces', removeFor ? workspaceList(d, removeFor.user, removeFor.role) : ''],
           ['Cabinets they manage', cabinetsManaged.length ? `${cabinetsManaged.map((c) => c.name).join(', ')} — keep working; admins take over management` : 'None'],
           ['Agents they created', removeFor ? createdAgentsLabel(agentsCreatedBy(d, removeFor.user).map((a) => a.label)) : ''],
-          ['Last active', ago(removeFor?.user.lastActive ?? null, now)],
+          ['Last active (this org)', ago(removeFor ? lastActiveInOrg(d, removeFor.user.id) : null, now)],
         ]}
         body="They lose access to every workspace in this organization. Nothing they created or did changes — tools they granted stay granted, keys and vault connectors they added stay — and the audit log keeps their name on it."
         confirmLabel="Remove user"

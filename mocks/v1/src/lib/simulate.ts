@@ -21,7 +21,15 @@ export function liveTick() {
     if (!candidates.length) return
 
     const ops = candidates.find((c) => agentById(d, c.agentId)?.label === 'ops-agent' && toolById(d, c.toolId)?.catalog === 'stripe')
-    const pick = ops && Math.random() < 0.55 ? ops : candidates[Math.floor(Math.random() * candidates.length)]
+    // Agents that run behind a sidecar get a steady share, so its traffic shows up in a busy workspace.
+    const behindSidecar = candidates.filter((c) => sidecarFor(d, c.agentId, c.wsId))
+    const r = Math.random()
+    const pick =
+      ops && r < 0.45
+        ? ops
+        : behindSidecar.length && r < 0.7
+          ? behindSidecar[Math.floor(Math.random() * behindSidecar.length)]
+          : candidates[Math.floor(Math.random() * candidates.length)]
     const a = agentById(d, pick.agentId)!
     const t = toolById(d, pick.toolId)!
     const ws = workspaces.find((w) => w.id === pick.wsId)!

@@ -196,6 +196,8 @@ export interface Connector {
   ip: string | null
   enrolledBy: string
   enrolledAt: number
+  /** Last time its credential was rotated; the previous one keeps working for 10 minutes. */
+  rotatedAt?: number
 }
 
 export type EventType =

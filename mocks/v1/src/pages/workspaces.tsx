@@ -43,8 +43,8 @@ const WS_COLS = '1.4fr 1.2fr 1.6fr 1fr 1.2fr'
 
 function wsHealth(d: ReturnType<typeof useDB>, w: Workspace) {
   const conns = d.connectors.filter((c) => c.workspaceId === w.id)
-  if (conns.some((c) => c.health === 'offline')) return { h: 'offline' as const, t: 'Connector offline' }
-  if (conns.some((c) => c.health === 'degraded')) return { h: 'degraded' as const, t: 'Connector degraded' }
+  if (conns.some((c) => c.health === 'offline')) return { h: 'offline' as const, t: 'Vault connector offline' }
+  if (conns.some((c) => c.health === 'degraded')) return { h: 'degraded' as const, t: 'Vault connector degraded' }
   const missing = w.tools.some((t) => missingSlots(d, w, t).length)
   if (missing) return { h: 'degraded' as const, t: 'Missing key slot' }
   if (w.keyIds.some((id) => keyById(d, id)?.sourceRemoved)) return { h: 'degraded' as const, t: 'Key source removed' }
@@ -289,7 +289,7 @@ export function WorkspaceDetail() {
         typeToConfirm={w.name}
         rows={[
           ['Players', `${plural(w.userIds.length, 'user')} · ${plural(liveAgents, 'agent')} lose access`, 'amber'],
-          ['Connectors enrolled here', conns.map((c) => c.name).join(', ') || 'None', conns.length ? 'amber' : undefined],
+          ['Vault connectors enrolled here', conns.map((c) => c.name).join(', ') || 'None', conns.length ? 'amber' : undefined],
           ['Stores that route through them', routed.map((s) => `${s.name} → becomes unreachable`).join('; ') || 'None', routed.length ? 'amber' : undefined],
           ['Tools granted', String(w.tools.length)],
           ['Cabinets', String(d.cabinets.filter((c) => c.workspaceId === w.id).length)],

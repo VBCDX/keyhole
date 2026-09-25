@@ -32,7 +32,7 @@ A **Prototype controls** pill sits at the bottom left. It isn't part of the prod
 |---|---|
 | 1 · Golden path | New org → Home checklist → Add key → Tools › Install Stripe (a draft) → Publish v1 → New workspace → Add tool (slot matching) → New agent (one-time token) → Workspace › Connect › MCP → Download config → first call lands |
 | 2 · OpenBao, public | Organizations › Stores › Add store › OpenBao. The first test finds the vault **Sealed**, and *Test again* passes. A path outside `secret/` gives **Not allowed**. An address containing `unreachable` gives **Can't reach**. |
-| 3 · OpenBao via connector | Same wizard, step 2 › *Through a Keyhole connector* › *Enroll a new connector* › Generate token. The heartbeat arrives in about 6 s and the new connector is picked. |
+| 3 · OpenBao via vault connector | Same wizard, step 2 › *Through a Keyhole vault connector* › *Enroll a new vault connector* › Generate token. The heartbeat arrives in about 6 s and the new vault connector is picked. Connectors › ⋯ › *Rotate token…* issues a new credential, shown once. |
 | 4 · Invite + locked cabinet | Members › Invite user. View as Sam › Accept. Workspace › Cabinets › New cabinet › Only these players (people + agents). |
 | 5 · Grant with missing slot | Organizations › Tools › Grant, then tick Staging: *Missing: `stripe_secret`* › Expose a key › Use this key › Grant. The exposure is staged and only applied on Grant; Production shows as already granted with its current mapping. |
 | 6 · Revoke | Players › Agents › billing-agent › Revoke token. Its next attempt appears in the log as blocked about 4 s later. |

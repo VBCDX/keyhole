@@ -249,7 +249,7 @@ export function UsersTable({ rows, className }: { rows: UserRow[]; className?: s
           ['Agents they created', removeFor ? createdAgentsLabel(agentsCreatedBy(d, removeFor.user).map((a) => a.label)) : ''],
           ['Last active', ago(removeFor?.user.lastActive ?? null, now)],
         ]}
-        body="They lose access to every workspace in this organization. Nothing they created or did changes — tools they granted stay granted, keys and connectors they added stay — and the audit log keeps their name on it."
+        body="They lose access to every workspace in this organization. Nothing they created or did changes — tools they granted stay granted, keys and vault connectors they added stay — and the audit log keeps their name on it."
         confirmLabel="Remove user"
         onConfirm={() => removeFor && actions.removeUser(removeFor.user.id)}
       />

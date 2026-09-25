@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { CATALOG } from './catalog'
-import { DAY, maskToken, newToken, plural, trackingCode, uid } from './format'
+import { DAY, maskToken, newConnectorToken, newToken, plural, trackingCode, uid } from './format'
 import { freshDB, populatedDB } from './seed'
 import type {
   Agent,
@@ -692,7 +692,7 @@ export const actions = {
       d.connectors = d.connectors.filter((c) => c.workspaceId !== wsId)
       for (const s of routed) s.health = 'unreachable'
       const detail: [string, string][] = []
-      if (conns.length) detail.push(['Connectors revoked', conns.map((c) => c.name).join(', ')])
+      if (conns.length) detail.push(['Vault connectors revoked', conns.map((c) => c.name).join(', ')])
       if (routed.length) detail.push(['Stores now unreachable', routed.map((s) => s.name).join(', ')])
       log(d, { object: `Deleted workspace ${w.name}`, detail: detail.length ? detail : undefined })
     })
@@ -1000,16 +1000,29 @@ export const actions = {
       if (!adminIn(d, wsById(d, c.workspaceId)?.orgId)) return
       d.connectors.push({ id, orgId: d.currentOrgId, name: c.name, workspaceId: c.workspaceId, version: '1.4.2', health: 'healthy', lastSeen: Date.now(), ip: `10.2.14.${20 + Math.floor(Math.random() * 60)}`, enrolledBy: me(d).name.replace(/(\w+) (\w).*/, '$1 $2.'), enrolledAt: Date.now() })
       // The person who issued the enrollment token is attributed; the heartbeat is the connector's own.
-      log(d, { object: `Enrolled connector ${c.name} in ${wsById(d, c.workspaceId)?.name ?? 'a workspace'}`, workspaceId: c.workspaceId })
-      log(d, { type: 'connection', severity: 'ok', actor: c.name, actorKind: 'connector', object: 'Connector enrolled', workspaceId: c.workspaceId, result: 'First heartbeat' })
+      log(d, { object: `Enrolled vault connector ${c.name} in ${wsById(d, c.workspaceId)?.name ?? 'a workspace'}`, workspaceId: c.workspaceId })
+      log(d, { type: 'connection', severity: 'ok', actor: c.name, actorKind: 'connector', object: 'Vault connector enrolled', workspaceId: c.workspaceId, result: 'First heartbeat' })
     })
     return id
+  },
+  /** New credential for a running connector. Checked before minting; the token is returned once and never stored. */
+  rotateConnector(id: string) {
+    const c = db.connectors.find((x) => x.id === id)
+    if (!c || !adminIn(db, c.orgId)) return null
+    const token = newConnectorToken()
+    update((d) => {
+      const x = d.connectors.find((y) => y.id === id)
+      if (!x) return
+      x.rotatedAt = Date.now()
+      log(d, { object: `Rotated token for vault connector ${x.name}`, workspaceId: x.workspaceId, detail: [['Credential', 'New token issued · the old one works 10 more minutes']] })
+    })
+    return token
   },
   renameConnector(id: string, name: string) {
     update((d) => {
       const c = d.connectors.find((x) => x.id === id)
       if (!c || !adminIn(d, c.orgId) || !name.trim() || name.trim() === c.name) return
-      log(d, { object: `Renamed connector ${c.name} → ${name.trim()}`, workspaceId: c.workspaceId })
+      log(d, { object: `Renamed vault connector ${c.name} → ${name.trim()}`, workspaceId: c.workspaceId })
       c.name = name.trim()
     })
   },
@@ -1019,7 +1032,7 @@ export const actions = {
       if (!c || !adminIn(d, c.orgId)) return
       d.connectors = d.connectors.filter((x) => x.id !== id)
       for (const s of d.stores) if (s.route === id) s.health = 'unreachable'
-      log(d, { object: `Revoked connector ${c.name}` })
+      log(d, { object: `Revoked vault connector ${c.name}` })
     })
   },
 

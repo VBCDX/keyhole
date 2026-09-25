@@ -111,7 +111,7 @@ export function EnrollPanel({
             <KeyholeIcon pulse />
             <div>
               <div className="text-[13px] font-semibold">Waiting for the first heartbeat…</div>
-              <div className="mt-0.5 text-xs text-zinc-500">This turns green the moment the connector reports in.</div>
+              <div className="mt-0.5 text-xs text-zinc-500">This turns green the moment the vault connector reports in.</div>
             </div>
           </div>
         ))}

@@ -3,6 +3,7 @@ import { ago, plural } from '../lib/format'
 import { actions, isAdmin, useDB, useNow, visibleConnectors, wsById } from '../lib/store'
 import type { Connector } from '../lib/types'
 import { EnrollPanel } from '../components/EnrollPanel'
+import { TokenPanel } from '../components/keyhole'
 import { ImpactDialog, ListBody } from '../components/shared'
 import { Button, Dot, Field, Footer, Input, Menu, Modal, PageTitle, Row, SlideOver, Table, cx } from '../components/ui'
 
@@ -41,17 +42,20 @@ export function Connectors() {
   const [renaming, setRenaming] = useState<Connector | null>(null)
   const [newName, setNewName] = useState('')
   const [revoking, setRevoking] = useState<Connector | null>(null)
+  const [rotating, setRotating] = useState<Connector | null>(null)
+  const [rotated, setRotated] = useState<{ c: Connector; token: string } | null>(null)
   const stores = revoking ? d.stores.filter((s) => s.route === revoking.id) : []
+  const routedThrough = (c: Connector | null) => (c ? d.stores.filter((s) => s.route === c.id).map((s) => s.name) : [])
 
   return (
     <div>
-      <PageTitle actions={admin && <Button variant="primary" onClick={() => setEnrolling(true)}>Enroll connector</Button>}>Connectors</PageTitle>
+      <PageTitle actions={admin && <Button variant="primary" onClick={() => setEnrolling(true)}>Enroll vault connector</Button>}>Connectors</PageTitle>
       <div className="mt-1 text-sm2 text-zinc-500">
         Installed copies of <span className="font-mono text-xs">keyholed</span>. They make traffic leave from your network and reach vaults behind your firewall.
       </div>
       {list.length === 0 ? (
         <div className="mt-5 max-w-[1060px] rounded-[10px] border border-edge bg-panel p-10 text-center">
-          <div className="text-[13px] text-zinc-400">No connectors yet. Enroll one to route traffic through your own network.</div>
+          <div className="text-[13px] text-zinc-400">No vault connectors yet. Enroll one to reach vaults behind your firewall.</div>
           {admin && (
             <Button variant="primary" className="mt-4" onClick={() => setEnrolling(true)}>
               Enroll connector
@@ -84,7 +88,8 @@ export function Connectors() {
                               setRenaming(c)
                             },
                           },
-                          { label: 'Revoke', danger: true, onClick: () => setRevoking(c) },
+                          { label: 'Rotate token…', onClick: () => setRotating(c) },
+                          { label: 'Revoke…', danger: true, onClick: () => setRevoking(c) },
                         ]}
                       />
                     )}
@@ -96,14 +101,14 @@ export function Connectors() {
         </Table>
       )}
       {list.some((c) => c.health === 'offline') && (
-        <div className="mt-2.5 max-w-[1100px] text-xs text-zinc-500">Offline connectors send a notification and put an amber flag on any store that depends on them.</div>
+        <div className="mt-2.5 max-w-[1100px] text-xs text-zinc-500">Offline vault connectors send a notification and put an amber flag on any store that depends on them.</div>
       )}
 
-      <SlideOver open={enrolling} onClose={() => setEnrolling(false)} width={520} title="Enroll connector">
+      <SlideOver open={enrolling} onClose={() => setEnrolling(false)} width={520} title="Enroll vault connector">
         <EnrollPanel />
       </SlideOver>
 
-      <Modal open={!!renaming} onClose={() => setRenaming(null)} title="Rename connector" width={420}>
+      <Modal open={!!renaming} onClose={() => setRenaming(null)} title="Rename vault connector" width={420}>
         <Field label="Name">
           <Input value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
         </Field>
@@ -126,17 +131,48 @@ export function Connectors() {
       </Modal>
 
       <ImpactDialog
+        open={!!rotating}
+        onClose={() => setRotating(null)}
+        title={`Rotate the token for ${rotating?.name}?`}
+        rows={[
+          ['Stores that route through it', routedThrough(rotating).join(', ') || 'None'],
+          ['Workspace', rotating ? (wsById(d, rotating.workspaceId)?.name ?? '—') : ''],
+          ['Current credential', 'Keeps working for 10 minutes', 'amber'],
+        ]}
+        body="A new token is shown once. The running connector picks it up with keyholed rotate --token <new token> (or a restart with it); after 10 minutes the old credential is refused and those stores become unreachable through it."
+        confirmLabel="Rotate token"
+        onConfirm={() => {
+          const token = rotating && actions.rotateConnector(rotating.id)
+          if (rotating && token) setRotated({ c: rotating, token })
+        }}
+      />
+      <Modal open={!!rotated} onClose={() => {}} width={540} dismissable={false}>
+        {rotated && (
+          <TokenPanel
+            token={rotated.token}
+            title="Vault connector token rotated"
+            subtitle={`${rotated.c.name} · ${wsById(d, rotated.c.workspaceId)?.name ?? ''}`}
+            note={
+              <>
+                On that machine, run <span className="font-mono">keyholed rotate --token</span> with this token. The old credential keeps working for 10 minutes.
+              </>
+            }
+            onDone={() => setRotated(null)}
+          />
+        )}
+      </Modal>
+      <ImpactDialog
         open={!!revoking}
         onClose={() => setRevoking(null)}
         title={`Revoke ${revoking?.name}?`}
         rows={[
-          ['Routes through it', `${plural(stores.length, 'store')} and 1 workspace route through this connector`, stores.length ? 'amber' : undefined],
+          ['Routes through it', `${plural(stores.length, 'store')} and 1 workspace route through this vault connector`, stores.length ? 'amber' : undefined],
           ['Stores', stores.map((s) => s.name).join(', ') || 'None'],
           ['Workspace', revoking ? (wsById(d, revoking.workspaceId)?.name ?? '—') : ''],
           ['Last seen', ago(revoking?.lastSeen ?? null, now)],
         ]}
-        body="The connector stops being accepted immediately. Stores that route through it become unreachable until you pick another route."
-        confirmLabel="Revoke connector"
+        body="The vault connector stops being accepted immediately. Stores that route through it become unreachable until you pick another route."
+        confirmLabel="Revoke vault connector"
         onConfirm={() => revoking && actions.revokeConnector(revoking.id)}
       />
     </div>

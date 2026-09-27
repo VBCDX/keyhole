@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/org.schema.json",
+  "title": "Organization",
+  "description": "suite.orgs — one per organization, the same record in Keyhole and Dispatch. Membership and roles live in the auth service (auth.org_memberships).",
+  "type": "object",
+  "required": [
+    "_id",
+    "name",
+    "status",
+    "createdAt",
+    "createdBy",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "common.schema.json#/$defs/orgId"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "status": {
+      "enum": [
+        "active",
+        "deleted"
+      ]
+    },
+    "auditRetentionDays": {
+      "type": "integer",
+      "description": "How long audit rows are kept (TTL on audit_events.expireAt).",
+      "minimum": 30,
+      "maximum": 3650,
+      "default": 365
+    },
+    "createdAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "createdBy": {
+      "$ref": "common.schema.json#/$defs/principalRef"
+    },
+    "updatedAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "common.schema.json#/$defs/principalRef"
+    },
+    "deletedAt": {
+      "$ref": "common.schema.json#/$defs/nullableDate"
+    },
+    "deletedBy": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rev": {
+      "$ref": "common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "org_acme",
+      "name": "Acme Corp",
+      "status": "active",
+      "auditRetentionDays": 365,
+      "createdAt": "2026-07-29T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-07-29T10:00:00Z",
+      "rev": 0
+    }
+  ]
+}

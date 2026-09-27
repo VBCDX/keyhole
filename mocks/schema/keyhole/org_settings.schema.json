@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/org_settings.schema.json",
+  "title": "Keyhole org settings",
+  "description": "keyhole.org_settings — Keyhole's per-org settings (_id = orgId), including configVersion, the monotonic counter every connector/sidecar acknowledges.",
+  "type": "object",
+  "required": [
+    "_id",
+    "configVersion",
+    "notifications",
+    "updatedAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "configVersion": {
+      "type": "integer",
+      "description": "$inc on any change a component must see (grants, availability, exposure, keys, stores, tokens). Mirrored to Redis kh:cfgver:{orgId}.",
+      "minimum": 0
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "connectorOffline": {
+          "type": "boolean"
+        },
+        "storeUnhealthy": {
+          "type": "boolean"
+        },
+        "verificationFailed": {
+          "type": "boolean"
+        },
+        "tokenExpiring": {
+          "type": "boolean"
+        },
+        "blockedSpike": {
+          "type": "boolean"
+        },
+        "memberJoined": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "alertWebhook": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "signingSecret": {
+          "$ref": "../shared/common.schema.json#/$defs/secretRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "defaultGraceSeconds": {
+      "$ref": "../shared/common.schema.json#/$defs/graceSeconds"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    }
+  },
+  "additionalProperties": false
+}

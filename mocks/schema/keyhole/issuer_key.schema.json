@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/issuer_key.schema.json",
+  "title": "Keyhole OIDC issuer key",
+  "description": "keyhole.issuer_keys — signing keys for Keyhole-as-issuer JWTs (jwt/oidc/web_identity/wif/federated methods). Private keys never leave the KMS. JWKS publishes next + active + retiring.",
+  "type": "object",
+  "required": [
+    "_id",
+    "kid",
+    "alg",
+    "publicJwk",
+    "privateKeyRef",
+    "status",
+    "createdAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/issuerKeyId"
+    },
+    "kid": {
+      "type": "string"
+    },
+    "alg": {
+      "enum": [
+        "RS256",
+        "ES256"
+      ]
+    },
+    "publicJwk": {
+      "type": "object"
+    },
+    "privateKeyRef": {
+      "$ref": "../shared/common.schema.json#/$defs/kmsKeyRef"
+    },
+    "status": {
+      "enum": [
+        "next",
+        "active",
+        "retiring",
+        "retired"
+      ]
+    },
+    "createdAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "activatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "retiringAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "retiredAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    }
+  },
+  "additionalProperties": false
+}

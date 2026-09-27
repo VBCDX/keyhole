@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/outbox_event.schema.json",
+  "title": "Outbox event",
+  "description": "suite.outbox — one row per shared change, written in the same transaction as the change and its shared audit row. Relayed by change stream (see outbox.md). Payloads carry shared facts only.",
+  "type": "object",
+  "required": [
+    "_id",
+    "type",
+    "schemaVersion",
+    "orgId",
+    "aggregate",
+    "originApp",
+    "actor",
+    "occurredAt",
+    "trk",
+    "payload"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "common.schema.json#/$defs/outboxEventId",
+      "description": "ULID-based, so _id order is commit order within a shard."
+    },
+    "type": {
+      "enum": [
+        "org.created",
+        "org.renamed",
+        "org.deleted",
+        "org.member.invited",
+        "org.member.invite_revoked",
+        "org.member.joined",
+        "org.member.role_changed",
+        "org.member.suspended",
+        "org.member.resumed",
+        "org.member.removed",
+        "org.ownership_transferred",
+        "user.locked",
+        "user.unlocked",
+        "user.signed_out_everywhere",
+        "user.invite_resent",
+        "workspace.created",
+        "workspace.renamed",
+        "workspace.deleted",
+        "workspace.membership.added",
+        "workspace.membership.role_changed",
+        "workspace.membership.removed",
+        "workspace.default_admins_changed",
+        "agent.created",
+        "agent.renamed",
+        "agent.retired"
+      ]
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "orgId": {
+      "$ref": "common.schema.json#/$defs/orgId"
+    },
+    "workspaceId": {
+      "$ref": "common.schema.json#/$defs/workspaceId"
+    },
+    "aggregate": {
+      "type": "object",
+      "description": "The record that changed and its rev after the change. Consumers ignore an event whose rev is ≤ the rev they already applied.",
+      "required": [
+        "kind",
+        "id",
+        "rev"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "org",
+            "org_membership",
+            "user",
+            "workspace",
+            "workspace_membership",
+            "agent"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "rev": {
+          "$ref": "common.schema.json#/$defs/rev"
+        }
+      },
+      "additionalProperties": false
+    },
+    "originApp": {
+      "$ref": "common.schema.json#/$defs/originApp"
+    },
+    "actor": {
+      "$ref": "common.schema.json#/$defs/actorRef"
+    },
+    "occurredAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "trk": {
+      "$ref": "common.schema.json#/$defs/trackingCode"
+    },
+    "correlationId": {
+      "type": "string"
+    },
+    "auditEventId": {
+      "$ref": "common.schema.json#/$defs/auditEventId",
+      "description": "The shared audit row written in the same transaction."
+    },
+    "refusal": {
+      "type": "boolean",
+      "description": "True for changes that reduce access (suspend, remove, retire, lock, sign-out-everywhere). Also published on the Redis fast path right after commit (rule 5)."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Shared fields before/after, e.g. {membershipId, member, before: {role}, after: {role}}. Never app-specific consequences."
+    },
+    "publishedAt": {
+      "$ref": "common.schema.json#/$defs/nullableDate",
+      "description": "Set by the relay after it fanned the event out to Redis."
+    },
+    "deleteAt": {
+      "$ref": "common.schema.json#/$defs/isoDate",
+      "description": "TTL: 7 days after occurredAt."
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "obx_01J8ZK3Q7W5V",
+      "type": "workspace.membership.added",
+      "schemaVersion": 1,
+      "orgId": "org_acme",
+      "workspaceId": "ws_incidents",
+      "aggregate": {
+        "kind": "workspace_membership",
+        "id": "wm_inc_triage",
+        "rev": 0
+      },
+      "originApp": "dispatch",
+      "actor": {
+        "kind": "user",
+        "id": "u_ravi",
+        "label": "Ravi Mehta"
+      },
+      "occurredAt": "2026-09-27T09:00:00Z",
+      "trk": "trk_5sh4r3dx",
+      "auditEventId": "ev_13",
+      "refusal": false,
+      "payload": {
+        "membershipId": "wm_inc_triage",
+        "member": {
+          "kind": "agent",
+          "id": "ag_triage"
+        },
+        "before": null,
+        "after": {
+          "role": "member"
+        }
+      },
+      "publishedAt": "2026-09-27T09:00:00.120Z",
+      "deleteAt": "2026-10-04T09:00:00Z"
+    }
+  ]
+}

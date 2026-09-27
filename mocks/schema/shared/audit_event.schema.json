@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/audit_event.schema.json",
+  "title": "Audit event",
+  "description": "The audit envelope both apps write. Shared rows (shared: true) live once in suite.audit_events and show in both apps, marked Shared; app-only rows (shared: false) live in <app>.audit_events and never leave that app. A shared row carries only shared facts (`changes` on shared fields); app-specific consequences are a separate app-only row with causationId pointing at the shared row.",
+  "type": "object",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "shared": {
+            "const": true
+          }
+        },
+        "required": [
+          "shared"
+        ]
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "detail"
+              ]
+            },
+            {
+              "required": [
+                "link"
+              ]
+            }
+          ]
+        },
+        "properties": {
+          "type": {
+            "enum": [
+              "admin",
+              "support"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "required": [
+    "_id",
+    "orgId",
+    "app",
+    "shared",
+    "type",
+    "severity",
+    "at",
+    "actor",
+    "object",
+    "result",
+    "trk",
+    "expireAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "common.schema.json#/$defs/auditEventId"
+    },
+    "orgId": {
+      "$ref": "common.schema.json#/$defs/orgId"
+    },
+    "workspaceId": {
+      "$ref": "common.schema.json#/$defs/workspaceId"
+    },
+    "app": {
+      "$ref": "common.schema.json#/$defs/originApp",
+      "description": "The app (or the auth service) where the action happened. Replaces Keyhole's `source: 'Dispatch'`."
+    },
+    "shared": {
+      "type": "boolean",
+      "description": "Org, workspace and player facts both apps show."
+    },
+    "type": {
+      "enum": [
+        "admin",
+        "support",
+        "request",
+        "blocked",
+        "error",
+        "connection",
+        "verification",
+        "message",
+        "receipt",
+        "webhook",
+        "access",
+        "context"
+      ],
+      "description": "admin and support can be shared; the rest are app-only (Keyhole: request, blocked, error, connection, verification; Dispatch: message, receipt, webhook, access, context; blocked also Dispatch)."
+    },
+    "severity": {
+      "enum": [
+        "ok",
+        "blocked",
+        "warn",
+        "info"
+      ]
+    },
+    "at": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "actor": {
+      "$ref": "common.schema.json#/$defs/actorRef"
+    },
+    "subject": {
+      "type": "object",
+      "description": "The main thing acted on (a user, agent, workspace, key, message…).",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "object": {
+      "type": "string",
+      "description": "Display sentence, e.g. \"Added triage-bot to Incidents\"."
+    },
+    "result": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "trk": {
+      "$ref": "common.schema.json#/$defs/trackingCode"
+    },
+    "correlationId": {
+      "type": "string",
+      "description": "Groups rows from one user action across apps (the originating request id)."
+    },
+    "causationId": {
+      "type": "string",
+      "description": "The event this row is a consequence of (an ev_ or obx_ id)."
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "field",
+          "before",
+          "after"
+        ],
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "before": {},
+          "after": {}
+        },
+        "additionalProperties": false
+      },
+      "description": "Before/after of shared fields (rule 6)."
+    },
+    "detail": {
+      "type": "object",
+      "description": "App-only rows: app-specific blob validated by keyhole/audit_detail.schema.json or dispatch/audit_detail.schema.json. Forbidden on shared rows."
+    },
+    "link": {
+      "type": "object",
+      "description": "In-app deep link. App-only rows.",
+      "required": [
+        "label",
+        "to"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "expireAt": {
+      "$ref": "common.schema.json#/$defs/isoDate",
+      "description": "TTL index; at + org.auditRetentionDays."
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "ev_13",
+      "orgId": "org_acme",
+      "workspaceId": "ws_incidents",
+      "app": "dispatch",
+      "shared": true,
+      "type": "admin",
+      "severity": "info",
+      "at": "2026-09-27T09:00:00Z",
+      "actor": {
+        "kind": "user",
+        "id": "u_ravi",
+        "label": "Ravi Mehta"
+      },
+      "subject": {
+        "kind": "agent",
+        "id": "ag_triage",
+        "label": "triage-bot"
+      },
+      "object": "Added triage-bot to Incidents",
+      "result": "Done",
+      "trk": "trk_5sh4r3dx",
+      "changes": [
+        {
+          "field": "workspaceRole",
+          "before": null,
+          "after": "member"
+        }
+      ],
+      "expireAt": "2027-09-27T09:00:00Z"
+    },
+    {
+      "_id": "ev_1",
+      "orgId": "org_acme",
+      "workspaceId": "ws_prod",
+      "app": "keyhole",
+      "shared": false,
+      "type": "request",
+      "severity": "ok",
+      "at": "2026-09-27T13:58:00Z",
+      "actor": {
+        "kind": "agent",
+        "id": "ag_billing",
+        "label": "billing-agent",
+        "via": {
+          "kind": "sidecar",
+          "id": "sc_payapi01",
+          "label": "pay-api-01"
+        }
+      },
+      "object": "Stripe charges",
+      "result": "200 · 164 ms",
+      "trk": "trk_2b8xm4c1",
+      "detail": {
+        "kind": "request",
+        "toolId": "t_stripe",
+        "actionId": "a_charges",
+        "method": "GET",
+        "path": "/v1/charges",
+        "destinationHost": "api.stripe.com",
+        "status": 200,
+        "latencyMs": 164,
+        "route": "sidecar",
+        "keyIds": [
+          "k_stripe"
+        ],
+        "cache": "hit"
+      },
+      "expireAt": "2027-09-27T13:58:00Z"
+    }
+  ]
+}

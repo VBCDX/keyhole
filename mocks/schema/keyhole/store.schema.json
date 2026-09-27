@@ -1,0 +1,3245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/store.schema.json",
+  "title": "Secret store",
+  "description": "keyhole.stores — an org-level secret store. Discriminated by `provider`; `auth` is discriminated by `method`. Each method is annotated x-route (either | connector_only) and x-stores-secret. Route rule: a method that is connector_only, an identitySource of connector_ambient, or networkExposure private all require route.mode connector. Stored secret material is only ever a secretRef (sealed in the Keyhole sealed-secret service, or connector_local). See stores.md.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "name",
+    "provider",
+    "status",
+    "route",
+    "health",
+    "createdAt",
+    "createdBy",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/storeId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "provider": {
+      "enum": [
+        "openbao",
+        "hashicorp_vault",
+        "aws_secrets_manager",
+        "aws_ssm_parameter_store",
+        "azure_key_vault",
+        "gcp_secret_manager",
+        "onepassword_connect",
+        "onepassword_service_account",
+        "infisical",
+        "doppler",
+        "conjur",
+        "local"
+      ]
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "verifying",
+        "active",
+        "disabled",
+        "removed"
+      ],
+      "description": "draft until the first successful connection test."
+    },
+    "route": {
+      "$ref": "#/$defs/route"
+    },
+    "networkExposure": {
+      "enum": [
+        "public",
+        "private",
+        "unknown"
+      ],
+      "description": "Customer-declared or detected reachability of the store's endpoint. private ⇒ connector.",
+      "default": "unknown"
+    },
+    "connection": {
+      "description": "Provider-specific connection fields ($defs conn*)."
+    },
+    "auth": {
+      "description": "Provider-specific auth method ($defs auth*)."
+    },
+    "health": {
+      "$ref": "#/$defs/health"
+    },
+    "cache": {
+      "type": "object",
+      "properties": {
+        "defaultTtlSeconds": {
+          "type": "integer",
+          "description": "Default key TTL for this store (keys can override).",
+          "minimum": 0,
+          "maximum": 3600,
+          "default": 300
+        }
+      },
+      "additionalProperties": false
+    },
+    "invalidation": {
+      "type": "object",
+      "properties": {
+        "eventSourceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "../shared/common.schema.json#/$defs/storeEventSourceId"
+          }
+        },
+        "revalidation": {
+          "enum": [
+            "kv2_metadata",
+            "describe_secret",
+            "etag",
+            "item_version",
+            "none"
+          ],
+          "description": "Value-free revalidation Keyhole uses between events (VAULT_FLOWS §11.2 #4)."
+        },
+        "pollIntervalSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 86400
+        }
+      },
+      "additionalProperties": false
+    },
+    "createdAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "createdBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "removedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "removedBy": {
+      "anyOf": [
+        {
+          "$ref": "../shared/common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rev": {
+      "$ref": "../shared/common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "networkExposure": {
+            "const": "private"
+          }
+        },
+        "required": [
+          "networkExposure"
+        ]
+      },
+      "then": {
+        "properties": {
+          "route": {
+            "properties": {
+              "mode": {
+                "const": "connector"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "auth": {
+            "properties": {
+              "identitySource": {
+                "const": "connector_ambient"
+              }
+            },
+            "required": [
+              "identitySource"
+            ]
+          }
+        },
+        "required": [
+          "auth"
+        ]
+      },
+      "then": {
+        "properties": {
+          "route": {
+            "properties": {
+              "mode": {
+                "const": "connector"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "provider": {
+              "const": "openbao"
+            },
+            "connection": {
+              "$ref": "#/$defs/connOpenbao"
+            },
+            "auth": {
+              "$ref": "#/$defs/authOpenbao"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "enum": [
+                          "kubernetes",
+                          "azure"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "route": {
+                    "properties": {
+                      "mode": {
+                        "const": "connector"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "const": "gcp"
+                      },
+                      "roleType": {
+                        "const": "gce"
+                      }
+                    },
+                    "required": [
+                      "method",
+                      "roleType"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "identitySource": {
+                        "const": "connector_ambient"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "hashicorp_vault"
+            },
+            "connection": {
+              "$ref": "#/$defs/connVault"
+            },
+            "auth": {
+              "$ref": "#/$defs/authVault"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "enum": [
+                          "kubernetes",
+                          "aws_ec2",
+                          "azure"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "route": {
+                    "properties": {
+                      "mode": {
+                        "const": "connector"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "const": "gcp"
+                      },
+                      "roleType": {
+                        "const": "gce"
+                      }
+                    },
+                    "required": [
+                      "method",
+                      "roleType"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "identitySource": {
+                        "const": "connector_ambient"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "aws_secrets_manager"
+            },
+            "connection": {
+              "$ref": "#/$defs/connAwsSm"
+            },
+            "auth": {
+              "$ref": "#/$defs/authAws"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "enum": [
+                          "ambient"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "route": {
+                    "properties": {
+                      "mode": {
+                        "const": "connector"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "aws_ssm_parameter_store"
+            },
+            "connection": {
+              "$ref": "#/$defs/connAwsSsm"
+            },
+            "auth": {
+              "$ref": "#/$defs/authAws"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "enum": [
+                          "ambient"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "route": {
+                    "properties": {
+                      "mode": {
+                        "const": "connector"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "azure_key_vault"
+            },
+            "connection": {
+              "$ref": "#/$defs/connAzure"
+            },
+            "auth": {
+              "$ref": "#/$defs/authAzure"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "enum": [
+                          "managed_identity",
+                          "aks_workload_identity"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "route": {
+                    "properties": {
+                      "mode": {
+                        "const": "connector"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "gcp_secret_manager"
+            },
+            "connection": {
+              "$ref": "#/$defs/connGcp"
+            },
+            "auth": {
+              "$ref": "#/$defs/authGcp"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "enum": [
+                          "ambient"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "route": {
+                    "properties": {
+                      "mode": {
+                        "const": "connector"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "onepassword_connect"
+            },
+            "connection": {
+              "$ref": "#/$defs/connOpConnect"
+            },
+            "auth": {
+              "$ref": "#/$defs/authOpConnect"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "onepassword_service_account"
+            },
+            "connection": {
+              "$ref": "#/$defs/connOpSa"
+            },
+            "auth": {
+              "$ref": "#/$defs/authOpSa"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "infisical"
+            },
+            "connection": {
+              "$ref": "#/$defs/connInfisical"
+            },
+            "auth": {
+              "$ref": "#/$defs/authInfisical"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "method": {
+                        "enum": [
+                          "kubernetes",
+                          "spiffe"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "method"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "route": {
+                    "properties": {
+                      "mode": {
+                        "const": "connector"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "doppler"
+            },
+            "connection": {
+              "$ref": "#/$defs/connDoppler"
+            },
+            "auth": {
+              "$ref": "#/$defs/authDoppler"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "conjur"
+            },
+            "connection": {
+              "$ref": "#/$defs/connConjur"
+            },
+            "auth": {
+              "$ref": "#/$defs/authConjur"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "direct",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "connection",
+            "auth"
+          ]
+        },
+        {
+          "properties": {
+            "provider": {
+              "const": "local"
+            },
+            "route": {
+              "properties": {
+                "mode": {
+                  "const": "internal"
+                }
+              }
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "connection"
+                ]
+              },
+              {
+                "required": [
+                  "auth"
+                ]
+              }
+            ]
+          },
+          "description": "Local store: Keyhole holds the values itself (local_key_values), envelope-encrypted with a KMS key."
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "route": {
+      "description": "How Keyhole reaches the store. direct = from Keyhole's SaaS; connector = through a customer-run vault connector (the connector becomes org-level: only org admins manage it); internal = Local store.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "const": "direct"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mode",
+            "connectorId"
+          ],
+          "properties": {
+            "mode": {
+              "const": "connector"
+            },
+            "connectorId": {
+              "$ref": "../shared/common.schema.json#/$defs/vaultConnectorId"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "const": "internal"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "identitySource": {
+      "enum": [
+        "keyhole",
+        "connector_ambient"
+      ],
+      "description": "Whose platform identity signs the login. keyhole = Keyhole's own cloud principal, which the customer trusts (SaaS-direct possible). connector_ambient = the connector's instance/pod identity (connector only)."
+    },
+    "federation": {
+      "type": "object",
+      "description": "Keyhole as OIDC issuer: nothing is stored; Keyhole mints a short-lived JWT per login (VAULT_FLOWS §1).",
+      "required": [
+        "issuer",
+        "subject",
+        "audience"
+      ],
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "description": "Keyhole's OIDC issuer (discovery + JWKS). Read-only.",
+          "format": "uri",
+          "readOnly": true
+        },
+        "subject": {
+          "type": "string",
+          "description": "Tenant-specific `sub` Keyhole puts in the JWTs it mints for this store. Read-only; the customer binds it exactly.",
+          "pattern": "^keyhole:org_[A-Za-z0-9_]+:st_[A-Za-z0-9_]+$",
+          "readOnly": true
+        },
+        "audience": {
+          "type": "string",
+          "description": "`aud` Keyhole mints and the customer's config expects."
+        }
+      },
+      "additionalProperties": false
+    },
+    "vaultMount": {
+      "type": "string",
+      "description": "Auth mount path. Customisable (`auth enable -path=…`); defaults to the type name.",
+      "pattern": "^[A-Za-z0-9._/-]+$"
+    },
+    "authOpenbao": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Static token. Keyhole stores and renews it.",
+          "required": [
+            "method",
+            "token"
+          ],
+          "properties": {
+            "method": {
+              "const": "token"
+            },
+            "token": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Vault/OpenBao token. Prefer a periodic, orphan token (`-period=24h -orphan`)."
+            },
+            "periodic": {
+              "type": "boolean",
+              "description": "Periodic token: Keyhole renews it (renew-self) within each period."
+            },
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 60
+            },
+            "accessor": {
+              "type": "string",
+              "description": "Token accessor (not secret), for lookup and revoke."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        },
+        {
+          "type": "object",
+          "description": "\"For servers the AppRole method is the recommended choice.\" Pin with secret_id_bound_cidrs / token_bound_cidrs to Keyhole's egress IPs for SaaS-direct.",
+          "required": [
+            "method",
+            "mount",
+            "roleId"
+          ],
+          "properties": {
+            "method": {
+              "const": "approle"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "approle"
+            },
+            "roleId": {
+              "type": "string",
+              "description": "role_id. An identifier; stored in the clear."
+            },
+            "secretId": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "secret_id. Required when the role has bind_secret_id=true (the default)."
+            },
+            "bindSecretId": {
+              "type": "boolean",
+              "default": true
+            },
+            "secretIdExpiresAt": {
+              "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+            },
+            "secretIdNumUses": {
+              "type": "integer",
+              "description": "0 = unlimited. When > 0 Keyhole single-flights logins (redis kh:vlogin lock) so replicas don't burn uses.",
+              "minimum": 0
+            },
+            "inlineAuth": {
+              "type": "boolean",
+              "description": "OpenBao only: send X-Vault-Inline-Auth-* headers per request instead of logging in (no storage writes, no leases; one-shot logins only). Each request counts against secret_id_num_uses.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "AppRole with response wrapping: the customer pastes a single-use wrapping token; a second unwrap fails, which detects interception.",
+          "required": [
+            "method",
+            "mount",
+            "roleId",
+            "secretId",
+            "unwrappedAt"
+          ],
+          "properties": {
+            "method": {
+              "const": "approle_wrapped"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "approle"
+            },
+            "roleId": {
+              "type": "string"
+            },
+            "secretId": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "The secret_id Keyhole got by unwrapping (sys/wrapping/unwrap) once. The wrapping token itself is never stored."
+            },
+            "unwrappedAt": {
+              "$ref": "../shared/common.schema.json#/$defs/isoDate"
+            },
+            "wrapTtlSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "inlineAuth": {
+              "type": "boolean",
+              "description": "OpenBao only: send X-Vault-Inline-Auth-* headers per request instead of logging in (no storage writes, no leases; one-shot logins only). Each request counts against secret_id_num_uses.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "Keyhole as issuer. The server must reach Keyhole's discovery/JWKS URL, or the customer pastes the keys into jwt_validation_pubkeys. The role needs at least one of bound_audiences, bound_subject, bound_claims, token_bound_cidrs.",
+          "required": [
+            "method",
+            "mount",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "jwt"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "jwt"
+            },
+            "role": {
+              "type": "string",
+              "description": "Optional when the mount has default_role."
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            },
+            "inlineAuth": {
+              "type": "boolean",
+              "description": "OpenBao only: send X-Vault-Inline-Auth-* headers per request instead of logging in (no storage writes, no leases; one-shot logins only). Each request counts against secret_id_num_uses.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "The service-account token exists only in-cluster.",
+          "required": [
+            "method",
+            "mount",
+            "role"
+          ],
+          "properties": {
+            "method": {
+              "const": "kubernetes"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "kubernetes"
+            },
+            "role": {
+              "type": "string"
+            },
+            "serviceAccountTokenPath": {
+              "type": "string",
+              "default": "/var/run/secrets/kubernetes.io/serviceaccount/token"
+            },
+            "audience": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "description": "mTLS must reach the server end to end; a TLS-terminating proxy breaks it.",
+          "required": [
+            "method",
+            "mount",
+            "clientCertificatePem",
+            "clientKey"
+          ],
+          "properties": {
+            "method": {
+              "const": "cert"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "cert"
+            },
+            "name": {
+              "type": "string",
+              "description": "Optional: pins a cert role."
+            },
+            "clientCertificatePem": {
+              "type": "string",
+              "description": "Public certificate (not secret).",
+              "pattern": "^-----BEGIN CERTIFICATE-----"
+            },
+            "clientKey": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Private key for the TLS client certificate."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        },
+        {
+          "type": "object",
+          "description": "Signed sts:GetCallerIdentity. OpenBao: external plugin (openbao-plugins); Keyhole probes sys/auth before offering it.",
+          "required": [
+            "method",
+            "mount",
+            "role",
+            "identitySource"
+          ],
+          "properties": {
+            "method": {
+              "const": "aws_iam"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "aws"
+            },
+            "role": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string",
+              "default": "us-east-1"
+            },
+            "iamServerIdHeaderValue": {
+              "type": "string",
+              "description": "Value for X-Vault-AWS-IAM-Server-ID when the server requires it."
+            },
+            "identitySource": {
+              "$ref": "#/$defs/identitySource"
+            },
+            "keyholePrincipalArn": {
+              "type": "string",
+              "description": "Keyhole's AWS role ARN the customer binds (identitySource keyhole). Read-only.",
+              "readOnly": true
+            },
+            "pluginRequired": {
+              "const": true
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "description": "Managed-identity token from the connector's Azure compute. OpenBao: external plugin (openbao-plugins); Keyhole probes sys/auth before offering it.",
+          "required": [
+            "method",
+            "mount",
+            "role"
+          ],
+          "properties": {
+            "method": {
+              "const": "azure"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "azure"
+            },
+            "role": {
+              "type": "string"
+            },
+            "subscriptionId": {
+              "type": "string"
+            },
+            "resourceGroupName": {
+              "type": "string"
+            },
+            "vmName": {
+              "type": "string"
+            },
+            "vmssName": {
+              "type": "string"
+            },
+            "resourceId": {
+              "type": "string"
+            },
+            "pluginRequired": {
+              "const": true
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "description": "iam: SaaS-direct if Keyhole's SA is bound. gce: connector only. OpenBao: external plugin (openbao-plugins); Keyhole probes sys/auth before offering it.",
+          "required": [
+            "method",
+            "mount",
+            "role",
+            "roleType",
+            "identitySource"
+          ],
+          "properties": {
+            "method": {
+              "const": "gcp"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "gcp"
+            },
+            "role": {
+              "type": "string"
+            },
+            "roleType": {
+              "enum": [
+                "iam",
+                "gce"
+              ]
+            },
+            "identitySource": {
+              "$ref": "#/$defs/identitySource"
+            },
+            "keyholeServiceAccountEmail": {
+              "type": "string",
+              "readOnly": true
+            },
+            "pluginRequired": {
+              "const": true
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false
+        }
+      ],
+      "x-methods": [
+        "token",
+        "approle",
+        "approle_wrapped",
+        "jwt",
+        "kubernetes",
+        "cert",
+        "aws_iam",
+        "azure",
+        "gcp"
+      ]
+    },
+    "authVault": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Static token. Keyhole stores and renews it.",
+          "required": [
+            "method",
+            "token"
+          ],
+          "properties": {
+            "method": {
+              "const": "token"
+            },
+            "token": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Vault/OpenBao token. Prefer a periodic, orphan token (`-period=24h -orphan`)."
+            },
+            "periodic": {
+              "type": "boolean",
+              "description": "Periodic token: Keyhole renews it (renew-self) within each period."
+            },
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 60
+            },
+            "accessor": {
+              "type": "string",
+              "description": "Token accessor (not secret), for lookup and revoke."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        },
+        {
+          "type": "object",
+          "description": "\"For servers the AppRole method is the recommended choice.\" Pin with secret_id_bound_cidrs / token_bound_cidrs to Keyhole's egress IPs for SaaS-direct.",
+          "required": [
+            "method",
+            "mount",
+            "roleId"
+          ],
+          "properties": {
+            "method": {
+              "const": "approle"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "approle"
+            },
+            "roleId": {
+              "type": "string",
+              "description": "role_id. An identifier; stored in the clear."
+            },
+            "secretId": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "secret_id. Required when the role has bind_secret_id=true (the default)."
+            },
+            "bindSecretId": {
+              "type": "boolean",
+              "default": true
+            },
+            "secretIdExpiresAt": {
+              "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+            },
+            "secretIdNumUses": {
+              "type": "integer",
+              "description": "0 = unlimited. When > 0 Keyhole single-flights logins (redis kh:vlogin lock) so replicas don't burn uses.",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "AppRole with response wrapping: the customer pastes a single-use wrapping token; a second unwrap fails, which detects interception.",
+          "required": [
+            "method",
+            "mount",
+            "roleId",
+            "secretId",
+            "unwrappedAt"
+          ],
+          "properties": {
+            "method": {
+              "const": "approle_wrapped"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "approle"
+            },
+            "roleId": {
+              "type": "string"
+            },
+            "secretId": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "The secret_id Keyhole got by unwrapping (sys/wrapping/unwrap) once. The wrapping token itself is never stored."
+            },
+            "unwrappedAt": {
+              "$ref": "../shared/common.schema.json#/$defs/isoDate"
+            },
+            "wrapTtlSeconds": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "Keyhole as issuer. The server must reach Keyhole's discovery/JWKS URL, or the customer pastes the keys into jwt_validation_pubkeys. The role needs at least one of bound_audiences, bound_subject, bound_claims, token_bound_cidrs.",
+          "required": [
+            "method",
+            "mount",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "jwt"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "jwt"
+            },
+            "role": {
+              "type": "string",
+              "description": "Optional when the mount has default_role."
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "The service-account token exists only in-cluster.",
+          "required": [
+            "method",
+            "mount",
+            "role"
+          ],
+          "properties": {
+            "method": {
+              "const": "kubernetes"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "kubernetes"
+            },
+            "role": {
+              "type": "string"
+            },
+            "serviceAccountTokenPath": {
+              "type": "string",
+              "default": "/var/run/secrets/kubernetes.io/serviceaccount/token"
+            },
+            "audience": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "description": "mTLS must reach the server end to end; a TLS-terminating proxy breaks it.",
+          "required": [
+            "method",
+            "mount",
+            "clientCertificatePem",
+            "clientKey"
+          ],
+          "properties": {
+            "method": {
+              "const": "cert"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "cert"
+            },
+            "name": {
+              "type": "string",
+              "description": "Optional: pins a cert role."
+            },
+            "clientCertificatePem": {
+              "type": "string",
+              "description": "Public certificate (not secret).",
+              "pattern": "^-----BEGIN CERTIFICATE-----"
+            },
+            "clientKey": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Private key for the TLS client certificate."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        },
+        {
+          "type": "object",
+          "description": "Signed sts:GetCallerIdentity.",
+          "required": [
+            "method",
+            "mount",
+            "role",
+            "identitySource"
+          ],
+          "properties": {
+            "method": {
+              "const": "aws_iam"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "aws"
+            },
+            "role": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string",
+              "default": "us-east-1"
+            },
+            "iamServerIdHeaderValue": {
+              "type": "string",
+              "description": "Value for X-Vault-AWS-IAM-Server-ID when the server requires it."
+            },
+            "identitySource": {
+              "$ref": "#/$defs/identitySource"
+            },
+            "keyholePrincipalArn": {
+              "type": "string",
+              "description": "Keyhole's AWS role ARN the customer binds (identitySource keyhole). Read-only.",
+              "readOnly": true
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "description": "Legacy EC2 type; prefer aws_iam.",
+          "required": [
+            "method",
+            "mount",
+            "role"
+          ],
+          "properties": {
+            "method": {
+              "const": "aws_ec2"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "aws"
+            },
+            "role": {
+              "type": "string"
+            },
+            "nonce": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Client nonce for re-authentication."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": true,
+          "x-discouraged": true
+        },
+        {
+          "type": "object",
+          "description": "Managed-identity token from the connector's Azure compute.",
+          "required": [
+            "method",
+            "mount",
+            "role"
+          ],
+          "properties": {
+            "method": {
+              "const": "azure"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "azure"
+            },
+            "role": {
+              "type": "string"
+            },
+            "subscriptionId": {
+              "type": "string"
+            },
+            "resourceGroupName": {
+              "type": "string"
+            },
+            "vmName": {
+              "type": "string"
+            },
+            "vmssName": {
+              "type": "string"
+            },
+            "resourceId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "description": "iam: SaaS-direct if Keyhole's SA is bound. gce: connector only.",
+          "required": [
+            "method",
+            "mount",
+            "role",
+            "roleType",
+            "identitySource"
+          ],
+          "properties": {
+            "method": {
+              "const": "gcp"
+            },
+            "mount": {
+              "$ref": "#/$defs/vaultMount",
+              "default": "gcp"
+            },
+            "role": {
+              "type": "string"
+            },
+            "roleType": {
+              "enum": [
+                "iam",
+                "gce"
+              ]
+            },
+            "identitySource": {
+              "$ref": "#/$defs/identitySource"
+            },
+            "keyholeServiceAccountEmail": {
+              "type": "string",
+              "readOnly": true
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false
+        }
+      ],
+      "x-methods": [
+        "token",
+        "approle",
+        "approle_wrapped",
+        "jwt",
+        "kubernetes",
+        "cert",
+        "aws_iam",
+        "aws_ec2",
+        "azure",
+        "gcp"
+      ]
+    },
+    "vaultConnection": {
+      "type": "object",
+      "required": [
+        "address"
+      ],
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "Server URL, e.g. https://bao.acme.internal:8200.",
+          "format": "uri"
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace path (X-Vault-Namespace on login and reads). OpenBao: open source; Vault: Enterprise/HCP."
+        },
+        "caBundlePem": {
+          "type": "string",
+          "description": "CA bundle (public).",
+          "pattern": "^-----BEGIN CERTIFICATE-----"
+        },
+        "caBundleName": {
+          "type": "string",
+          "description": "Uploaded file name, for display."
+        },
+        "tlsServerName": {
+          "type": "string"
+        },
+        "skipTlsVerify": {
+          "type": "boolean",
+          "description": "TLS verification off. Traffic can be intercepted; shown as a warning everywhere.",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "connOpenbao": {
+      "type": "object",
+      "required": [
+        "address"
+      ],
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "Server URL, e.g. https://bao.acme.internal:8200.",
+          "format": "uri"
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace path (X-Vault-Namespace on login and reads). OpenBao: open source; Vault: Enterprise/HCP."
+        },
+        "caBundlePem": {
+          "type": "string",
+          "description": "CA bundle (public).",
+          "pattern": "^-----BEGIN CERTIFICATE-----"
+        },
+        "caBundleName": {
+          "type": "string",
+          "description": "Uploaded file name, for display."
+        },
+        "tlsServerName": {
+          "type": "string"
+        },
+        "skipTlsVerify": {
+          "type": "boolean",
+          "description": "TLS verification off. Traffic can be intercepted; shown as a warning everywhere.",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "connVault": {
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "edition": {
+                "const": "hcp_dedicated"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "namespace"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "address",
+        "edition"
+      ],
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "Server URL, e.g. https://bao.acme.internal:8200.",
+          "format": "uri"
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Enterprise/HCP only. Required for HCP Vault Dedicated, whose top-level namespace defaults to `admin`.",
+          "x-verify": true,
+          "x-verify-note": "HCP default namespace `admin` is ⚠ in VAULT_FLOWS §3.1."
+        },
+        "caBundlePem": {
+          "type": "string",
+          "description": "CA bundle (public).",
+          "pattern": "^-----BEGIN CERTIFICATE-----"
+        },
+        "caBundleName": {
+          "type": "string",
+          "description": "Uploaded file name, for display."
+        },
+        "tlsServerName": {
+          "type": "string"
+        },
+        "skipTlsVerify": {
+          "type": "boolean",
+          "description": "TLS verification off. Traffic can be intercepted; shown as a warning everywhere.",
+          "default": false
+        },
+        "edition": {
+          "enum": [
+            "community",
+            "enterprise",
+            "hcp_dedicated"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "authAws": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Cross-account AssumeRole + ExternalId. SaaS-direct; nothing stored per customer.",
+          "required": [
+            "method",
+            "roleArn",
+            "externalId"
+          ],
+          "properties": {
+            "method": {
+              "const": "assume_role"
+            },
+            "roleArn": {
+              "type": "string",
+              "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$"
+            },
+            "externalId": {
+              "type": "string",
+              "description": "Generated by Keyhole per store, shown read-only; the customer never chooses it (confused deputy).",
+              "minLength": 2,
+              "maxLength": 1224,
+              "pattern": "^[\\w+=,.@:/-]*$",
+              "readOnly": true
+            },
+            "sessionName": {
+              "type": "string",
+              "description": "RoleSessionName; Keyhole sets it, e.g. keyhole-st_…",
+              "readOnly": true
+            },
+            "durationSeconds": {
+              "type": "integer",
+              "description": "900 up to the role's max session (≤ 43200). Role chaining caps it at 3600.",
+              "minimum": 900,
+              "maximum": 43200,
+              "default": 3600
+            },
+            "keyholePrincipalArn": {
+              "type": "string",
+              "description": "arn:aws:iam::<KEYHOLE_ACCT>:role/keyhole-broker the trust policy names. Read-only.",
+              "readOnly": true
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "AssumeRoleWithWebIdentity with Keyhole as OIDC IdP. SaaS-direct, nothing stored, no AWS account needed on Keyhole's side.",
+          "required": [
+            "method",
+            "roleArn",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "web_identity"
+            },
+            "roleArn": {
+              "type": "string",
+              "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$"
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            },
+            "durationSeconds": {
+              "type": "integer",
+              "minimum": 900,
+              "maximum": 43200,
+              "default": 3600
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true,
+          "x-verify": true,
+          "x-verify-note": "The customer's trust-policy pattern (Federated oidc-provider + StringEquals on :sub/:aud) is ⚠ in §4.1."
+        },
+        {
+          "type": "object",
+          "description": "IAM Roles Anywhere; useful for an on-prem connector without long-lived keys.",
+          "required": [
+            "method",
+            "trustAnchorArn",
+            "profileArn",
+            "roleArn",
+            "certificatePem",
+            "privateKey"
+          ],
+          "properties": {
+            "method": {
+              "const": "roles_anywhere"
+            },
+            "trustAnchorArn": {
+              "type": "string",
+              "pattern": "^arn:aws[a-z-]*:rolesanywhere:"
+            },
+            "profileArn": {
+              "type": "string",
+              "pattern": "^arn:aws[a-z-]*:rolesanywhere:"
+            },
+            "roleArn": {
+              "type": "string",
+              "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$"
+            },
+            "certificatePem": {
+              "type": "string",
+              "pattern": "^-----BEGIN CERTIFICATE-----"
+            },
+            "privateKey": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "X.509 private key. Prefer connector_local."
+            },
+            "durationSeconds": {
+              "type": "integer",
+              "minimum": 900,
+              "maximum": 43200,
+              "default": 3600
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        },
+        {
+          "type": "object",
+          "description": "The connector's platform credentials; auto-rotated by the platform.",
+          "required": [
+            "method",
+            "source"
+          ],
+          "properties": {
+            "method": {
+              "const": "ambient"
+            },
+            "source": {
+              "enum": [
+                "instance_profile",
+                "ecs_task_role",
+                "lambda_role",
+                "irsa",
+                "eks_pod_identity"
+              ],
+              "description": "Informational: what the SDK default chain finds on the connector."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "description": "Last resort, shown with a rotation warning.",
+          "required": [
+            "method",
+            "accessKeyId",
+            "secretAccessKey"
+          ],
+          "properties": {
+            "method": {
+              "const": "access_keys"
+            },
+            "accessKeyId": {
+              "type": "string",
+              "pattern": "^(AKIA|ASIA)[A-Z0-9]{12,}$"
+            },
+            "secretAccessKey": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "IAM user secret access key."
+            },
+            "sessionToken": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Optional session token."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-discouraged": true
+        }
+      ],
+      "x-methods": [
+        "assume_role",
+        "web_identity",
+        "roles_anywhere",
+        "ambient",
+        "access_keys"
+      ]
+    },
+    "connAwsSm": {
+      "type": "object",
+      "required": [
+        "region"
+      ],
+      "properties": {
+        "region": {
+          "type": "string",
+          "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]$"
+        },
+        "endpointUrl": {
+          "type": "string",
+          "description": "VPC endpoint or FIPS endpoint. A private endpoint means the store is private (connector).",
+          "format": "uri"
+        },
+        "kmsKeyArn": {
+          "type": "string",
+          "description": "Customer-managed KMS key protecting the secrets, when kms:Decrypt must be granted (kms:ViaService condition).",
+          "x-verify": true,
+          "x-verify-note": "kms:ViaService hardening is ⚠ in §4.1."
+        }
+      },
+      "additionalProperties": false
+    },
+    "connAwsSsm": {
+      "type": "object",
+      "required": [
+        "region"
+      ],
+      "properties": {
+        "region": {
+          "type": "string",
+          "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]$"
+        },
+        "endpointUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "throughput": {
+          "enum": [
+            "standard",
+            "higher"
+          ],
+          "description": "GetParameter throughput setting (~40 TPS standard).",
+          "x-verify": true,
+          "x-verify-note": "SSM throughput numbers are ⚠ in §4.5."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authAzure": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Multi-tenant app + admin consent. Keyhole authenticates its own app with a federated credential, so nothing is stored.",
+          "required": [
+            "method",
+            "keyholeClientId",
+            "permissionModel"
+          ],
+          "properties": {
+            "method": {
+              "const": "keyhole_app"
+            },
+            "keyholeClientId": {
+              "type": "string",
+              "description": "Keyhole's multi-tenant app ID. Read-only.",
+              "readOnly": true,
+              "format": "uuid"
+            },
+            "consentGrantedAt": {
+              "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+            },
+            "permissionModel": {
+              "enum": [
+                "rbac",
+                "access_policy"
+              ],
+              "description": "rbac: Key Vault Secrets User (4633458b-17de-408a-b874-0445c86b69e6). access_policy: legacy model, `get` on secrets."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true,
+          "x-verify": true,
+          "x-verify-note": "Multi-tenant instance behaviour and the FIC-on-app pattern are ◐ in §5.1."
+        },
+        {
+          "type": "object",
+          "description": "Workload identity federation with Keyhole as issuer. Matching is case-sensitive and exact.",
+          "required": [
+            "method",
+            "clientId",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "federated"
+            },
+            "clientId": {
+              "type": "string",
+              "description": "Customer app registration or user-assigned MI.",
+              "format": "uuid"
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            },
+            "fedAudience": {
+              "type": "string",
+              "description": "FIC audiences value.",
+              "default": "api://AzureADTokenExchange"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true,
+          "x-verify": true,
+          "x-verify-note": "Exact-match rule is ◐; client_assertion parameters are ⚠ (§5.1)."
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "clientId",
+            "certificatePem",
+            "privateKey"
+          ],
+          "properties": {
+            "method": {
+              "const": "client_certificate"
+            },
+            "clientId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "certificatePem": {
+              "type": "string",
+              "pattern": "^-----BEGIN CERTIFICATE-----"
+            },
+            "privateKey": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Certificate private key."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        },
+        {
+          "type": "object",
+          "description": "Least preferred SaaS option.",
+          "required": [
+            "method",
+            "clientId",
+            "clientSecret"
+          ],
+          "properties": {
+            "method": {
+              "const": "client_secret"
+            },
+            "clientId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "clientSecret": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "App client secret."
+            },
+            "secretExpiresAt": {
+              "$ref": "../shared/common.schema.json#/$defs/nullableDate",
+              "x-verify": true,
+              "x-verify-note": "Portal cap of 24 months is ⚠ (§5.1)."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-discouraged": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "method"
+          ],
+          "properties": {
+            "method": {
+              "const": "managed_identity"
+            },
+            "clientId": {
+              "type": "string",
+              "description": "User-assigned MI client ID; omit for system-assigned.",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "method"
+          ],
+          "properties": {
+            "method": {
+              "const": "aks_workload_identity"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        }
+      ],
+      "x-methods": [
+        "keyhole_app",
+        "federated",
+        "client_certificate",
+        "client_secret",
+        "managed_identity",
+        "aks_workload_identity"
+      ]
+    },
+    "connAzure": {
+      "type": "object",
+      "required": [
+        "vaultUrl",
+        "tenantId",
+        "cloud"
+      ],
+      "properties": {
+        "vaultUrl": {
+          "type": "string",
+          "description": "https://<vault-name>.vault.azure.net (other clouds: .vault.azure.cn, .vault.usgovcloudapi.net).",
+          "pattern": "^https://[A-Za-z0-9-]{3,24}\\.vault\\.(azure\\.net|azure\\.cn|usgovcloudapi\\.net)/?$",
+          "x-verify": true,
+          "x-verify-note": "Sovereign-cloud domains are ⚠ (§5.2)."
+        },
+        "tenantId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cloud": {
+          "enum": [
+            "public",
+            "china",
+            "usgov"
+          ],
+          "default": "public"
+        },
+        "apiVersion": {
+          "type": "string",
+          "default": "2025-07-01",
+          "x-verify": true,
+          "x-verify-note": "Latest api-version from search summary ◐ (§5.2)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authGcp": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Grant Keyhole's SA directly. All tenants grant the same principal: Keyhole keeps tenant separation by store; use impersonation when the customer wants per-tenant isolation.",
+          "required": [
+            "method",
+            "keyholeServiceAccountEmail"
+          ],
+          "properties": {
+            "method": {
+              "const": "keyhole_sa"
+            },
+            "keyholeServiceAccountEmail": {
+              "type": "string",
+              "description": "Keyhole's SA the customer grants roles/secretmanager.secretAccessor. Read-only.",
+              "format": "email",
+              "readOnly": true
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "targetServiceAccount"
+          ],
+          "properties": {
+            "method": {
+              "const": "impersonation"
+            },
+            "targetServiceAccount": {
+              "type": "string",
+              "format": "email"
+            },
+            "lifetimeSeconds": {
+              "type": "integer",
+              "description": "Default and max 3600; up to 43200 when the org policy allows the SA.",
+              "minimum": 1,
+              "maximum": 43200,
+              "default": 3600
+            },
+            "delegates": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "email"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "Workload Identity Federation, Keyhole as OIDC issuer. SaaS-direct, nothing stored.",
+          "required": [
+            "method",
+            "audience",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "wif"
+            },
+            "audience": {
+              "type": "string",
+              "description": "//iam.googleapis.com/projects/<N>/locations/global/workloadIdentityPools/<POOL>/providers/<PROVIDER>",
+              "pattern": "^//iam\\.googleapis\\.com/projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$"
+            },
+            "serviceAccountImpersonationUrl": {
+              "type": "string",
+              "format": "uri"
+            },
+            "credentialConfig": {
+              "type": "object",
+              "description": "The customer's external_account credential-config JSON (not secret: it has no private key).",
+              "x-verify": true,
+              "x-verify-note": "\"doesn't contain a private key\" is ◐ (§6.1)."
+            },
+            "subjectTokenType": {
+              "enum": [
+                "urn:ietf:params:oauth:token-type:jwt",
+                "urn:ietf:params:oauth:token-type:id_token"
+              ],
+              "default": "urn:ietf:params:oauth:token-type:jwt"
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "source"
+          ],
+          "properties": {
+            "method": {
+              "const": "ambient"
+            },
+            "source": {
+              "enum": [
+                "attached_sa",
+                "gke_workload_identity"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "description": "Often blocked by iam.disableServiceAccountKeyCreation.",
+          "required": [
+            "method",
+            "clientEmail",
+            "keyJson"
+          ],
+          "properties": {
+            "method": {
+              "const": "sa_key"
+            },
+            "clientEmail": {
+              "type": "string",
+              "format": "email"
+            },
+            "keyJson": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Service-account key file JSON."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-discouraged": true,
+          "x-verify": true,
+          "x-verify-note": "Org-policy default enforcement is ⚠ (§6.1)."
+        }
+      ],
+      "x-methods": [
+        "keyhole_sa",
+        "impersonation",
+        "wif",
+        "ambient",
+        "sa_key"
+      ]
+    },
+    "connGcp": {
+      "type": "object",
+      "required": [
+        "projectId"
+      ],
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID or number.",
+          "pattern": "^[a-z0-9-]{4,30}$|^[0-9]+$"
+        },
+        "location": {
+          "type": "string",
+          "description": "Regional secrets: endpoint secretmanager.{location}.rep.googleapis.com.",
+          "x-verify": true,
+          "x-verify-note": "Regional endpoint form is ◐ (§6.2)."
+        },
+        "endpoint": {
+          "enum": [
+            "global",
+            "regional",
+            "mtls"
+          ],
+          "default": "global"
+        },
+        "accessorRole": {
+          "const": "roles/secretmanager.secretAccessor",
+          "x-verify": true,
+          "x-verify-note": "Standard role name ⚠ (§6.1)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authOpSa": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "SDK-based (no public REST API ⚠). Vault scope can't be changed after creation ◐.",
+          "required": [
+            "method",
+            "token"
+          ],
+          "properties": {
+            "method": {
+              "const": "service_account"
+            },
+            "token": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Service-account token (tooling reads OP_SERVICE_ACCOUNT_TOKEN).",
+              "x-verify": true,
+              "x-verify-note": "Observed `ops_` prefix is ⚠ (§7.1)."
+            },
+            "integrationName": {
+              "const": "Keyhole"
+            },
+            "integrationVersion": {
+              "type": "string"
+            },
+            "tokenExpiresAt": {
+              "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+            },
+            "rateLimitHint": {
+              "type": "object",
+              "properties": {
+                "perTokenHourly": {
+                  "type": "integer"
+                },
+                "perAccountDaily": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "x-verify": true,
+              "x-verify-note": "Rate-limit numbers are unverified ◐ (§7.1); aggressive caching is mandatory."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        }
+      ],
+      "x-methods": [
+        "service_account"
+      ]
+    },
+    "connOpSa": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "authOpConnect": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "token"
+          ],
+          "properties": {
+            "method": {
+              "const": "connect_token"
+            },
+            "token": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Connect server bearer token."
+            },
+            "scopedVaultIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Vault UUIDs the token can read (for display)."
+            },
+            "tokenExpiresAt": {
+              "$ref": "../shared/common.schema.json#/$defs/nullableDate",
+              "x-verify": true,
+              "x-verify-note": "Optional Connect token expiry is ⚠ (§7.2)."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        }
+      ],
+      "x-methods": [
+        "connect_token"
+      ]
+    },
+    "connOpConnect": {
+      "type": "object",
+      "required": [
+        "connectHost"
+      ],
+      "properties": {
+        "connectHost": {
+          "type": "string",
+          "description": "Customer's Connect server, e.g. http://op-connect.internal:8080 (API under /v1).",
+          "format": "uri"
+        },
+        "deployment": {
+          "enum": [
+            "connect_api_and_sync"
+          ],
+          "x-verify": true,
+          "x-verify-note": "Two-container deployment is ⚠ (§7.2)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authInfisical": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "clientId",
+            "clientSecret"
+          ],
+          "properties": {
+            "method": {
+              "const": "universal"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "clientSecret": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Universal Auth client secret."
+            },
+            "clientSecretTtlSeconds": {
+              "type": "integer",
+              "description": "0 = never expires.",
+              "minimum": 0
+            },
+            "clientSecretNumUses": {
+              "type": "integer",
+              "description": "0 = unlimited.",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        },
+        {
+          "type": "object",
+          "description": "Keyhole as issuer; use hardcoded (not glob) subject/audience values.",
+          "required": [
+            "method",
+            "identityId",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "oidc"
+            },
+            "identityId": {
+              "type": "string",
+              "description": "Machine identity ID; the identity must be added to the project with a role."
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true
+        },
+        {
+          "type": "object",
+          "description": "Static public keys or JWKS URL.",
+          "required": [
+            "method",
+            "identityId",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "jwt"
+            },
+            "identityId": {
+              "type": "string",
+              "description": "Machine identity ID; the identity must be added to the project with a role."
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "identityId",
+            "identitySource"
+          ],
+          "properties": {
+            "method": {
+              "const": "aws"
+            },
+            "identityId": {
+              "type": "string",
+              "description": "Machine identity ID; the identity must be added to the project with a role."
+            },
+            "identitySource": {
+              "$ref": "#/$defs/identitySource"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "identityId"
+          ],
+          "properties": {
+            "method": {
+              "const": "kubernetes"
+            },
+            "identityId": {
+              "type": "string",
+              "description": "Machine identity ID; the identity must be added to the project with a role."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "identityId",
+            "identitySource"
+          ],
+          "properties": {
+            "method": {
+              "const": "gcp"
+            },
+            "identityId": {
+              "type": "string",
+              "description": "Machine identity ID; the identity must be added to the project with a role."
+            },
+            "identitySource": {
+              "$ref": "#/$defs/identitySource"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "identityId",
+            "identitySource"
+          ],
+          "properties": {
+            "method": {
+              "const": "azure"
+            },
+            "identityId": {
+              "type": "string",
+              "description": "Machine identity ID; the identity must be added to the project with a role."
+            },
+            "identitySource": {
+              "$ref": "#/$defs/identitySource"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "identityId",
+            "certificatePem",
+            "privateKey"
+          ],
+          "properties": {
+            "method": {
+              "const": "tls_cert"
+            },
+            "identityId": {
+              "type": "string",
+              "description": "Machine identity ID; the identity must be added to the project with a role."
+            },
+            "certificatePem": {
+              "type": "string",
+              "pattern": "^-----BEGIN CERTIFICATE-----"
+            },
+            "privateKey": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Client certificate key."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true
+        },
+        {
+          "type": "object",
+          "description": "JWT-SVID from SPIRE on the connector host.",
+          "required": [
+            "method",
+            "identityId"
+          ],
+          "properties": {
+            "method": {
+              "const": "spiffe"
+            },
+            "identityId": {
+              "type": "string",
+              "description": "Machine identity ID; the identity must be added to the project with a role."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "connector_only",
+          "x-stores-secret": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "accessToken"
+          ],
+          "properties": {
+            "method": {
+              "const": "token"
+            },
+            "accessToken": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Static identity access token."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-discouraged": true
+        }
+      ],
+      "x-methods": [
+        "universal",
+        "oidc",
+        "jwt",
+        "aws",
+        "kubernetes",
+        "gcp",
+        "azure",
+        "tls_cert",
+        "spiffe",
+        "token"
+      ]
+    },
+    "connInfisical": {
+      "type": "object",
+      "required": [
+        "siteUrl"
+      ],
+      "properties": {
+        "siteUrl": {
+          "type": "string",
+          "description": "https://app.infisical.com, https://us.infisical.com, https://eu.infisical.com, or self-hosted.",
+          "format": "uri",
+          "default": "https://app.infisical.com"
+        },
+        "selfHosted": {
+          "type": "boolean",
+          "default": false
+        },
+        "tokenRenewal": {
+          "type": "object",
+          "description": "Read expiresIn from each login (docs disagree on the default TTL).",
+          "properties": {
+            "renewPath": {
+              "type": "string",
+              "default": "/api/v1/auth/token/renew"
+            }
+          },
+          "additionalProperties": false,
+          "x-verify": true,
+          "x-verify-note": "Renew route name is ⚠ (§8.1)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authDoppler": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Least-privilege static option.",
+          "required": [
+            "method",
+            "token"
+          ],
+          "properties": {
+            "method": {
+              "const": "service_token"
+            },
+            "token": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "dp.st.… — read-only, one project + config."
+            },
+            "scope": {
+              "type": "object",
+              "description": "Implied by the token; collected for display and validation.",
+              "properties": {
+                "project": {
+                  "type": "string"
+                },
+                "config": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "x-verify": true,
+              "x-verify-note": "Implied project/config is ⚠ (§9.1)."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-recommended": true,
+          "x-verify": true,
+          "x-verify-note": "Token formats are ◐ (§9.1)."
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "token"
+          ],
+          "properties": {
+            "method": {
+              "const": "service_account_token"
+            },
+            "token": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "dp.sa.… — workplace-level service account."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-verify": true,
+          "x-verify-note": "Token formats are ◐ (§9.1)."
+        },
+        {
+          "type": "object",
+          "description": "POST /v3/auth/oidc → short-lived token. SaaS-direct, nothing stored.",
+          "required": [
+            "method",
+            "identityId",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "oidc_identity"
+            },
+            "identityId": {
+              "type": "string"
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true
+        }
+      ],
+      "x-methods": [
+        "service_token",
+        "service_account_token",
+        "oidc_identity"
+      ]
+    },
+    "connDoppler": {
+      "type": "object",
+      "properties": {
+        "apiBaseUrl": {
+          "type": "string",
+          "format": "uri",
+          "default": "https://api.doppler.com"
+        },
+        "rateLimitHint": {
+          "type": "object",
+          "properties": {
+            "perMinute": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "x-verify": true,
+          "x-verify-note": "\"240 requests/minute\" is unverified ◐ (§9.4)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authConjur": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Access tokens last 8 minutes; Keyhole re-authenticates often.",
+          "required": [
+            "method",
+            "login",
+            "apiKey"
+          ],
+          "properties": {
+            "method": {
+              "const": "api_key"
+            },
+            "login": {
+              "type": "string",
+              "description": "host/<policy path>/<id>"
+            },
+            "apiKey": {
+              "$ref": "../shared/common.schema.json#/$defs/secretRef",
+              "description": "Conjur API key."
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": true,
+          "x-verify": true,
+          "x-verify-note": "8-minute token and Token header format are ◐/⚠ (§10)."
+        },
+        {
+          "type": "object",
+          "description": "authn-jwt with Keyhole as issuer; SaaS-direct.",
+          "required": [
+            "method",
+            "serviceId",
+            "federation"
+          ],
+          "properties": {
+            "method": {
+              "const": "jwt"
+            },
+            "serviceId": {
+              "type": "string",
+              "description": "authn-jwt service ID."
+            },
+            "federation": {
+              "$ref": "#/$defs/federation"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-recommended": true,
+          "x-verify": true,
+          "x-verify-note": "authn-jwt endpoint and variables are ⚠ (§10)."
+        },
+        {
+          "type": "object",
+          "description": "Platform identities; connector-side except authn-iam with Keyhole's own role.",
+          "required": [
+            "method",
+            "authenticator",
+            "login",
+            "identitySource"
+          ],
+          "properties": {
+            "method": {
+              "const": "platform"
+            },
+            "authenticator": {
+              "enum": [
+                "authn-iam",
+                "authn-azure",
+                "authn-gcp",
+                "authn-k8s",
+                "authn-cert"
+              ]
+            },
+            "serviceId": {
+              "type": "string"
+            },
+            "login": {
+              "type": "string"
+            },
+            "identitySource": {
+              "$ref": "#/$defs/identitySource"
+            }
+          },
+          "additionalProperties": false,
+          "x-route": "either",
+          "x-stores-secret": false,
+          "x-verify": true,
+          "x-verify-note": "Platform authenticators are ◐ (§10)."
+        }
+      ],
+      "x-methods": [
+        "api_key",
+        "jwt",
+        "platform"
+      ]
+    },
+    "connConjur": {
+      "type": "object",
+      "required": [
+        "applianceUrl",
+        "account",
+        "edition"
+      ],
+      "properties": {
+        "applianceUrl": {
+          "type": "string",
+          "description": "e.g. https://<subdomain>.secretsmgr.cyberark.cloud/api for SaaS.",
+          "format": "uri"
+        },
+        "account": {
+          "type": "string",
+          "default": "conjur"
+        },
+        "edition": {
+          "enum": [
+            "open_source",
+            "self_hosted",
+            "saas"
+          ],
+          "x-verify": true,
+          "x-verify-note": "Edition names ◐ (§10)."
+        },
+        "caBundlePem": {
+          "type": "string",
+          "pattern": "^-----BEGIN CERTIFICATE-----"
+        }
+      },
+      "additionalProperties": false
+    },
+    "health": {
+      "type": "object",
+      "required": [
+        "status",
+        "checkedAt"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "healthy",
+            "degraded",
+            "sealed",
+            "denied",
+            "unreachable",
+            "unknown"
+          ],
+          "description": "Coarse state the UI shows (the prototype's StoreHealth plus unknown)."
+        },
+        "code": {
+          "enum": [
+            "ok",
+            "sealed",
+            "namespace_sealed",
+            "namespace_locked",
+            "not_initialized",
+            "standby",
+            "permission_denied",
+            "invalid_credential",
+            "expired_credential",
+            "consent_missing",
+            "firewall_denied",
+            "vpcsc_denied",
+            "kms_decrypt_denied",
+            "not_found",
+            "rate_limited",
+            "sync_not_ready",
+            "tls_error",
+            "dns_error",
+            "tcp_error",
+            "connector_offline",
+            "vendor_error"
+          ],
+          "description": "Fine-grained cause mapped from vendor signals (VAULT_FLOWS §2.5, 4.4, 5.4, 6.4, 7.5, 8.4, 9.4, 10). namespace_sealed/namespace_locked are never mapped to sealed."
+        },
+        "message": {
+          "type": "string"
+        },
+        "httpStatus": {
+          "type": "integer"
+        },
+        "vendorCode": {
+          "type": "string",
+          "description": "e.g. AccessDeniedException, ForbiddenByFirewall, AADSTS700016, PERMISSION_DENIED."
+        },
+        "checkedAt": {
+          "$ref": "../shared/common.schema.json#/$defs/isoDate"
+        },
+        "lastTestId": {
+          "$ref": "../shared/common.schema.json#/$defs/connectionTestId"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "_id": "st_bao",
+      "orgId": "org_acme",
+      "name": "Payments vault",
+      "provider": "openbao",
+      "status": "active",
+      "route": {
+        "mode": "connector",
+        "connectorId": "cn_edge01"
+      },
+      "networkExposure": "private",
+      "connection": {
+        "address": "https://bao.acme.internal:8200",
+        "caBundlePem": "-----BEGIN CERTIFICATE-----\nMIIB…\n-----END CERTIFICATE-----\n",
+        "caBundleName": "vault-ca.pem",
+        "skipTlsVerify": false
+      },
+      "auth": {
+        "method": "approle",
+        "mount": "approle",
+        "roleId": "b7f1c2a4-keyhole",
+        "bindSecretId": true,
+        "secretId": {
+          "kind": "connector_local",
+          "connectorId": "cn_edge01",
+          "name": "payments-approle-secret-id",
+          "setAt": "2026-09-24T10:00:00Z"
+        }
+      },
+      "health": {
+        "status": "healthy",
+        "code": "ok",
+        "checkedAt": "2026-09-27T13:56:00Z"
+      },
+      "cache": {
+        "defaultTtlSeconds": 60
+      },
+      "invalidation": {
+        "revalidation": "kv2_metadata",
+        "pollIntervalSeconds": 60
+      },
+      "createdAt": "2026-09-13T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-24T10:00:00Z",
+      "rev": 4
+    },
+    {
+      "_id": "st_local",
+      "orgId": "org_acme",
+      "name": "Local store",
+      "provider": "local",
+      "status": "active",
+      "route": {
+        "mode": "internal"
+      },
+      "health": {
+        "status": "healthy",
+        "code": "ok",
+        "checkedAt": "2026-09-27T13:59:20Z"
+      },
+      "createdAt": "2026-07-29T10:00:00Z",
+      "createdBy": {
+        "kind": "system",
+        "id": "org_bootstrap"
+      },
+      "updatedAt": "2026-07-29T10:00:00Z",
+      "rev": 0
+    },
+    {
+      "_id": "st_awsprod",
+      "orgId": "org_acme",
+      "name": "AWS prod secrets",
+      "provider": "aws_secrets_manager",
+      "status": "active",
+      "route": {
+        "mode": "direct"
+      },
+      "networkExposure": "public",
+      "connection": {
+        "region": "us-east-1"
+      },
+      "auth": {
+        "method": "assume_role",
+        "roleArn": "arn:aws:iam::123456789012:role/keyhole-read",
+        "externalId": "kh-org_acme-st_awsprod-7Qm2",
+        "sessionName": "keyhole-st_awsprod",
+        "durationSeconds": 3600,
+        "keyholePrincipalArn": "arn:aws:iam::999999999999:role/keyhole-broker"
+      },
+      "health": {
+        "status": "healthy",
+        "code": "ok",
+        "checkedAt": "2026-09-27T13:00:00Z"
+      },
+      "invalidation": {
+        "revalidation": "describe_secret",
+        "eventSourceIds": [
+          "esrc_awsprod"
+        ]
+      },
+      "createdAt": "2026-09-20T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-20T10:00:00Z",
+      "rev": 1
+    }
+  ]
+}

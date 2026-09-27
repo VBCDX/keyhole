@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/org_membership.schema.json",
+  "title": "Org membership",
+  "description": "auth.org_memberships — a user's role and status in one org. Suspension affects only this membership. A pending invitation shows as status invited so both apps' grids list the person.",
+  "type": "object",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "suspended"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "suspendedFrom",
+          "suspensionId"
+        ]
+      }
+    }
+  ],
+  "required": [
+    "_id",
+    "orgId",
+    "userId",
+    "role",
+    "status",
+    "createdAt",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../common.schema.json#/$defs/orgMembershipId"
+    },
+    "orgId": {
+      "$ref": "../common.schema.json#/$defs/orgId"
+    },
+    "userId": {
+      "$ref": "../common.schema.json#/$defs/userId"
+    },
+    "role": {
+      "$ref": "../common.schema.json#/$defs/orgRole"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "invited",
+        "suspended"
+      ]
+    },
+    "suspendedFrom": {
+      "enum": [
+        "active",
+        "invited"
+      ],
+      "description": "While suspended: the status Resume restores."
+    },
+    "suspensionId": {
+      "anyOf": [
+        {
+          "$ref": "../common.schema.json#/$defs/suspensionId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "invitationId": {
+      "anyOf": [
+        {
+          "$ref": "../common.schema.json#/$defs/invitationId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "joinedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "createdAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "updatedAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "../common.schema.json#/$defs/principalRef"
+    },
+    "rev": {
+      "$ref": "../common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "om_acme_jo",
+      "orgId": "org_acme",
+      "userId": "u_jo",
+      "role": "user",
+      "status": "suspended",
+      "suspendedFrom": "active",
+      "suspensionId": "susp_acme_jo1",
+      "joinedAt": "2026-08-01T10:00:00Z",
+      "createdAt": "2026-08-01T10:00:00Z",
+      "updatedAt": "2026-09-20T10:00:00Z",
+      "updatedBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "rev": 2
+    }
+  ]
+}

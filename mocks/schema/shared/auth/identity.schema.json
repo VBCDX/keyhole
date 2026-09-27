@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/identity.schema.json",
+  "title": "Identity (SSO link)",
+  "description": "auth.identities — how a user signs in: a password, a social IdP, or an org's enterprise SSO connection.",
+  "type": "object",
+  "required": [
+    "_id",
+    "userId",
+    "provider",
+    "subject",
+    "linkedAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../common.schema.json#/$defs/identityId"
+    },
+    "userId": {
+      "$ref": "../common.schema.json#/$defs/userId"
+    },
+    "provider": {
+      "enum": [
+        "password",
+        "google",
+        "microsoft",
+        "github",
+        "oidc",
+        "saml"
+      ]
+    },
+    "connectionId": {
+      "type": "string",
+      "description": "Enterprise SSO connection (oidc/saml), owned by an org."
+    },
+    "connectionOrgId": {
+      "$ref": "../common.schema.json#/$defs/orgId"
+    },
+    "subject": {
+      "type": "string",
+      "description": "IdP subject (`sub` / NameID). Unique with provider+connectionId."
+    },
+    "emailAtLink": {
+      "type": "string",
+      "format": "email"
+    },
+    "passwordHash": {
+      "type": "string",
+      "description": "password only: argon2id PHC string.",
+      "pattern": "^\\$argon2id\\$"
+    },
+    "linkedAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "lastUsedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    }
+  },
+  "additionalProperties": false
+}

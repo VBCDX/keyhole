@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/cabinet.schema.json",
+  "title": "Cabinet",
+  "description": "keyhole.cabinets — a workspace-scoped bundle of keys (including cabinet-owned Local keys) and tool grants, usable by everyone in the workspace or a named set of players. createdBy grants nothing; managedBy falls back to the workspace admins when the manager can no longer use the workspace.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "workspaceId",
+    "name",
+    "keyIds",
+    "tools",
+    "access",
+    "createdAt",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/cabinetId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "workspaceId": {
+      "$ref": "../shared/common.schema.json#/$defs/workspaceId"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "createdBy": {
+      "anyOf": [
+        {
+          "$ref": "../shared/common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "managedBy": {
+      "anyOf": [
+        {
+          "$ref": "../shared/common.schema.json#/$defs/userId",
+          "description": "null: workspace admins manage it."
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "keyIds": {
+      "type": "array",
+      "items": {
+        "$ref": "../shared/common.schema.json#/$defs/keyId"
+      },
+      "uniqueItems": true
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "toolId",
+          "slotMap"
+        ],
+        "properties": {
+          "toolId": {
+            "$ref": "../shared/common.schema.json#/$defs/toolId"
+          },
+          "slotMap": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "../shared/common.schema.json#/$defs/keyId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "access": {
+      "oneOf": [
+        {
+          "const": "everyone"
+        },
+        {
+          "type": "object",
+          "required": [
+            "players"
+          ],
+          "properties": {
+            "players": {
+              "type": "array",
+              "items": {
+                "$ref": "../shared/common.schema.json#/$defs/memberRef"
+              },
+              "minItems": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "createdAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "rev": {
+      "$ref": "../shared/common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "cb_mia",
+      "orgId": "org_acme",
+      "workspaceId": "ws_prod",
+      "name": "Mia's billing set",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_mia"
+      },
+      "managedBy": "u_mia",
+      "keyIds": [
+        "k_mia1",
+        "k_mia2"
+      ],
+      "tools": [
+        {
+          "toolId": "t_stripe",
+          "slotMap": {
+            "stripe_secret": "k_mia1"
+          }
+        }
+      ],
+      "access": {
+        "players": [
+          {
+            "kind": "user",
+            "id": "u_mia"
+          },
+          {
+            "kind": "agent",
+            "id": "ag_billing"
+          }
+        ]
+      },
+      "createdAt": "2026-09-27T11:00:00Z",
+      "updatedAt": "2026-09-27T11:00:00Z",
+      "rev": 0
+    }
+  ]
+}

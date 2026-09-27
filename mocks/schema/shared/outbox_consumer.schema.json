@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/outbox_consumer.schema.json",
+  "title": "Outbox consumer checkpoint",
+  "description": "suite.outbox_consumers — one row per consumer (keyhole.projector, dispatch.projector, suite.relay). Holds the change-stream resume token.",
+  "type": "object",
+  "required": [
+    "_id",
+    "resumeToken",
+    "updatedAt"
+  ],
+  "properties": {
+    "_id": {
+      "type": "string",
+      "description": "Consumer name, e.g. `dispatch.projector`.",
+      "pattern": "^[a-z]+\\.[a-z_]+$"
+    },
+    "resumeToken": {
+      "type": "object",
+      "description": "Opaque change-stream resume token."
+    },
+    "lastEventId": {
+      "$ref": "common.schema.json#/$defs/outboxEventId"
+    },
+    "lastEventAt": {
+      "$ref": "common.schema.json#/$defs/nullableDate"
+    },
+    "updatedAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    }
+  },
+  "additionalProperties": false
+}

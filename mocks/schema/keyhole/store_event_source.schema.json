@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/store_event_source.schema.json",
+  "title": "Store change-event source",
+  "description": "keyhole.store_event_sources — how Keyhole learns a secret changed, to invalidate caches (VAULT_FLOWS §11.2 #3). Events are hints: Keyhole re-reads and never trusts payloads. Inbound kinds get a per-source endpoint https://hooks.keyhole.dev/store-events/{_id}; the verification secret is a secretRef.",
+  "type": "object",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "azure_event_grid",
+              "aws_eventbridge_api_destination",
+              "doppler_webhook",
+              "infisical_webhook",
+              "gcp_pubsub_push"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "verification"
+        ],
+        "properties": {
+          "direction": {
+            "const": "inbound"
+          }
+        }
+      }
+    }
+  ],
+  "x-verify": true,
+  "x-verify-note": "EventBridge field paths ⚠, Event Grid handshake ⚠, Pub/Sub event types ⚠, Doppler signature ◐ (VAULT_FLOWS §4.3, 5.3, 6.3, 9.3).",
+  "required": [
+    "_id",
+    "orgId",
+    "storeId",
+    "kind",
+    "status",
+    "createdAt",
+    "createdBy",
+    "updatedAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/storeEventSourceId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "storeId": {
+      "$ref": "../shared/common.schema.json#/$defs/storeId"
+    },
+    "kind": {
+      "enum": [
+        "vault_events_ws",
+        "aws_eventbridge_api_destination",
+        "aws_ssm_parameter_change",
+        "azure_event_grid",
+        "gcp_pubsub_push",
+        "gcp_pubsub_pull",
+        "infisical_webhook",
+        "infisical_event_subscription",
+        "doppler_webhook",
+        "doppler_watch_sse",
+        "poll"
+      ],
+      "description": "vault_events_ws: Vault Enterprise sys/events/subscribe (SaaS if reachable, else the connector subscribes). infisical_event_subscription: Enterprise SSE, no replay. poll: revalidation only."
+    },
+    "direction": {
+      "enum": [
+        "inbound",
+        "outbound_subscription",
+        "poll"
+      ]
+    },
+    "endpointPath": {
+      "type": "string",
+      "description": "Inbound only: /store-events/{_id}."
+    },
+    "verification": {
+      "type": "object",
+      "required": [
+        "method"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "hmac_sha256_header",
+            "basic_or_api_key_header",
+            "event_grid_handshake",
+            "pubsub_oidc",
+            "none"
+          ]
+        },
+        "secret": {
+          "$ref": "../shared/common.schema.json#/$defs/secretRef"
+        },
+        "headerName": {
+          "type": "string",
+          "description": "x-infisical-signature, X-Doppler-Signature, or the API-destination auth header."
+        },
+        "expectedAudience": {
+          "type": "string",
+          "description": "pubsub_oidc: audience in the push JWT."
+        },
+        "expectedServiceAccount": {
+          "type": "string",
+          "description": "pubsub_oidc: the push subscription's SA email.",
+          "format": "email"
+        },
+        "handshakeCompletedAt": {
+          "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "filter": {
+      "type": "object",
+      "properties": {
+        "eventTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "configs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "via": {
+      "type": "object",
+      "description": "Outbound subscriptions held by a connector (private stores).",
+      "properties": {
+        "connectorId": {
+          "$ref": "../shared/common.schema.json#/$defs/vaultConnectorId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "status": {
+      "enum": [
+        "pending_setup",
+        "active",
+        "failing",
+        "disabled"
+      ]
+    },
+    "lastEventAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "createdAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "createdBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    }
+  },
+  "additionalProperties": false
+}

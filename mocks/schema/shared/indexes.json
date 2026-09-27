@@ -1,0 +1,386 @@
+{
+  "$comment": "Every collection's validator is its schema file converted by shared/tools/mongo_validator.py ($ref inlined, dates → bsonType date, const → enum, if/then → anyOf[not if, then], unsupported keywords dropped). Tenancy: every index starts with orgId except the auth-path indexes marked `\"global\": true`, which look up a credential digest or public ID before the org is known; the handler then checks the row's orgId. MongoDB 7.0+ (partial indexes with $in).",
+  "databases": {
+    "suite": {
+      "orgs": {
+        "schema": "org.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "status": 1,
+              "_id": 1
+            },
+            "name": "status"
+          }
+        ]
+      },
+      "workspaces": {
+        "schema": "workspace.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "orgId": 1,
+              "status": 1,
+              "name": 1
+            },
+            "name": "org_status_name"
+          }
+        ]
+      },
+      "workspace_memberships": {
+        "schema": "workspace_membership.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "orgId": 1,
+              "workspaceId": 1,
+              "member.kind": 1,
+              "member.id": 1
+            },
+            "name": "org_ws_member",
+            "unique": true
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "member.kind": 1,
+              "member.id": 1
+            },
+            "name": "org_member"
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "workspaceId": 1,
+              "role": 1
+            },
+            "name": "org_ws_role"
+          }
+        ]
+      },
+      "agents": {
+        "schema": "agent.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "orgId": 1,
+              "labelLower": 1
+            },
+            "name": "org_label",
+            "unique": true
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "createdAt": -1
+            },
+            "name": "org_created"
+          }
+        ]
+      },
+      "audit_events": {
+        "schema": "audit_event.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "orgId": 1,
+              "at": -1
+            },
+            "name": "org_at"
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "workspaceId": 1,
+              "at": -1
+            },
+            "name": "org_ws_at"
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "actor.id": 1,
+              "at": -1
+            },
+            "name": "org_actor_at"
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "subject.id": 1,
+              "at": -1
+            },
+            "name": "org_subject_at"
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "trk": 1
+            },
+            "name": "org_trk"
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "causationId": 1
+            },
+            "name": "org_causation",
+            "partialFilterExpression": {
+              "causationId": {
+                "$exists": true
+              }
+            }
+          },
+          {
+            "key": {
+              "expireAt": 1
+            },
+            "name": "ttl_expireAt",
+            "expireAfterSeconds": 0
+          }
+        ],
+        "$comment": "Shared rows only (shared: true)."
+      },
+      "outbox": {
+        "schema": "outbox_event.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "publishedAt": 1,
+              "_id": 1
+            },
+            "name": "published_order"
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "aggregate.id": 1,
+              "_id": 1
+            },
+            "name": "org_aggregate"
+          },
+          {
+            "key": {
+              "deleteAt": 1
+            },
+            "name": "ttl_deleteAt",
+            "expireAfterSeconds": 0
+          }
+        ],
+        "$comment": "The relay tails a change stream; published_order serves its catch-up scan for publishedAt: null after a restart."
+      },
+      "outbox_consumers": {
+        "schema": "outbox_consumer.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": []
+      }
+    },
+    "auth": {
+      "$comment": "Logical model of the auth service's store. Engine is the auth service's choice; these are the uniqueness and lookup rules it must honour.",
+      "users": {
+        "schema": "auth/user.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "emailLower": 1
+            },
+            "name": "email",
+            "unique": true,
+            "global": true
+          }
+        ]
+      },
+      "identities": {
+        "schema": "auth/identity.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "provider": 1,
+              "connectionId": 1,
+              "subject": 1
+            },
+            "name": "provider_subject",
+            "unique": true,
+            "global": true
+          },
+          {
+            "key": {
+              "userId": 1
+            },
+            "name": "user"
+          }
+        ]
+      },
+      "sessions": {
+        "schema": "auth/session.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "userId": 1,
+              "revokedAt": 1,
+              "lastSeenAt": -1
+            },
+            "name": "user_live"
+          },
+          {
+            "key": {
+              "refresh.current.hash": 1
+            },
+            "name": "refresh_hash",
+            "unique": true,
+            "partialFilterExpression": {
+              "refresh.current.hash": {
+                "$exists": true
+              }
+            }
+          },
+          {
+            "key": {
+              "expiresAt": 1
+            },
+            "name": "ttl_expiresAt",
+            "expireAfterSeconds": 0
+          }
+        ]
+      },
+      "mfa_factors": {
+        "schema": "auth/mfa_factor.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "userId": 1,
+              "type": 1
+            },
+            "name": "user_type"
+          },
+          {
+            "key": {
+              "webauthn.credentialId": 1
+            },
+            "name": "webauthn_cred",
+            "unique": true,
+            "partialFilterExpression": {
+              "webauthn.credentialId": {
+                "$exists": true
+              }
+            },
+            "global": true
+          }
+        ]
+      },
+      "org_memberships": {
+        "schema": "auth/org_membership.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "orgId": 1,
+              "userId": 1
+            },
+            "name": "org_user",
+            "unique": true
+          },
+          {
+            "key": {
+              "userId": 1,
+              "status": 1
+            },
+            "name": "user_orgs",
+            "global": true
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "role": 1,
+              "status": 1
+            },
+            "name": "org_role_status"
+          }
+        ]
+      },
+      "invitations": {
+        "schema": "auth/invitation.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "token.hash": 1
+            },
+            "name": "token_hash",
+            "unique": true,
+            "global": true
+          },
+          {
+            "key": {
+              "orgId": 1,
+              "status": 1,
+              "expiresAt": 1
+            },
+            "name": "org_status_exp"
+          },
+          {
+            "key": {
+              "emailLower": 1,
+              "status": 1
+            },
+            "name": "email_status",
+            "global": true
+          }
+        ]
+      },
+      "support_locks": {
+        "schema": "auth/support_lock.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "userId": 1,
+              "status": 1
+            },
+            "name": "user_status",
+            "global": true
+          }
+        ]
+      },
+      "suspensions": {
+        "schema": "auth/suspension.schema.json",
+        "validationLevel": "strict",
+        "validationAction": "error",
+        "indexes": [
+          {
+            "key": {
+              "orgId": 1,
+              "userId": 1,
+              "suspendedAt": -1
+            },
+            "name": "org_user_at"
+          }
+        ]
+      }
+    }
+  }
+}

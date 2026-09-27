@@ -1,0 +1,1205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/common.schema.json",
+  "title": "VBCDX common definitions",
+  "description": "Shared $defs referenced by every schema in the suite: ID patterns, dates, principal refs, token digests, rotating credentials, secret references, envelopes, sidecar local endpoints, cache policy.",
+  "$defs": {
+    "orgId": {
+      "type": "string",
+      "description": "Organization. Prefix `org_`.",
+      "pattern": "^org_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "description": "Workspace. Prefix `ws_`.",
+      "pattern": "^ws_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "agentId": {
+      "type": "string",
+      "description": "Agent (shared identity record). Prefix `ag_`.",
+      "pattern": "^ag_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "workspaceMembershipId": {
+      "type": "string",
+      "description": "Workspace membership (human or agent). Prefix `wm_`.",
+      "pattern": "^wm_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "auditEventId": {
+      "type": "string",
+      "description": "Audit event. Prefix `ev_`.",
+      "pattern": "^ev_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "outboxEventId": {
+      "type": "string",
+      "description": "Outbox event. Prefix `obx_`.",
+      "pattern": "^obx_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "userId": {
+      "type": "string",
+      "description": "User (human). Prefix `u_`.",
+      "pattern": "^u_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "identityId": {
+      "type": "string",
+      "description": "Linked identity / SSO link. Prefix `idn_`.",
+      "pattern": "^idn_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "sessionId": {
+      "type": "string",
+      "description": "Session. Prefix `ses_`.",
+      "pattern": "^ses_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "mfaFactorId": {
+      "type": "string",
+      "description": "MFA factor. Prefix `mfa_`.",
+      "pattern": "^mfa_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "orgMembershipId": {
+      "type": "string",
+      "description": "Org membership. Prefix `om_`.",
+      "pattern": "^om_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "invitationId": {
+      "type": "string",
+      "description": "Invitation. Prefix `inv_`.",
+      "pattern": "^inv_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "supportLockId": {
+      "type": "string",
+      "description": "Support lock. Prefix `lock_`.",
+      "pattern": "^lock_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "suspensionId": {
+      "type": "string",
+      "description": "Suspension. Prefix `susp_`.",
+      "pattern": "^susp_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "supportAgentId": {
+      "type": "string",
+      "description": "Keyhole support operator (superAdmin; outside every org). Prefix `sup_`.",
+      "pattern": "^sup_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "enrollmentTokenId": {
+      "type": "string",
+      "description": "Enrollment token record (the token itself is kh_enr_… / dsp_enr_…). Prefix `enr_`.",
+      "pattern": "^enr_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "storeId": {
+      "type": "string",
+      "description": "Keyhole secret store. Prefix `st_`.",
+      "pattern": "^st_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "keyId": {
+      "type": "string",
+      "description": "Keyhole key. Prefix `k_`.",
+      "pattern": "^k_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "localKeyValueId": {
+      "type": "string",
+      "description": "Keyhole Local-store key value (envelope-encrypted). Prefix `lkv_`.",
+      "pattern": "^lkv_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "toolId": {
+      "type": "string",
+      "description": "Keyhole tool. Prefix `t_`.",
+      "pattern": "^t_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "toolActionId": {
+      "type": "string",
+      "description": "Keyhole tool action. Prefix `a_`.",
+      "pattern": "^a_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "toolInputId": {
+      "type": "string",
+      "description": "Keyhole tool action input. Prefix `i_`.",
+      "pattern": "^i_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "keySlotId": {
+      "type": "string",
+      "description": "Keyhole tool key slot. Prefix `s_`.",
+      "pattern": "^s_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "grantId": {
+      "type": "string",
+      "description": "Keyhole workspace tool grant. Prefix `gr_`.",
+      "pattern": "^gr_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "cabinetId": {
+      "type": "string",
+      "description": "Keyhole cabinet. Prefix `cb_`.",
+      "pattern": "^cb_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "vaultConnectorId": {
+      "type": "string",
+      "description": "Keyhole vault connector. Prefix `cn_`.",
+      "pattern": "^cn_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "keyholeSidecarId": {
+      "type": "string",
+      "description": "Keyhole sidecar. Prefix `sc_`.",
+      "pattern": "^sc_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "connectionTestId": {
+      "type": "string",
+      "description": "Keyhole store connection test. Prefix `ctest_`.",
+      "pattern": "^ctest_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "storeEventSourceId": {
+      "type": "string",
+      "description": "Keyhole store change-event source. Prefix `esrc_`.",
+      "pattern": "^esrc_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "issuerKeyId": {
+      "type": "string",
+      "description": "Keyhole OIDC issuer signing key. Prefix `ikey_`.",
+      "pattern": "^ikey_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "messageId": {
+      "type": "string",
+      "description": "Dispatch message. Prefix `msg_`.",
+      "pattern": "^msg_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "webhookId": {
+      "type": "string",
+      "description": "Dispatch message webhook. Prefix `wh_`.",
+      "pattern": "^wh_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "listenerId": {
+      "type": "string",
+      "description": "Dispatch webhook listener (public URL id). Prefix `lsn_`.",
+      "pattern": "^lsn_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "webhookAttemptId": {
+      "type": "string",
+      "description": "Dispatch webhook attempt. Prefix `wa_`.",
+      "pattern": "^wa_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "listenerCallId": {
+      "type": "string",
+      "description": "Dispatch listener call. Prefix `lc_`.",
+      "pattern": "^lc_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "deadLetterId": {
+      "type": "string",
+      "description": "Dispatch webhook dead letter. Prefix `dlq_`.",
+      "pattern": "^dlq_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "noteId": {
+      "type": "string",
+      "description": "Dispatch context note. Prefix `nt_`.",
+      "pattern": "^nt_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "sealedSecretId": {
+      "type": "string",
+      "description": "Dispatch sealed secret. Prefix `sec_`.",
+      "pattern": "^sec_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "blobId": {
+      "type": "string",
+      "description": "Large body/payload blob. Prefix `blob_`.",
+      "pattern": "^blob_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "dispatchSidecarId": {
+      "type": "string",
+      "description": "Dispatch sidecar. Prefix `dsc_`.",
+      "pattern": "^dsc_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "trackingCode": {
+      "type": "string",
+      "description": "Tracking code shown to people and support (`trk_` + 8 lowercase alphanumerics).",
+      "pattern": "^trk_[a-z0-9]{8}$"
+    },
+    "isoDate": {
+      "type": "string",
+      "description": "ISO-8601 instant in UTC. Stored as a BSON Date in Mongo.",
+      "format": "date-time"
+    },
+    "nullableDate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/isoDate"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rev": {
+      "type": "integer",
+      "description": "Optimistic-concurrency revision. Every write does `{$inc: {rev: 1}}` guarded by the rev it read; events carry it so consumers can drop stale ones.",
+      "minimum": 0
+    },
+    "app": {
+      "enum": [
+        "keyhole",
+        "dispatch"
+      ],
+      "description": "A product in the suite."
+    },
+    "originApp": {
+      "enum": [
+        "keyhole",
+        "dispatch",
+        "auth",
+        "suite"
+      ],
+      "description": "Where a change originated. `auth` = the auth service; `suite` = a suite-level job (retention, erasure)."
+    },
+    "orgRole": {
+      "enum": [
+        "Owner",
+        "userAdmin",
+        "user"
+      ],
+      "description": "Organization role (PERMISSIONS.md rule 1). Lives in the auth service."
+    },
+    "workspaceRole": {
+      "enum": [
+        "member",
+        "workspace_admin"
+      ],
+      "description": "Shared workspace role. Agents are always `member` here; Dispatch's agent workspace admins live in dispatch.membership_access."
+    },
+    "principalKind": {
+      "enum": [
+        "user",
+        "agent",
+        "support",
+        "system"
+      ],
+      "description": "Who can create or change something."
+    },
+    "principalRef": {
+      "type": "object",
+      "description": "`createdBy`/`updatedBy` everywhere. Kept for audit and observability only (rule 3): it grants nothing.",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/principalKind"
+        },
+        "id": {
+          "type": "string",
+          "description": "u_… / ag_… / sup_… / a system job name such as `retention`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "memberRef": {
+      "type": "object",
+      "description": "A workspace member or a player: a human user or an agent.",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "user",
+            "agent"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^(u|ag)_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "actorRef": {
+      "type": "object",
+      "description": "Audit actor. Label is a snapshot so renames and deletions never rewrite history.",
+      "required": [
+        "kind",
+        "label"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "user",
+            "agent",
+            "support",
+            "system",
+            "connector",
+            "sidecar",
+            "listener"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "The actor's ID when it has one (u_, ag_, sup_, cn_, sc_, dsc_, lsn_)."
+        },
+        "label": {
+          "type": "string",
+          "description": "Name at the time of the event. Kept on the row forever (rule 4); pseudonymised only by an erasure request."
+        },
+        "via": {
+          "type": "object",
+          "description": "The channel the actor used: a Keyhole or Dispatch sidecar, Dispatch's API console (a human using an agent's credentials; id = u_…), the CLI, or a vault connector.",
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "sidecar",
+                "api_console",
+                "cli",
+                "connector"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "ipAddress": {
+      "type": "string",
+      "description": "Client IP (PII). Truncated to /24 (IPv4) or /48 (IPv6) after 90 days.",
+      "maxLength": 45
+    },
+    "tokenDigest": {
+      "type": "object",
+      "description": "How every token is stored: only a hash plus prefix and last four. The plaintext is shown once and never stored.",
+      "required": [
+        "alg",
+        "hash",
+        "prefix",
+        "last4",
+        "issuedAt"
+      ],
+      "properties": {
+        "alg": {
+          "enum": [
+            "sha256",
+            "argon2id"
+          ],
+          "description": "`sha256` = HMAC-SHA256(pepper[pepperVersion], token), for high-entropy generated tokens (≥ 256 bits) that are looked up on every request. `argon2id` = PHC string, for anything a human could choose or that is short (MFA recovery codes)."
+        },
+        "hash": {
+          "type": "string",
+          "description": "base64url digest (sha256) or PHC string (argon2id). Never the token."
+        },
+        "pepperVersion": {
+          "type": "integer",
+          "description": "sha256 only: which server-side pepper keyed the HMAC (rotated via re-hash on next use).",
+          "minimum": 1
+        },
+        "prefix": {
+          "type": "string",
+          "description": "Public token prefix, e.g. kh_live_. Stored for display and secret scanning.",
+          "pattern": "^[a-z]+_[a-z]+_$"
+        },
+        "last4": {
+          "type": "string",
+          "description": "Last four characters, for display (••••6TpE).",
+          "pattern": "^[A-Za-z0-9]{4}$"
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/nullableDate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "graceSeconds": {
+      "type": "integer",
+      "description": "Grace period chosen at rotate time: how long the previous credential keeps working. 0 = it stops immediately.",
+      "minimum": 0,
+      "maximum": 86400
+    },
+    "credentialSet": {
+      "type": "object",
+      "description": "A rotating credential with at most one previous value. Rotate(grace): previous := current with graceUntil = now + grace (grace 0: previous := null); an earlier previous that was still in grace stops immediately and the rotation's audit row says so. End grace now: previous := null. Auth accepts current, or previous while now < graceUntil.",
+      "required": [
+        "current"
+      ],
+      "properties": {
+        "current": {
+          "$ref": "#/$defs/tokenDigest"
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "type": "object",
+              "description": "The credential replaced by the last rotation, valid until graceUntil. Null when there is no grace running.",
+              "required": [
+                "digest",
+                "graceUntil"
+              ],
+              "properties": {
+                "digest": {
+                  "$ref": "#/$defs/tokenDigest"
+                },
+                "graceUntil": {
+                  "$ref": "#/$defs/isoDate"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rotatedAt": {
+          "$ref": "#/$defs/nullableDate"
+        },
+        "rotatedBy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/principalRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "graceSeconds": {
+          "$ref": "#/$defs/graceSeconds"
+        },
+        "graceEndedEarlyAt": {
+          "$ref": "#/$defs/nullableDate",
+          "description": "Set by \"End grace now\": previous is cleared at the same moment."
+        },
+        "rotationCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "kmsKeyRef": {
+      "type": "string",
+      "description": "A key-encryption key held outside the database. `aws-kms:<key ARN>`, `gcp-kms:projects/…/cryptoKeys/…`, `azure-kv:https://…/keys/<name>/<version>`, `transit:<mount>/<key>` (Vault/OpenBao Transit), `tpm:<handle>` (component-local only).",
+      "pattern": "^(aws-kms|gcp-kms|azure-kv|transit|tpm):.+$"
+    },
+    "envelope": {
+      "type": "object",
+      "description": "Envelope encryption: a per-record data key encrypts the value; a KMS key wraps the data key. Plaintext data keys exist only in process memory.",
+      "required": [
+        "alg",
+        "nonce",
+        "ciphertext",
+        "aad",
+        "dek"
+      ],
+      "properties": {
+        "alg": {
+          "const": "AES-256-GCM"
+        },
+        "nonce": {
+          "type": "string",
+          "description": "96-bit nonce, base64. Unique per encryption.",
+          "contentEncoding": "base64"
+        },
+        "ciphertext": {
+          "type": "string",
+          "description": "Ciphertext with the 128-bit GCM tag appended, base64.",
+          "contentEncoding": "base64"
+        },
+        "aad": {
+          "type": "string",
+          "description": "Additional authenticated data, e.g. `org_acme|k_stripe|v3`. Binds the ciphertext to its owner so it can't be moved."
+        },
+        "dek": {
+          "type": "object",
+          "required": [
+            "wrapped",
+            "kmsKeyRef"
+          ],
+          "properties": {
+            "wrapped": {
+              "type": "string",
+              "description": "The 256-bit data key, wrapped by the KEK. base64.",
+              "contentEncoding": "base64"
+            },
+            "kmsKeyRef": {
+              "$ref": "#/$defs/kmsKeyRef"
+            },
+            "kekVersion": {
+              "type": "string",
+              "description": "KEK version used to wrap, when the KMS reports one."
+            },
+            "wrappedAt": {
+              "$ref": "#/$defs/isoDate"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "secretRef": {
+      "description": "Where stored secret material lives. Never the value. Keyhole's Mongo holds only these references for store credentials.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "uri",
+            "kmsKeyRef",
+            "version",
+            "setAt",
+            "setBy"
+          ],
+          "properties": {
+            "kind": {
+              "const": "sealed"
+            },
+            "uri": {
+              "type": "string",
+              "description": "`kss://…` = Keyhole sealed-secret service (outside Mongo). `dss://sec_…` = Dispatch sealed_secrets collection.",
+              "pattern": "^(kss|dss)://.+$"
+            },
+            "kmsKeyRef": {
+              "$ref": "#/$defs/kmsKeyRef"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "fingerprint": {
+              "type": "string",
+              "description": "HMAC-SHA256 of the value under a per-org key, to detect re-use without revealing it.",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "last4": {
+              "type": "string",
+              "description": "Only where the vendor shows last four itself (e.g. access key IDs are not secret; secret keys never get last4).",
+              "pattern": "^.{4}$"
+            },
+            "setAt": {
+              "$ref": "#/$defs/isoDate"
+            },
+            "setBy": {
+              "$ref": "#/$defs/principalRef"
+            },
+            "expiresAt": {
+              "$ref": "#/$defs/nullableDate"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "The secret was entered on the connector host and never reached Keyhole's SaaS. Only for stores routed through that connector.",
+          "required": [
+            "kind",
+            "connectorId",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "const": "connector_local"
+            },
+            "connectorId": {
+              "$ref": "#/$defs/vaultConnectorId"
+            },
+            "name": {
+              "type": "string",
+              "description": "Name of the secret in the connector's local sealed file (`keyhole connector secret set <name>`)."
+            },
+            "setAt": {
+              "$ref": "#/$defs/nullableDate"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "listenAddress": {
+      "description": "Where a sidecar listens. Loopback TCP (127.0.0.1:8787) by default, or a unix socket.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "transport",
+            "host",
+            "port"
+          ],
+          "properties": {
+            "transport": {
+              "const": "tcp"
+            },
+            "host": {
+              "type": "string",
+              "description": "Loopback unless the endpoint is exposed on the network."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "transport",
+            "path",
+            "mode"
+          ],
+          "properties": {
+            "transport": {
+              "const": "unix"
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "mode": {
+              "type": "string",
+              "description": "File mode, octal. 0660 admits only the app's user or group; that is the caller check.",
+              "pattern": "^0[0-7]{3}$",
+              "default": "0660"
+            },
+            "group": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "localAuth": {
+      "description": "How local callers prove they may use the sidecar.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Socket file permissions. Only valid with a unix listen address.",
+          "required": [
+            "method"
+          ],
+          "properties": {
+            "method": {
+              "const": "unix_socket"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Required for any TCP address.",
+          "required": [
+            "method",
+            "callerToken"
+          ],
+          "properties": {
+            "method": {
+              "const": "caller_token"
+            },
+            "callerToken": {
+              "$ref": "#/$defs/credentialSet",
+              "description": "Per-sidecar caller token (kh_call_ / dsp_call_), sent as X-Keyhole-Caller / X-Dispatch-Caller or Proxy-Authorization. Valid only at this sidecar."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "localEndpoint": {
+      "type": "object",
+      "required": [
+        "listen",
+        "exposeOnNetwork",
+        "localAuth",
+        "protocols"
+      ],
+      "properties": {
+        "listen": {
+          "$ref": "#/$defs/listenAddress"
+        },
+        "exposeOnNetwork": {
+          "type": "boolean",
+          "description": "Listens on a non-loopback address. Off by default; turning it on needs an explicit acknowledgement.",
+          "default": false
+        },
+        "exposureAcknowledged": {
+          "type": "object",
+          "required": [
+            "by",
+            "at"
+          ],
+          "properties": {
+            "by": {
+              "$ref": "#/$defs/principalRef"
+            },
+            "at": {
+              "$ref": "#/$defs/isoDate"
+            }
+          },
+          "additionalProperties": false
+        },
+        "localAuth": {
+          "$ref": "#/$defs/localAuth"
+        },
+        "protocols": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "http",
+              "https",
+              "sse",
+              "mcp"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "exposeOnNetwork": {
+                "const": false
+              },
+              "listen": {
+                "properties": {
+                  "transport": {
+                    "const": "tcp"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "listen": {
+                "properties": {
+                  "host": {
+                    "pattern": "^(127\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|localhost|::1)$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "listen": {
+                "properties": {
+                  "transport": {
+                    "const": "tcp"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "localAuth": {
+                "properties": {
+                  "method": {
+                    "const": "caller_token"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "exposeOnNetwork": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "exposureAcknowledged"
+            ]
+          }
+        }
+      ],
+      "description": "Rules: a TCP address is loopback unless exposeOnNetwork; any TCP address needs the caller token; exposing needs an acknowledgement."
+    },
+    "cachePolicy": {
+      "type": "object",
+      "description": "Local encrypted credential cache policy for a component (see cache.md).",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "disk"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "keyProtection"
+            ],
+            "properties": {
+              "keyProtection": {
+                "enum": [
+                  "tpm",
+                  "cloud_kms"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "keyProtection": {
+                "const": "cloud_kms"
+              }
+            },
+            "required": [
+              "keyProtection"
+            ]
+          },
+          "then": {
+            "required": [
+              "kmsKeyRef"
+            ]
+          }
+        }
+      ],
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "off",
+            "memory",
+            "disk"
+          ],
+          "description": "memory: process memory only. disk: an encrypted file that survives restarts.",
+          "default": "memory"
+        },
+        "keyProtection": {
+          "enum": [
+            "process_memory",
+            "tpm",
+            "cloud_kms"
+          ],
+          "description": "Where the cache's data key lives. disk needs tpm or cloud_kms.",
+          "default": "process_memory"
+        },
+        "kmsKeyRef": {
+          "$ref": "#/$defs/kmsKeyRef"
+        },
+        "defaultTtlSeconds": {
+          "type": "integer",
+          "description": "For moving pointers (latest, AWSCURRENT, unversioned). VAULT_FLOWS §11.2: 300 s.",
+          "minimum": 0,
+          "maximum": 3600,
+          "default": 300
+        },
+        "pinnedTtlSeconds": {
+          "type": "integer",
+          "description": "For pinned versions (immutable values). Still bounded to respect revocation.",
+          "minimum": 0,
+          "maximum": 86400,
+          "default": 86400
+        },
+        "staleIfErrorSeconds": {
+          "type": "integer",
+          "description": "Serve a stale entry this long on 5xx/network/429 only; never on 401/403/404.",
+          "minimum": 0,
+          "maximum": 900,
+          "default": 900
+        },
+        "maxStalenessSeconds": {
+          "type": "integer",
+          "description": "Hard cap on age since the value was fetched, whatever else applies. Set by the server; the component can only lower it.",
+          "minimum": 0,
+          "maximum": 86400,
+          "default": 3600
+        },
+        "negativeCaching": {
+          "const": false,
+          "description": "Off: errors and not-founds are never cached."
+        },
+        "maxEntries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000,
+          "default": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "componentHealth": {
+      "type": "object",
+      "required": [
+        "status",
+        "lastSeenAt"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "healthy",
+            "degraded",
+            "offline"
+          ],
+          "description": "Derived from Redis presence; written back here on transitions and at most once a minute."
+        },
+        "lastSeenAt": {
+          "$ref": "#/$defs/nullableDate"
+        },
+        "ip": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ipAddress"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "missedHeartbeats": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reportedVersion": {
+          "type": "string"
+        },
+        "configVersion": {
+          "type": "integer",
+          "description": "Last org config version the component acknowledged (see redis.md).",
+          "minimum": 0
+        },
+        "cache": {
+          "type": "object",
+          "description": "Counts only. Never keys or values.",
+          "properties": {
+            "entries": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "hitRatio": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "staleServed24h": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lastFlushAt": {
+              "$ref": "#/$defs/nullableDate"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "installInfo": {
+      "type": "object",
+      "required": [
+        "method"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "script",
+            "homebrew",
+            "apt",
+            "yum",
+            "msi",
+            "docker",
+            "helm",
+            "npm",
+            "binary"
+          ]
+        },
+        "os": {
+          "enum": [
+            "linux",
+            "darwin",
+            "windows"
+          ]
+        },
+        "arch": {
+          "enum": [
+            "amd64",
+            "arm64"
+          ]
+        },
+        "host": {
+          "type": "string",
+          "description": "Hostname the component reports from."
+        },
+        "serviceManager": {
+          "enum": [
+            "systemd",
+            "launchd",
+            "windows_service",
+            "kubernetes",
+            "none"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "enrollment": {
+      "type": "object",
+      "description": "How a component was enrolled. The enrollment token is single use; this links to its record.",
+      "required": [
+        "enrollmentTokenId",
+        "enrolledAt",
+        "tokenCreatedBy"
+      ],
+      "properties": {
+        "enrollmentTokenId": {
+          "$ref": "#/$defs/enrollmentTokenId"
+        },
+        "enrolledAt": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "tokenCreatedBy": {
+          "$ref": "#/$defs/principalRef"
+        },
+        "fromIp": {
+          "$ref": "#/$defs/ipAddress"
+        },
+        "publicKey": {
+          "type": "string",
+          "description": "The component's X25519 public key (base64). The server seals anything it sends the component (tokens, local-store values) to this key.",
+          "contentEncoding": "base64"
+        },
+        "clientCertFingerprint": {
+          "type": "string",
+          "description": "SHA-256 of the mTLS client certificate issued at enrollment, when mTLS is on.",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "enrollmentTokenBase": {
+      "type": "object",
+      "required": [
+        "_id",
+        "orgId",
+        "app",
+        "componentKind",
+        "token",
+        "status",
+        "createdAt",
+        "createdBy",
+        "expiresAt"
+      ],
+      "properties": {
+        "_id": {
+          "$ref": "#/$defs/enrollmentTokenId"
+        },
+        "orgId": {
+          "$ref": "#/$defs/orgId"
+        },
+        "app": {
+          "$ref": "#/$defs/app"
+        },
+        "componentKind": {
+          "enum": [
+            "vault_connector",
+            "keyhole_sidecar",
+            "dispatch_sidecar"
+          ]
+        },
+        "token": {
+          "$ref": "#/$defs/tokenDigest",
+          "description": "kh_enr_… / dsp_enr_…. Shown once. Never accepted on argv (see cli.md)."
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "consumed",
+            "expired",
+            "revoked"
+          ]
+        },
+        "createdAt": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "createdBy": {
+          "$ref": "#/$defs/principalRef"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/isoDate",
+          "description": "15 minutes after creation."
+        },
+        "consumedAt": {
+          "$ref": "#/$defs/nullableDate"
+        },
+        "consumedFromIp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ipAddress"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "consumedByComponentId": {
+          "type": "string",
+          "pattern": "^(cn|sc|dsc)_"
+        },
+        "revokedAt": {
+          "$ref": "#/$defs/nullableDate"
+        },
+        "revokedBy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/principalRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deleteAt": {
+          "$ref": "#/$defs/isoDate",
+          "description": "TTL index: 30 days after expiry."
+        }
+      },
+      "description": "Fields every enrollment token record has. Single use: consumption is an atomic findOneAndUpdate({status:'pending', expiresAt:{$gt:now}})."
+    },
+    "timestamps": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "createdBy": {
+          "$ref": "#/$defs/principalRef"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/isoDate"
+        },
+        "updatedBy": {
+          "$ref": "#/$defs/principalRef"
+        }
+      }
+    }
+  }
+}

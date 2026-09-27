@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/tool.schema.json",
+  "title": "Tool",
+  "description": "keyhole.tools — an org-level HTTP tool: base URL, allowed actions, key slots. The editable draft lives here; each published version is an immutable row in tool_versions. Workspaces grant only published tools that org admins made available to them.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "status",
+    "draft",
+    "publishedVersion",
+    "createdAt",
+    "createdBy",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/toolId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "published"
+      ],
+      "description": "published: the draft equals the latest published version."
+    },
+    "draft": {
+      "$ref": "#/$defs/snapshot"
+    },
+    "publishedVersion": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "catalog": {
+      "enum": [
+        "stripe",
+        "github",
+        "slack"
+      ],
+      "description": "Installed from the starter catalog."
+    },
+    "createdAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "createdBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "deletedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "rev": {
+      "$ref": "../shared/common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "input": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "type",
+        "required"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "../shared/common.schema.json#/$defs/toolInputId"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "id",
+        "method",
+        "path",
+        "summary",
+        "inputs"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "../shared/common.schema.json#/$defs/toolActionId"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/input"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "slot": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "location",
+        "field",
+        "scheme"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "../shared/common.schema.json#/$defs/keySlotId"
+        },
+        "name": {
+          "type": "string",
+          "description": "Slot name grants map to a key, e.g. stripe_secret.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "location": {
+          "enum": [
+            "header",
+            "query"
+          ]
+        },
+        "field": {
+          "type": "string",
+          "description": "Header name or query parameter."
+        },
+        "scheme": {
+          "enum": [
+            "Bearer",
+            "Basic",
+            "None"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "snapshot": {
+      "type": "object",
+      "required": [
+        "internalName",
+        "displayName",
+        "description",
+        "baseUrl",
+        "actions",
+        "slots",
+        "perMinute",
+        "timeoutMs"
+      ],
+      "properties": {
+        "internalName": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/action"
+          }
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slot"
+          }
+        },
+        "perMinute": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "_id": "t_stripe",
+      "orgId": "org_acme",
+      "status": "published",
+      "publishedVersion": 2,
+      "catalog": "stripe",
+      "draft": {
+        "internalName": "stripe_charges",
+        "displayName": "Stripe charges",
+        "description": "Lists recent charges from a Stripe account.",
+        "baseUrl": "https://api.stripe.com",
+        "actions": [
+          {
+            "id": "a_charges",
+            "method": "GET",
+            "path": "/v1/charges",
+            "summary": "List recent charges",
+            "inputs": [
+              {
+                "id": "i_limit",
+                "name": "limit",
+                "type": "integer",
+                "required": false,
+                "description": "1–100"
+              }
+            ]
+          },
+          {
+            "id": "a_charge",
+            "method": "GET",
+            "path": "/v1/charges/{id}",
+            "summary": "Get one charge by id",
+            "inputs": [
+              {
+                "id": "i_id",
+                "name": "id",
+                "type": "string",
+                "required": true
+              }
+            ]
+          }
+        ],
+        "slots": [
+          {
+            "id": "s_stripe",
+            "name": "stripe_secret",
+            "location": "header",
+            "field": "Authorization",
+            "scheme": "Bearer"
+          }
+        ],
+        "perMinute": 60,
+        "timeoutMs": 10000
+      },
+      "createdAt": "2026-09-07T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-24T10:00:00Z",
+      "rev": 5
+    }
+  ]
+}

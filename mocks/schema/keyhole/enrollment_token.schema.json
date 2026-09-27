@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/enrollment_token.schema.json",
+  "title": "Keyhole enrollment token",
+  "description": "keyhole.enrollment_tokens — single-use kh_enr_… tokens (15 minutes). `intent` is the configuration the admin chose; the component receives it on enrollment and can't widen it.",
+  "allOf": [
+    {
+      "$ref": "../shared/common.schema.json#/$defs/enrollmentTokenBase"
+    },
+    {
+      "properties": {
+        "app": {
+          "const": "keyhole"
+        },
+        "componentKind": {
+          "enum": [
+            "vault_connector",
+            "keyhole_sidecar"
+          ]
+        },
+        "intent": {
+          "type": "object",
+          "required": [
+            "name"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "$ref": "../shared/common.schema.json#/$defs/workspaceId"
+            },
+            "agentId": {
+              "$ref": "../shared/common.schema.json#/$defs/agentId"
+            },
+            "local": {
+              "$ref": "../shared/common.schema.json#/$defs/localEndpoint"
+            },
+            "appMode": {
+              "enum": [
+                "base_url",
+                "proxy"
+              ]
+            },
+            "cachePolicy": {
+              "$ref": "../shared/common.schema.json#/$defs/cachePolicy"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "componentKind": {
+                "const": "keyhole_sidecar"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "intent": {
+                "required": [
+                  "workspaceId",
+                  "agentId",
+                  "local",
+                  "appMode"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "unevaluatedProperties": false
+}

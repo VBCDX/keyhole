@@ -1,0 +1,420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/connector.schema.json",
+  "title": "Vault connector or sidecar",
+  "description": "keyhole.connectors — installed keyholed processes. kind vault: reaches customer vaults behind the firewall (stores route through it). kind sidecar: runs next to an app, bound to one agent in one workspace; the app calls it locally and never holds the secret. Presence and heartbeats live in Redis; this row is written on transitions.",
+  "allOf": [
+    {
+      "$ref": "#/$defs/base"
+    },
+    {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/vault"
+        },
+        {
+          "$ref": "#/$defs/sidecar"
+        }
+      ]
+    }
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": [
+        "_id",
+        "orgId",
+        "kind",
+        "name",
+        "status",
+        "enrollment",
+        "credential",
+        "health",
+        "cachePolicy",
+        "createdAt",
+        "createdBy",
+        "updatedAt",
+        "rev"
+      ],
+      "properties": {
+        "orgId": {
+          "$ref": "../shared/common.schema.json#/$defs/orgId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "status": {
+          "enum": [
+            "active",
+            "revoked"
+          ]
+        },
+        "enrollment": {
+          "$ref": "../shared/common.schema.json#/$defs/enrollment"
+        },
+        "credential": {
+          "$ref": "../shared/common.schema.json#/$defs/credentialSet",
+          "description": "kh_conn_… (vault) / kh_sc_… (sidecar). The component rotates it over its control channel, or an admin rotates it and pastes the new one via stdin."
+        },
+        "install": {
+          "$ref": "../shared/common.schema.json#/$defs/installInfo"
+        },
+        "health": {
+          "$ref": "../shared/common.schema.json#/$defs/componentHealth"
+        },
+        "cachePolicy": {
+          "$ref": "../shared/common.schema.json#/$defs/cachePolicy"
+        },
+        "createdAt": {
+          "$ref": "../shared/common.schema.json#/$defs/isoDate"
+        },
+        "createdBy": {
+          "$ref": "../shared/common.schema.json#/$defs/principalRef"
+        },
+        "updatedAt": {
+          "$ref": "../shared/common.schema.json#/$defs/isoDate"
+        },
+        "updatedBy": {
+          "$ref": "../shared/common.schema.json#/$defs/principalRef"
+        },
+        "revokedAt": {
+          "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+        },
+        "revokedBy": {
+          "anyOf": [
+            {
+              "$ref": "../shared/common.schema.json#/$defs/principalRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rev": {
+          "$ref": "../shared/common.schema.json#/$defs/rev"
+        }
+      }
+    },
+    "vault": {
+      "properties": {
+        "_id": {
+          "$ref": "../shared/common.schema.json#/$defs/vaultConnectorId"
+        },
+        "kind": {
+          "const": "vault"
+        },
+        "workspaceId": {
+          "anyOf": [
+            {
+              "$ref": "../shared/common.schema.json#/$defs/workspaceId",
+              "description": "Workspace it was enrolled to. Informational once it routes an org store."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "routesStoreIds": {
+          "type": "array",
+          "items": {
+            "$ref": "../shared/common.schema.json#/$defs/storeId"
+          },
+          "description": "Denormalised from stores.route. Non-empty ⇒ org-level: only org admins rename, rotate, rebind or revoke it.",
+          "uniqueItems": true
+        },
+        "scope": {
+          "enum": [
+            "org",
+            "workspace"
+          ],
+          "description": "Derived: org when routesStoreIds is non-empty.",
+          "readOnly": true
+        },
+        "egress": {
+          "type": "object",
+          "description": "Outbound-only tunnel to Keyhole; no inbound ports.",
+          "properties": {
+            "tunnel": {
+              "enum": [
+                "wss",
+                "grpc"
+              ],
+              "default": "wss"
+            },
+            "region": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "_id",
+        "kind",
+        "routesStoreIds",
+        "scope"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "routesStoreIds": {
+                "minItems": 1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "scope": {
+                "const": "org"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sidecar": {
+      "properties": {
+        "_id": {
+          "$ref": "../shared/common.schema.json#/$defs/keyholeSidecarId"
+        },
+        "kind": {
+          "const": "sidecar"
+        },
+        "workspaceId": {
+          "$ref": "../shared/common.schema.json#/$defs/workspaceId"
+        },
+        "agentId": {
+          "$ref": "../shared/common.schema.json#/$defs/agentId",
+          "description": "Acts as this agent: its grants, limits, expiry and status apply. Binding to an agent from outside the workspace needs an org admin."
+        },
+        "local": {
+          "$ref": "../shared/common.schema.json#/$defs/localEndpoint"
+        },
+        "appMode": {
+          "enum": [
+            "base_url",
+            "proxy"
+          ],
+          "description": "base_url: the app calls http://127.0.0.1:8787/<tool>/…, no CA. proxy: HTTP(S)_PROXY for the tools' hosts; HTTPS needs the sidecar's local CA."
+        },
+        "proxy": {
+          "type": "object",
+          "properties": {
+            "allowedHosts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Derived from the tools granted to the agent in the workspace; everything else is refused.",
+              "readOnly": true
+            },
+            "localCaFingerprint": {
+              "type": "string",
+              "description": "SHA-256 of the sidecar's local CA certificate (proxy mode, HTTPS).",
+              "pattern": "^[A-Fa-f0-9]{64}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "requestsBase": {
+          "type": "integer",
+          "description": "Prototype only: traffic before modelled rows.",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "_id",
+        "kind",
+        "workspaceId",
+        "agentId",
+        "local",
+        "appMode"
+      ]
+    }
+  },
+  "examples": [
+    {
+      "_id": "cn_edge01",
+      "orgId": "org_acme",
+      "kind": "vault",
+      "name": "edge-01",
+      "status": "active",
+      "workspaceId": "ws_prod",
+      "routesStoreIds": [
+        "st_bao"
+      ],
+      "scope": "org",
+      "enrollment": {
+        "enrollmentTokenId": "enr_edge01",
+        "enrolledAt": "2026-09-24T10:00:00Z",
+        "tokenCreatedBy": {
+          "kind": "user",
+          "id": "u_dana"
+        },
+        "fromIp": "10.2.14.7",
+        "publicKey": "q1Xo0mZ3pE6tC8fT2dV9yN4sR7uW5hK1jL3bA0gI8c="
+      },
+      "credential": {
+        "current": {
+          "alg": "sha256",
+          "hash": "Q2w9Ef4rT6yU1iO3pA5sD7fG9hJ2kL4zX6cV8bN0mQ1",
+          "pepperVersion": 1,
+          "prefix": "kh_conn_",
+          "last4": "Rk2m",
+          "issuedAt": "2026-09-26T10:00:00Z",
+          "expiresAt": null
+        },
+        "previous": {
+          "digest": {
+            "alg": "sha256",
+            "hash": "W3e0Rr5tY7uI2oP4aS6dF8gH0jK3lZ5xC7vB9nM1qW2",
+            "pepperVersion": 1,
+            "prefix": "kh_conn_",
+            "last4": "Hx8v",
+            "issuedAt": "2026-09-24T10:00:00Z",
+            "expiresAt": null
+          },
+          "graceUntil": "2026-09-26T10:10:00Z"
+        },
+        "rotatedAt": "2026-09-26T10:00:00Z",
+        "rotatedBy": {
+          "kind": "user",
+          "id": "u_dana"
+        },
+        "graceSeconds": 600,
+        "rotationCount": 1
+      },
+      "install": {
+        "method": "helm",
+        "os": "linux",
+        "arch": "amd64",
+        "host": "edge-01.acme.internal",
+        "serviceManager": "kubernetes",
+        "version": "1.4.2"
+      },
+      "health": {
+        "status": "healthy",
+        "lastSeenAt": "2026-09-27T13:59:40Z",
+        "ip": "10.2.14.7",
+        "missedHeartbeats": 0,
+        "reportedVersion": "1.4.2",
+        "configVersion": 412
+      },
+      "cachePolicy": {
+        "mode": "disk",
+        "keyProtection": "cloud_kms",
+        "kmsKeyRef": "transit:transit/keyhole-edge01",
+        "defaultTtlSeconds": 60,
+        "pinnedTtlSeconds": 86400,
+        "staleIfErrorSeconds": 900,
+        "maxStalenessSeconds": 3600,
+        "negativeCaching": false,
+        "maxEntries": 1000
+      },
+      "createdAt": "2026-09-24T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-27T13:59:40Z",
+      "rev": 9
+    },
+    {
+      "_id": "sc_payapi01",
+      "orgId": "org_acme",
+      "kind": "sidecar",
+      "name": "pay-api-01",
+      "status": "active",
+      "workspaceId": "ws_prod",
+      "agentId": "ag_billing",
+      "local": {
+        "listen": {
+          "transport": "tcp",
+          "host": "127.0.0.1",
+          "port": 8787
+        },
+        "exposeOnNetwork": false,
+        "protocols": [
+          "http",
+          "mcp"
+        ],
+        "localAuth": {
+          "method": "caller_token",
+          "callerToken": {
+            "current": {
+              "alg": "sha256",
+              "hash": "Z9x8C7v6B5n4M3a2S1d0F9g8H7j6K5l4Q3w2E1r0T9y",
+              "pepperVersion": 1,
+              "prefix": "kh_call_",
+              "last4": "Qx7m",
+              "issuedAt": "2026-09-25T10:00:00Z",
+              "expiresAt": null
+            },
+            "previous": null,
+            "rotationCount": 0
+          }
+        }
+      },
+      "appMode": "base_url",
+      "enrollment": {
+        "enrollmentTokenId": "enr_payapi01",
+        "enrolledAt": "2026-09-25T10:00:00Z",
+        "tokenCreatedBy": {
+          "kind": "user",
+          "id": "u_dana"
+        },
+        "fromIp": "10.2.30.14"
+      },
+      "credential": {
+        "current": {
+          "alg": "sha256",
+          "hash": "P0o9I8u7Y6t5R4e3W2q1A0s9D8f7G6h5J4k3L2z1X0c",
+          "pepperVersion": 1,
+          "prefix": "kh_sc_",
+          "last4": "u8Lr",
+          "issuedAt": "2026-09-25T10:00:00Z",
+          "expiresAt": null
+        },
+        "previous": null,
+        "rotationCount": 0
+      },
+      "install": {
+        "method": "npm",
+        "os": "linux",
+        "arch": "amd64",
+        "host": "pay-api-7f9c.prod.acme.internal",
+        "serviceManager": "systemd",
+        "version": "1.5.0"
+      },
+      "health": {
+        "status": "healthy",
+        "lastSeenAt": "2026-09-27T13:59:48Z",
+        "ip": "10.2.30.14",
+        "missedHeartbeats": 0,
+        "reportedVersion": "1.5.0",
+        "configVersion": 412
+      },
+      "cachePolicy": {
+        "mode": "memory",
+        "keyProtection": "process_memory",
+        "defaultTtlSeconds": 300,
+        "pinnedTtlSeconds": 86400,
+        "staleIfErrorSeconds": 900,
+        "maxStalenessSeconds": 3600,
+        "negativeCaching": false,
+        "maxEntries": 200
+      },
+      "createdAt": "2026-09-25T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-27T13:59:48Z",
+      "rev": 3
+    }
+  ]
+}

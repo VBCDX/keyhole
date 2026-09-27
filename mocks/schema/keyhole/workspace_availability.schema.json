@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/workspace_availability.schema.json",
+  "title": "Workspace availability",
+  "description": "keyhole.workspace_availability — one per workspace (_id = workspaceId). Org admins set what is available; workspace admins expose keys and grant tools only from these sets. Narrowing availability un-exposes keys and removes grants in the same transaction, with the usual impact preview.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "availableKeyIds",
+    "availableToolIds",
+    "exposedKeyIds",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/workspaceId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "availableKeyIds": {
+      "type": "array",
+      "items": {
+        "$ref": "../shared/common.schema.json#/$defs/keyId"
+      },
+      "description": "Set by org admins only.",
+      "uniqueItems": true
+    },
+    "availableToolIds": {
+      "type": "array",
+      "items": {
+        "$ref": "../shared/common.schema.json#/$defs/toolId"
+      },
+      "description": "Set by org admins only.",
+      "uniqueItems": true
+    },
+    "exposedKeyIds": {
+      "type": "array",
+      "items": {
+        "$ref": "../shared/common.schema.json#/$defs/keyId"
+      },
+      "description": "Chosen by workspace admins; always ⊆ availableKeyIds.",
+      "uniqueItems": true
+    },
+    "availabilitySetBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "availabilitySetAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "exposureSetBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "exposureSetAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "rev": {
+      "$ref": "../shared/common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "ws_prod",
+      "orgId": "org_acme",
+      "availableKeyIds": [
+        "k_stripe",
+        "k_gh",
+        "k_bao1",
+        "k_bao2",
+        "k_old"
+      ],
+      "availableToolIds": [
+        "t_stripe",
+        "t_github"
+      ],
+      "exposedKeyIds": [
+        "k_stripe",
+        "k_gh",
+        "k_bao1",
+        "k_old"
+      ],
+      "availabilitySetBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "availabilitySetAt": "2026-09-26T10:00:00Z",
+      "updatedAt": "2026-09-26T10:00:00Z",
+      "rev": 7
+    },
+    {
+      "_id": "ws_incidents",
+      "orgId": "org_acme",
+      "availableKeyIds": [],
+      "availableToolIds": [],
+      "exposedKeyIds": [],
+      "updatedAt": "2026-09-15T09:00:00Z",
+      "rev": 0
+    }
+  ]
+}

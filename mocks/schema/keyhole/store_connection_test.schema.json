@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/store_connection_test.schema.json",
+  "title": "Store connection test",
+  "description": "keyhole.store_connection_tests — each run of the connect/verify flow: reachability → TLS → auth → permission (value-free where the vendor allows) → optional read probe. Values read by a probe are never stored. TTL 30 days.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "storeId",
+    "trigger",
+    "ranVia",
+    "startedAt",
+    "ok",
+    "steps"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/connectionTestId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "storeId": {
+      "$ref": "../shared/common.schema.json#/$defs/storeId"
+    },
+    "trigger": {
+      "enum": [
+        "create",
+        "edit",
+        "manual",
+        "scheduled",
+        "credential_rotated"
+      ]
+    },
+    "ranVia": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "direct",
+            "connector"
+          ]
+        },
+        "connectorId": {
+          "$ref": "../shared/common.schema.json#/$defs/vaultConnectorId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "startedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "finishedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "healthCode": {
+      "$ref": "store.schema.json#/$defs/health/properties/code"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "step",
+          "ok"
+        ],
+        "properties": {
+          "step": {
+            "enum": [
+              "reachability",
+              "tls",
+              "auth",
+              "permission",
+              "read_probe",
+              "metadata_probe",
+              "event_source"
+            ]
+          },
+          "probe": {
+            "type": "string",
+            "description": "What was called, e.g. GET /v1/sys/health, sts:GetCallerIdentity, POST sys/capabilities-self, :testIamPermissions, GET /heartbeat."
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "httpStatus": {
+            "type": "integer"
+          },
+          "vendorCode": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "requestedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "deleteAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    }
+  },
+  "additionalProperties": false
+}

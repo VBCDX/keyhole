@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/workspace_settings.schema.json",
+  "title": "Keyhole workspace settings",
+  "description": "keyhole.workspace_settings — Keyhole's extension of suite.workspaces (_id = workspaceId): public slug and connection methods.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "slug",
+    "https",
+    "mcp",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/workspaceId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "slug": {
+      "type": "string",
+      "description": "Public slug in agent-facing URLs.",
+      "pattern": "^ws_[a-z0-9]{4,12}$"
+    },
+    "https": {
+      "type": "boolean",
+      "description": "HTTPS endpoint on."
+    },
+    "mcp": {
+      "type": "boolean",
+      "description": "MCP endpoint on."
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "rev": {
+      "$ref": "../shared/common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "ws_prod",
+      "orgId": "org_acme",
+      "slug": "ws_1a2b",
+      "https": false,
+      "mcp": true,
+      "updatedAt": "2026-09-08T10:00:00Z",
+      "rev": 2
+    }
+  ]
+}

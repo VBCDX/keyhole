@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/mfa_factor.schema.json",
+  "title": "MFA factor",
+  "description": "auth.mfa_factors — TOTP, WebAuthn or recovery codes. The TOTP seed is a sealed secret in the auth service's own KMS-backed store.",
+  "type": "object",
+  "required": [
+    "_id",
+    "userId",
+    "type",
+    "createdAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../common.schema.json#/$defs/mfaFactorId"
+    },
+    "userId": {
+      "$ref": "../common.schema.json#/$defs/userId"
+    },
+    "type": {
+      "enum": [
+        "totp",
+        "webauthn",
+        "recovery_codes"
+      ]
+    },
+    "label": {
+      "type": "string"
+    },
+    "totp": {
+      "type": "object",
+      "required": [
+        "secretRef"
+      ],
+      "properties": {
+        "secretRef": {
+          "$ref": "../common.schema.json#/$defs/secretRef"
+        },
+        "digits": {
+          "type": "integer",
+          "enum": [
+            6,
+            8
+          ]
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "default": 30
+        }
+      },
+      "additionalProperties": false
+    },
+    "webauthn": {
+      "type": "object",
+      "required": [
+        "credentialId",
+        "publicKey",
+        "signCount"
+      ],
+      "properties": {
+        "credentialId": {
+          "type": "string",
+          "contentEncoding": "base64"
+        },
+        "publicKey": {
+          "type": "string",
+          "description": "COSE key, base64.",
+          "contentEncoding": "base64"
+        },
+        "signCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "aaguid": {
+          "type": "string"
+        },
+        "transports": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "recoveryCodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "hash"
+        ],
+        "properties": {
+          "hash": {
+            "$ref": "../common.schema.json#/$defs/tokenDigest",
+            "description": "argon2id."
+          },
+          "usedAt": {
+            "$ref": "../common.schema.json#/$defs/nullableDate"
+          }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 16
+    },
+    "createdAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "lastUsedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "disabledAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    }
+  },
+  "additionalProperties": false
+}

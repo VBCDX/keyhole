@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/workspace.schema.json",
+  "title": "Workspace",
+  "description": "suite.workspaces — shared. App content (Keyhole keys/tools, Dispatch messages) lives in each app's collections keyed by workspaceId. Deletion is a soft delete so audit rows keep resolving the name.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "name",
+    "status",
+    "createdAt",
+    "createdBy",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "common.schema.json#/$defs/workspaceId"
+    },
+    "orgId": {
+      "$ref": "common.schema.json#/$defs/orgId"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "status": {
+      "enum": [
+        "active",
+        "deleted"
+      ]
+    },
+    "createdAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "createdBy": {
+      "$ref": "common.schema.json#/$defs/principalRef"
+    },
+    "updatedAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "common.schema.json#/$defs/principalRef"
+    },
+    "deletedAt": {
+      "$ref": "common.schema.json#/$defs/nullableDate"
+    },
+    "deletedBy": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rev": {
+      "$ref": "common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "ws_incidents",
+      "orgId": "org_acme",
+      "name": "Incidents",
+      "status": "active",
+      "createdAt": "2026-09-15T09:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-15T09:00:00Z",
+      "rev": 3
+    }
+  ]
+}

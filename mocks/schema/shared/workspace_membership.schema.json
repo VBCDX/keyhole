@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/workspace_membership.schema.json",
+  "title": "Workspace membership",
+  "description": "suite.workspace_memberships — who is in which workspace, and as member or workspace admin. Shared by both apps. App-specific settings hang off `_id` in each app (dispatch.membership_access: read/write, workspace token, agent admin). Default admins (rule 2) are derived, never stored. Removal deletes the row; history is in the audit log.",
+  "type": "object",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "member": {
+            "properties": {
+              "kind": {
+                "const": "agent"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "member"
+          }
+        }
+      }
+    }
+  ],
+  "required": [
+    "_id",
+    "orgId",
+    "workspaceId",
+    "member",
+    "role",
+    "addedAt",
+    "addedBy",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "common.schema.json#/$defs/workspaceMembershipId"
+    },
+    "orgId": {
+      "$ref": "common.schema.json#/$defs/orgId"
+    },
+    "workspaceId": {
+      "$ref": "common.schema.json#/$defs/workspaceId"
+    },
+    "member": {
+      "$ref": "common.schema.json#/$defs/memberRef"
+    },
+    "role": {
+      "$ref": "common.schema.json#/$defs/workspaceRole"
+    },
+    "addedAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "addedBy": {
+      "$ref": "common.schema.json#/$defs/principalRef"
+    },
+    "delegatedBy": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/principalRef",
+          "description": "Who made them workspace admin. Audit only: the delegation stands if that person loses access (rule 4)."
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "delegatedAt": {
+      "$ref": "common.schema.json#/$defs/nullableDate"
+    },
+    "updatedAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "rev": {
+      "$ref": "common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "wm_inc_mia",
+      "orgId": "org_acme",
+      "workspaceId": "ws_incidents",
+      "member": {
+        "kind": "user",
+        "id": "u_mia"
+      },
+      "role": "workspace_admin",
+      "addedAt": "2026-09-15T09:05:00Z",
+      "addedBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "delegatedBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "delegatedAt": "2026-09-15T09:05:00Z",
+      "updatedAt": "2026-09-15T09:05:00Z",
+      "rev": 1
+    },
+    {
+      "_id": "wm_prod_planner",
+      "orgId": "org_acme",
+      "workspaceId": "ws_prod",
+      "member": {
+        "kind": "agent",
+        "id": "ag_planner"
+      },
+      "role": "member",
+      "addedAt": "2026-08-28T12:00:00Z",
+      "addedBy": {
+        "kind": "user",
+        "id": "u_ravi"
+      },
+      "updatedAt": "2026-08-28T12:00:00Z",
+      "rev": 0
+    }
+  ]
+}

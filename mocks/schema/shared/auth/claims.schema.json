@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/claims.schema.json",
+  "title": "Access-token claims",
+  "description": "The JWT both apps receive from the auth service (RS256/ES256, verified against its JWKS). Carries identity and org roles only. Workspace roles are not in the token: apps read them from suite.workspace_memberships at action time (rule 3). Lifetime 5 minutes; apps also consume user.locked / org.member.suspended events to refuse before expiry (rule 5).",
+  "type": "object",
+  "required": [
+    "iss",
+    "sub",
+    "aud",
+    "iat",
+    "exp",
+    "jti",
+    "sid",
+    "amr",
+    "email",
+    "name",
+    "orgs",
+    "mver"
+  ],
+  "properties": {
+    "iss": {
+      "type": "string",
+      "format": "uri",
+      "const": "https://auth.vbcdx.dev"
+    },
+    "sub": {
+      "type": "string",
+      "description": "u_… for a user; sup_… for Keyhole support.",
+      "pattern": "^(u|sup)_[A-Za-z0-9][A-Za-z0-9_]{0,40}$"
+    },
+    "aud": {
+      "enum": [
+        "keyhole",
+        "dispatch",
+        "keyhole-cli",
+        "dispatch-cli"
+      ]
+    },
+    "iat": {
+      "type": "integer"
+    },
+    "exp": {
+      "type": "integer"
+    },
+    "nbf": {
+      "type": "integer"
+    },
+    "jti": {
+      "type": "string"
+    },
+    "sid": {
+      "$ref": "../common.schema.json#/$defs/sessionId"
+    },
+    "amr": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "acr": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "email_verified": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": "string"
+    },
+    "org": {
+      "$ref": "../common.schema.json#/$defs/orgId",
+      "description": "The org the session is currently acting in (switcher)."
+    },
+    "orgs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "../common.schema.json#/$defs/orgId"
+          },
+          "role": {
+            "$ref": "../common.schema.json#/$defs/orgRole"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "invited",
+              "suspended"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Every org membership, for the org switcher. Truncated at 50; orgs_truncated then says so.",
+      "maxItems": 50
+    },
+    "orgs_truncated": {
+      "type": "boolean"
+    },
+    "mver": {
+      "type": "integer",
+      "description": "Membership version: bumps on any role/status change for this user. Apps compare with the cached value from events and re-introspect when behind.",
+      "minimum": 0
+    },
+    "support": {
+      "type": "boolean",
+      "description": "Keyhole support (superAdmin). sub is then sup_… and orgs is empty; scope limits it to lock, unlock, sign-out-everywhere, resend-invite."
+    },
+    "scope": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

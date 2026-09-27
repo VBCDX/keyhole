@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/tool_version.schema.json",
+  "title": "Tool version",
+  "description": "keyhole.tool_versions — immutable published snapshot. Grants follow the latest published version unless pinned.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "toolId",
+    "version",
+    "snapshot",
+    "publishedAt",
+    "publishedBy"
+  ],
+  "properties": {
+    "_id": {
+      "type": "string",
+      "description": "`<toolId>@<version>`",
+      "pattern": "^t_[A-Za-z0-9_]+@[0-9]+$"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "toolId": {
+      "$ref": "../shared/common.schema.json#/$defs/toolId"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "snapshot": {
+      "$ref": "tool.schema.json#/$defs/snapshot"
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Human-readable change list shown on publish."
+    },
+    "publishedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "publishedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    }
+  },
+  "additionalProperties": false
+}

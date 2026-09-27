@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/session.schema.json",
+  "title": "Session",
+  "description": "auth.sessions — a signed-in browser or CLI. Refresh tokens rotate on every use; re-use of an old one revokes the family.",
+  "type": "object",
+  "required": [
+    "_id",
+    "userId",
+    "client",
+    "createdAt",
+    "lastSeenAt",
+    "expiresAt",
+    "amr"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../common.schema.json#/$defs/sessionId"
+    },
+    "userId": {
+      "$ref": "../common.schema.json#/$defs/userId"
+    },
+    "client": {
+      "enum": [
+        "web:keyhole",
+        "web:dispatch",
+        "cli:keyhole",
+        "cli:dispatch"
+      ]
+    },
+    "device": {
+      "type": "string",
+      "description": "PII-light label, e.g. \"MacBook Pro\"."
+    },
+    "userAgent": {
+      "type": "string"
+    },
+    "ip": {
+      "$ref": "../common.schema.json#/$defs/ipAddress"
+    },
+    "place": {
+      "type": "string",
+      "description": "Coarse geo from IP (city), e.g. \"San Francisco\". PII."
+    },
+    "amr": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "pwd",
+          "otp",
+          "hwk",
+          "sso",
+          "mfa",
+          "device_code"
+        ]
+      },
+      "minItems": 1
+    },
+    "acr": {
+      "type": "string"
+    },
+    "activeOrgId": {
+      "$ref": "../common.schema.json#/$defs/orgId"
+    },
+    "refresh": {
+      "type": "object",
+      "required": [
+        "familyId",
+        "current"
+      ],
+      "properties": {
+        "familyId": {
+          "type": "string"
+        },
+        "current": {
+          "$ref": "../common.schema.json#/$defs/tokenDigest"
+        },
+        "rotatedAt": {
+          "$ref": "../common.schema.json#/$defs/nullableDate"
+        },
+        "reuseDetectedAt": {
+          "$ref": "../common.schema.json#/$defs/nullableDate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "createdAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "lastSeenAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "idleExpiresAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "expiresAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate",
+      "description": "TTL index."
+    },
+    "revokedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "revokedBy": {
+      "anyOf": [
+        {
+          "$ref": "../common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revokeReason": {
+      "enum": [
+        "signout",
+        "signout_everywhere",
+        "support_lock",
+        "refresh_reuse",
+        "user_erased",
+        "password_changed"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

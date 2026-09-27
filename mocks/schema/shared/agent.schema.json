@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/agent.schema.json",
+  "title": "Agent",
+  "description": "suite.agents — the one agent identity shared by both apps (same ID, label and created-by). Status, credentials and app settings are per app: keyhole.agent_profiles (kh_live_…) and dispatch.agent_profiles (dsp_agent_…). Agents belong to the org, not their creator (rule 3).",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "label",
+    "labelLower",
+    "createdAt",
+    "createdBy",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "common.schema.json#/$defs/agentId"
+    },
+    "orgId": {
+      "$ref": "common.schema.json#/$defs/orgId"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "labelLower": {
+      "type": "string",
+      "description": "Lower-cased label; unique per org.",
+      "maxLength": 64
+    },
+    "createdAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "createdBy": {
+      "$ref": "common.schema.json#/$defs/principalRef"
+    },
+    "createdByLabel": {
+      "type": "string",
+      "description": "Creator's name at creation, for grids (\"Dana Keller\")."
+    },
+    "updatedAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "retiredAt": {
+      "$ref": "common.schema.json#/$defs/nullableDate",
+      "description": "Retired suite-wide (both apps treat it as revoked). Per-app revocation lives in each app's profile."
+    },
+    "retiredBy": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rev": {
+      "$ref": "common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "ag_billing",
+      "orgId": "org_acme",
+      "label": "billing-agent",
+      "labelLower": "billing-agent",
+      "createdAt": "2026-09-24T08:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "createdByLabel": "Dana Keller",
+      "updatedAt": "2026-09-24T08:00:00Z",
+      "rev": 0
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/audit_detail.schema.json",
+  "title": "Keyhole audit detail",
+  "description": "The `detail` blob on keyhole.audit_events rows (shared: false). IDs and metadata only — never key values, request bodies or response bodies.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "kind",
+        "toolId",
+        "method",
+        "path",
+        "destinationHost",
+        "route"
+      ],
+      "properties": {
+        "kind": {
+          "const": "request"
+        },
+        "toolId": {
+          "$ref": "../shared/common.schema.json#/$defs/toolId"
+        },
+        "actionId": {
+          "$ref": "../shared/common.schema.json#/$defs/toolActionId"
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "destinationHost": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer"
+        },
+        "latencyMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "route": {
+          "enum": [
+            "direct",
+            "connector",
+            "sidecar"
+          ]
+        },
+        "connectorId": {
+          "$ref": "../shared/common.schema.json#/$defs/vaultConnectorId"
+        },
+        "sidecarId": {
+          "$ref": "../shared/common.schema.json#/$defs/keyholeSidecarId"
+        },
+        "keyIds": {
+          "type": "array",
+          "items": {
+            "$ref": "../shared/common.schema.json#/$defs/keyId"
+          }
+        },
+        "cache": {
+          "enum": [
+            "hit",
+            "miss",
+            "stale",
+            "bypass"
+          ]
+        },
+        "grantId": {
+          "$ref": "../shared/common.schema.json#/$defs/grantId"
+        },
+        "cabinetId": {
+          "$ref": "../shared/common.schema.json#/$defs/cabinetId"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "kind",
+        "rule"
+      ],
+      "properties": {
+        "kind": {
+          "const": "blocked"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "attempted": {
+          "type": "string"
+        },
+        "allowed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fix": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "kind",
+        "componentId",
+        "event"
+      ],
+      "properties": {
+        "kind": {
+          "const": "connection"
+        },
+        "componentId": {
+          "type": "string",
+          "pattern": "^(cn|sc)_"
+        },
+        "event": {
+          "enum": [
+            "enrolled",
+            "heartbeat_late",
+            "offline",
+            "online",
+            "rotated",
+            "grace_ended",
+            "revoked",
+            "cache_wiped"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "kind",
+        "changes"
+      ],
+      "properties": {
+        "kind": {
+          "const": "admin"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "field",
+              "before",
+              "after"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "before": {},
+              "after": {}
+            },
+            "additionalProperties": false
+          }
+        },
+        "impact": {
+          "type": "object",
+          "properties": {
+            "keysUnexposed": {
+              "type": "array",
+              "items": {
+                "$ref": "../shared/common.schema.json#/$defs/keyId"
+              }
+            },
+            "grantsRemoved": {
+              "type": "array",
+              "items": {
+                "$ref": "../shared/common.schema.json#/$defs/grantId"
+              }
+            },
+            "componentsAffected": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cabinetsReleased": {
+              "type": "array",
+              "items": {
+                "$ref": "../shared/common.schema.json#/$defs/cabinetId"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

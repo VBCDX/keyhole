@@ -1,0 +1,598 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/key.schema.json",
+  "title": "Key",
+  "description": "keyhole.keys — metadata for one secret value: where it lives (provider-specific address) and how long Keyhole may cache it. Never the value. Keys are org-level; org admins make them available to workspaces (workspace_availability).",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "name",
+    "storeId",
+    "provider",
+    "address",
+    "status",
+    "createdAt",
+    "createdBy",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/keyId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name, e.g. stripe_secret or payments/api_key.",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "storeId": {
+      "$ref": "../shared/common.schema.json#/$defs/storeId"
+    },
+    "provider": {
+      "enum": [
+        "openbao",
+        "hashicorp_vault",
+        "aws_secrets_manager",
+        "aws_ssm_parameter_store",
+        "azure_key_vault",
+        "gcp_secret_manager",
+        "onepassword_connect",
+        "onepassword_service_account",
+        "infisical",
+        "doppler",
+        "conjur",
+        "local"
+      ],
+      "description": "Denormalised from the store so the address can be validated."
+    },
+    "address": {
+      "description": "Provider-specific address ($defs addr*)."
+    },
+    "pinned": {
+      "type": "boolean",
+      "description": "Derived: the address names an immutable version (kv2 version, versionId, Azure version, GCP numeric version, Infisical version, Conjur version). Pinned keys may use the store's pinned TTL.",
+      "readOnly": true
+    },
+    "cacheTtlSeconds": {
+      "type": "integer",
+      "description": "Override for this key, 0–3600. 0 = never cached.",
+      "minimum": 0,
+      "maximum": 3600
+    },
+    "length": {
+      "type": "integer",
+      "description": "Local keys: value length, for display. Remote keys: last observed length.",
+      "minimum": 0
+    },
+    "lastSeenVersion": {
+      "type": "string",
+      "description": "Non-secret version marker from the last read (kv2 version, VersionId, Azure version, 1Password item version…)."
+    },
+    "rotatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "expiresAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "rotationReminderDays": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "status": {
+      "enum": [
+        "active",
+        "source_removed"
+      ],
+      "description": "source_removed: its store was removed; workspaces keep a placeholder until resolved."
+    },
+    "cabinetId": {
+      "$ref": "../shared/common.schema.json#/$defs/cabinetId",
+      "description": "Set for cabinet-owned Local keys."
+    },
+    "createdAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "createdBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "rev": {
+      "$ref": "../shared/common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "provider": {
+          "const": "openbao"
+        },
+        "address": {
+          "$ref": "#/$defs/addrVault"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "hashicorp_vault"
+        },
+        "address": {
+          "$ref": "#/$defs/addrVault"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "aws_secrets_manager"
+        },
+        "address": {
+          "$ref": "#/$defs/addrAwsSm"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "aws_ssm_parameter_store"
+        },
+        "address": {
+          "$ref": "#/$defs/addrAwsSsm"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "azure_key_vault"
+        },
+        "address": {
+          "$ref": "#/$defs/addrAzure"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "gcp_secret_manager"
+        },
+        "address": {
+          "$ref": "#/$defs/addrGcp"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "onepassword_connect"
+        },
+        "address": {
+          "$ref": "#/$defs/addrOp"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "onepassword_service_account"
+        },
+        "address": {
+          "$ref": "#/$defs/addrOp"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "infisical"
+        },
+        "address": {
+          "$ref": "#/$defs/addrInfisical"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "doppler"
+        },
+        "address": {
+          "$ref": "#/$defs/addrDoppler"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "conjur"
+        },
+        "address": {
+          "$ref": "#/$defs/addrConjur"
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": {
+          "const": "local"
+        },
+        "address": {
+          "$ref": "#/$defs/addrLocal"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "addrVault": {
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "engine": {
+                "const": "kv1"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "version"
+              ]
+            }
+          }
+        }
+      ],
+      "required": [
+        "engine",
+        "mount",
+        "path",
+        "field"
+      ],
+      "properties": {
+        "engine": {
+          "enum": [
+            "kv1",
+            "kv2"
+          ],
+          "description": "Detected via sys/internal/ui/mounts/<mount> (internal endpoint, no compat guarantee) or asked."
+        },
+        "mount": {
+          "type": "string",
+          "examples": [
+            "secret"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "examples": [
+            "apps/stripe"
+          ]
+        },
+        "field": {
+          "type": "string",
+          "description": "Key inside the secret's map (data[key] for kv1, data.data[key] for kv2)."
+        },
+        "version": {
+          "type": "integer",
+          "description": "kv2 only. Omit for latest (moving pointer).",
+          "minimum": 1
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Overrides the store namespace."
+        }
+      },
+      "additionalProperties": false
+    },
+    "addrAwsSm": {
+      "type": "object",
+      "required": [
+        "secretId"
+      ],
+      "properties": {
+        "secretId": {
+          "type": "string",
+          "description": "Name or full ARN. An ARN is required cross-account; prefer the full ARN (partial ARNs are ambiguous because of the -XXXXXX suffix).",
+          "x-verify": true,
+          "x-verify-note": "ARN suffix format is ⚠ (§4.2)."
+        },
+        "versionStage": {
+          "type": "string",
+          "description": "Default AWSCURRENT. AWSPREVIOUS/AWSPENDING or custom labels.",
+          "default": "AWSCURRENT"
+        },
+        "versionId": {
+          "type": "string",
+          "description": "Pinned version. If both are given they must match."
+        },
+        "jsonKey": {
+          "type": "string",
+          "description": "SecretString is often JSON; Keyhole parses it and selects this key."
+        }
+      },
+      "additionalProperties": false
+    },
+    "addrAwsSsm": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name or ARN (full ARN for shared parameters); may carry :version or :label.",
+          "pattern": "^(/|arn:)?.+"
+        },
+        "withDecryption": {
+          "const": true
+        },
+        "jsonKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "addrAzure": {
+      "type": "object",
+      "required": [
+        "secretName"
+      ],
+      "properties": {
+        "secretName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9-]{1,127}$",
+          "x-verify": true,
+          "x-verify-note": "1–127 chars, alphanumerics and '-' is ⚠ (§5.2)."
+        },
+        "version": {
+          "type": "string",
+          "description": "32-hex version. Omit for current (moving pointer).",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "jsonKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "addrGcp": {
+      "type": "object",
+      "required": [
+        "secret",
+        "version"
+      ],
+      "properties": {
+        "secret": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "description": "Number, `latest`, or a version alias (≤ 63 chars). Google recommends pinning in production.",
+          "default": "latest"
+        },
+        "location": {
+          "type": "string",
+          "description": "Regional secret location; overrides the store's."
+        },
+        "jsonKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "addrOp": {
+      "description": "Either one op:// reference, or UUIDs picked in the UI (Connect needs UUIDs; Keyhole resolves names to UUIDs itself).",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "reference"
+          ],
+          "properties": {
+            "reference": {
+              "type": "string",
+              "pattern": "^op://[^/]+/[^/]+/([^/]+/)?[^/?]+(\\?attribute=(type|value|title|id|purpose|otp))?$"
+            },
+            "jsonKey": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "vaultId",
+            "itemId",
+            "fieldId"
+          ],
+          "properties": {
+            "vaultId": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "sectionId": {
+              "type": "string"
+            },
+            "fieldId": {
+              "type": "string"
+            },
+            "jsonKey": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "addrInfisical": {
+      "type": "object",
+      "required": [
+        "projectId",
+        "environment",
+        "secretName"
+      ],
+      "properties": {
+        "projectId": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string",
+          "description": "Environment slug, e.g. prod."
+        },
+        "secretPath": {
+          "type": "string",
+          "default": "/",
+          "pattern": "^/"
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "jsonKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "addrDoppler": {
+      "type": "object",
+      "description": "No per-secret version selector in the read API ⚠ (§9.2): Doppler keys are always moving pointers.",
+      "required": [
+        "project",
+        "config",
+        "secretName"
+      ],
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "config": {
+          "type": "string"
+        },
+        "secretName": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "jsonKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "x-verify": true
+    },
+    "addrConjur": {
+      "type": "object",
+      "required": [
+        "variableId"
+      ],
+      "properties": {
+        "variableId": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "addrLocal": {
+      "type": "object",
+      "description": "The current value lives in keyhole.local_key_values, envelope-encrypted.",
+      "required": [
+        "localValueId",
+        "version"
+      ],
+      "properties": {
+        "localValueId": {
+          "$ref": "../shared/common.schema.json#/$defs/localKeyValueId"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "_id": "k_stripe",
+      "orgId": "org_acme",
+      "name": "stripe_secret",
+      "storeId": "st_local",
+      "provider": "local",
+      "address": {
+        "localValueId": "lkv_stripe3",
+        "version": 3
+      },
+      "pinned": true,
+      "length": 32,
+      "rotatedAt": "2026-09-21T10:00:00Z",
+      "expiresAt": null,
+      "rotationReminderDays": 90,
+      "notes": "Restricted key — charges read only",
+      "status": "active",
+      "createdAt": "2026-09-07T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-21T10:00:00Z",
+      "rev": 3
+    },
+    {
+      "_id": "k_bao1",
+      "orgId": "org_acme",
+      "name": "payments/api_key",
+      "storeId": "st_bao",
+      "provider": "openbao",
+      "address": {
+        "engine": "kv2",
+        "mount": "secret",
+        "path": "payments",
+        "field": "api_key"
+      },
+      "pinned": false,
+      "cacheTtlSeconds": 60,
+      "status": "active",
+      "lastSeenVersion": "7",
+      "createdAt": "2026-09-13T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-13T10:00:00Z",
+      "rev": 0
+    }
+  ]
+}

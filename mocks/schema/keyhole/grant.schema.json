@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/grant.schema.json",
+  "title": "Workspace tool grant",
+  "description": "keyhole.grants — a published tool granted to a workspace, with each key slot mapped to one of the workspace's exposed keys. Invariants enforced on write: toolId ∈ workspace_availability.availableToolIds; every mapped keyId ∈ workspace_availability.exposedKeyIds.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "workspaceId",
+    "toolId",
+    "slotMap",
+    "enabled",
+    "perMinute",
+    "grantedAt",
+    "grantedBy",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/grantId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "workspaceId": {
+      "$ref": "../shared/common.schema.json#/$defs/workspaceId"
+    },
+    "toolId": {
+      "$ref": "../shared/common.schema.json#/$defs/toolId"
+    },
+    "pinnedVersion": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "description": "null: follow the latest published version.",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "slotMap": {
+      "type": "object",
+      "description": "slot name → keyId, or null while unfilled (the grant then refuses calls that need it).",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "$ref": "../shared/common.schema.json#/$defs/keyId"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "keyIds": {
+      "type": "array",
+      "items": {
+        "$ref": "../shared/common.schema.json#/$defs/keyId"
+      },
+      "description": "Derived: the non-null values of slotMap, kept for the multikey index (which grants use key X).",
+      "uniqueItems": true,
+      "readOnly": true
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "perMinute": {
+      "type": "integer",
+      "description": "Workspace rate limit for this tool, ≤ the tool's.",
+      "minimum": 1
+    },
+    "grantedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "grantedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "updatedBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "rev": {
+      "$ref": "../shared/common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "gr_prod_stripe",
+      "orgId": "org_acme",
+      "workspaceId": "ws_prod",
+      "toolId": "t_stripe",
+      "pinnedVersion": null,
+      "slotMap": {
+        "stripe_secret": "k_stripe"
+      },
+      "keyIds": [
+        "k_stripe"
+      ],
+      "enabled": true,
+      "perMinute": 60,
+      "grantedAt": "2026-09-08T10:00:00Z",
+      "grantedBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "updatedAt": "2026-09-08T10:00:00Z",
+      "rev": 0
+    }
+  ]
+}

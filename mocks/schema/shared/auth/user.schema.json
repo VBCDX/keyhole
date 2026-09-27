@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/user.schema.json",
+  "title": "User",
+  "description": "auth.users — a human. Agents are never users. Status is account-level; suspension is per org (org_memberships), support locks are account-wide (support_locks).",
+  "type": "object",
+  "required": [
+    "_id",
+    "email",
+    "emailLower",
+    "name",
+    "status",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../common.schema.json#/$defs/userId"
+    },
+    "email": {
+      "type": "string",
+      "description": "PII.",
+      "format": "email"
+    },
+    "emailLower": {
+      "type": "string",
+      "description": "Unique."
+    },
+    "emailVerifiedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "name": {
+      "type": "string",
+      "description": "PII.",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "status": {
+      "enum": [
+        "active",
+        "pending"
+      ],
+      "description": "pending: has never signed in (created by an invitation)."
+    },
+    "lock": {
+      "anyOf": [
+        {
+          "type": "object",
+          "description": "Denormalised from support_locks for the sign-in check.",
+          "required": [
+            "lockId",
+            "lockedAt"
+          ],
+          "properties": {
+            "lockId": {
+              "$ref": "../common.schema.json#/$defs/supportLockId"
+            },
+            "lockedAt": {
+              "$ref": "../common.schema.json#/$defs/isoDate"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lastSignInAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "createdAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "updatedAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "erasedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate",
+      "description": "GDPR erasure: name and email replaced, identities and sessions deleted; the u_ ID stays so audit rows still resolve."
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "u_dana",
+      "email": "dana@acme.com",
+      "emailLower": "dana@acme.com",
+      "emailVerifiedAt": "2026-07-29T10:00:00Z",
+      "name": "Dana Keller",
+      "status": "active",
+      "lock": null,
+      "createdAt": "2026-07-29T10:00:00Z",
+      "updatedAt": "2026-09-27T14:00:00Z"
+    }
+  ]
+}

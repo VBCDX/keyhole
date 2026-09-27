@@ -3,7 +3,8 @@ name: Deploy mocks to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ['mocks/**', '.github/workflows/pages.yml']
+    # mocks/schema holds docs and JSON Schemas, not an app: changes there don't redeploy.
+    paths: ['mocks/**', '!mocks/schema/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -26,9 +27,11 @@ jobs:
       - name: Build every mocks/<version> app
         run: |
           mkdir -p _site/mocks
-          for dir in mocks/*/; do
+          # Only directories with a package.json are apps; mocks/schema and any other docs folder are skipped.
+          for pkg in mocks/*/package.json; do
+            [ -f "$pkg" ] || continue
+            dir=$(dirname "$pkg")
             v=$(basename "$dir")
-            [ -f "$dir/package.json" ] || continue
             echo "::group::Building mocks/$v"
             (cd "$dir" && npm ci && npm run build)
             cp -r "$dir/dist" "_site/mocks/$v"

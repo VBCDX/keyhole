@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/agent_profile.schema.json",
+  "title": "Keyhole agent profile",
+  "description": "keyhole.agent_profiles — Keyhole's per-app layer on suite.agents (_id = agentId): status, the kh_live_ token, expiry and rate limit. Status is per app.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "status",
+    "token",
+    "createdAt",
+    "updatedAt",
+    "rev"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/agentId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "suspended",
+        "revoked"
+      ]
+    },
+    "token": {
+      "$ref": "../shared/common.schema.json#/$defs/credentialSet",
+      "description": "kh_live_…"
+    },
+    "expiresAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "rateLimitPerMinute": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lastUsedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "suspendedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "suspendedBy": {
+      "anyOf": [
+        {
+          "$ref": "../shared/common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revokedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "revokedBy": {
+      "anyOf": [
+        {
+          "$ref": "../shared/common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "createdAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "updatedAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "rev": {
+      "$ref": "../shared/common.schema.json#/$defs/rev"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "ag_billing",
+      "orgId": "org_acme",
+      "status": "active",
+      "token": {
+        "current": {
+          "alg": "sha256",
+          "hash": "d4Jt9nq0Qm1pZr8vX2kL5cB7wY3eH6aF0gN4sU1iO9M",
+          "pepperVersion": 1,
+          "prefix": "kh_live_",
+          "last4": "6TpE",
+          "issuedAt": "2026-09-24T08:00:00Z",
+          "expiresAt": "2026-12-23T08:00:00Z"
+        },
+        "previous": null,
+        "rotatedAt": null,
+        "rotationCount": 0
+      },
+      "expiresAt": "2026-12-23T08:00:00Z",
+      "rateLimitPerMinute": 60,
+      "lastUsedAt": "2026-09-27T13:58:00Z",
+      "createdAt": "2026-09-24T08:00:00Z",
+      "updatedAt": "2026-09-27T13:58:00Z",
+      "rev": 1
+    }
+  ]
+}

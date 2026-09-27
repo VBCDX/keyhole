@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/support_lock.schema.json",
+  "title": "Support lock",
+  "description": "auth.support_locks — account-wide lock set by Keyhole support (superAdmin). Blocks sign-in and revokes sessions. Support never sees content.",
+  "type": "object",
+  "required": [
+    "_id",
+    "userId",
+    "status",
+    "lockedAt",
+    "lockedBy",
+    "reason"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../common.schema.json#/$defs/supportLockId"
+    },
+    "userId": {
+      "$ref": "../common.schema.json#/$defs/userId"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "lifted"
+      ]
+    },
+    "lockedAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "lockedBy": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "support"
+        },
+        "id": {
+          "$ref": "../common.schema.json#/$defs/supportAgentId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reason": {
+      "type": "string",
+      "description": "Support's reason or ticket ID; shown to the person and in their orgs' logs.",
+      "maxLength": 500
+    },
+    "unlockRequests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "byUserId",
+          "orgId",
+          "at"
+        ],
+        "properties": {
+          "byUserId": {
+            "$ref": "../common.schema.json#/$defs/userId"
+          },
+          "orgId": {
+            "$ref": "../common.schema.json#/$defs/orgId"
+          },
+          "at": {
+            "$ref": "../common.schema.json#/$defs/isoDate"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "An org admin asked support to unlock."
+    },
+    "liftedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "liftedBy": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "support"
+        },
+        "id": {
+          "$ref": "../common.schema.json#/$defs/supportAgentId"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

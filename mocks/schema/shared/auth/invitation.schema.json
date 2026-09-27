@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/invitation.schema.json",
+  "title": "Invitation",
+  "description": "auth.invitations — an invite to an org with a role and workspaces (the same dialog in both apps). On accept, the auth service activates the org membership and emits org.member.joined; the suite projector creates the workspace memberships and each app applies its own `extensions`.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "email",
+    "emailLower",
+    "role",
+    "workspaceGrants",
+    "token",
+    "status",
+    "invitedAt",
+    "invitedBy",
+    "expiresAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../common.schema.json#/$defs/invitationId"
+    },
+    "orgId": {
+      "$ref": "../common.schema.json#/$defs/orgId"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "emailLower": {
+      "type": "string"
+    },
+    "role": {
+      "$ref": "../common.schema.json#/$defs/orgRole"
+    },
+    "workspaceGrants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "workspaceId",
+          "role"
+        ],
+        "properties": {
+          "workspaceId": {
+            "$ref": "../common.schema.json#/$defs/workspaceId"
+          },
+          "role": {
+            "$ref": "../common.schema.json#/$defs/workspaceRole"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Opaque per-app options the auth service stores and hands back on accept.",
+      "properties": {
+        "dispatch": {
+          "type": "object",
+          "properties": {
+            "access": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "read",
+                  "write"
+                ],
+                "properties": {
+                  "read": {
+                    "type": "boolean"
+                  },
+                  "write": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "description": "workspaceId → read/write."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "token": {
+      "$ref": "../common.schema.json#/$defs/tokenDigest",
+      "description": "au_inv_… in the invitation link."
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "accepted",
+        "declined",
+        "revoked",
+        "expired"
+      ]
+    },
+    "invitedAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "invitedBy": {
+      "$ref": "../common.schema.json#/$defs/principalRef"
+    },
+    "resends": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "at",
+          "by"
+        ],
+        "properties": {
+          "at": {
+            "$ref": "../common.schema.json#/$defs/isoDate"
+          },
+          "by": {
+            "$ref": "../common.schema.json#/$defs/principalRef"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Support can resend (PERMISSIONS rule 1).",
+      "maxItems": 20
+    },
+    "expiresAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "acceptedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "acceptedUserId": {
+      "$ref": "../common.schema.json#/$defs/userId"
+    },
+    "revokedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "revokedBy": {
+      "anyOf": [
+        {
+          "$ref": "../common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "inv_sam",
+      "orgId": "org_acme",
+      "email": "sam@acme.com",
+      "emailLower": "sam@acme.com",
+      "role": "user",
+      "workspaceGrants": [
+        {
+          "workspaceId": "ws_prod",
+          "role": "member"
+        }
+      ],
+      "token": {
+        "alg": "sha256",
+        "hash": "Zt1d3bRr0Xn4mQ8u2Yp6cVh9sKq5wLe7aB3fJ0gHiNo",
+        "pepperVersion": 1,
+        "prefix": "au_inv_",
+        "last4": "Q7xs",
+        "issuedAt": "2026-09-25T14:00:00Z",
+        "expiresAt": "2026-10-02T14:00:00Z"
+      },
+      "status": "pending",
+      "invitedAt": "2026-09-25T14:00:00Z",
+      "invitedBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "expiresAt": "2026-10-02T14:00:00Z"
+    }
+  ]
+}

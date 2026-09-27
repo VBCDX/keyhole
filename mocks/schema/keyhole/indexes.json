@@ -1,0 +1,525 @@
+{
+  "$comment": "Every collection's validator is its schema file converted by shared/tools/mongo_validator.py ($ref inlined, dates → bsonType date, const → enum, if/then → anyOf[not if, then], unsupported keywords dropped). Tenancy: every index starts with orgId except the auth-path indexes marked `\"global\": true`, which look up a credential digest or public ID before the org is known; the handler then checks the row's orgId. MongoDB 7.0+ (partial indexes with $in).",
+  "database": "keyhole",
+  "collections": {
+    "stores": {
+      "schema": "store.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "name": 1
+          },
+          "name": "org_name",
+          "unique": true,
+          "partialFilterExpression": {
+            "status": {
+              "$in": [
+                "draft",
+                "verifying",
+                "active",
+                "disabled"
+              ]
+            }
+          }
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "route.connectorId": 1
+          },
+          "name": "org_connector",
+          "partialFilterExpression": {
+            "route.connectorId": {
+              "$exists": true
+            }
+          }
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "provider": 1
+          },
+          "name": "org_provider"
+        }
+      ]
+    },
+    "keys": {
+      "schema": "key.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "storeId": 1,
+            "name": 1
+          },
+          "name": "org_store_name",
+          "unique": true
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "name": 1
+          },
+          "name": "org_name"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "cabinetId": 1
+          },
+          "name": "org_cabinet",
+          "partialFilterExpression": {
+            "cabinetId": {
+              "$exists": true
+            }
+          }
+        }
+      ]
+    },
+    "local_key_values": {
+      "schema": "local_key_value.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "keyId": 1,
+            "version": -1
+          },
+          "name": "org_key_version",
+          "unique": true
+        },
+        {
+          "key": {
+            "destroyAt": 1
+          },
+          "name": "ttl_destroyAt",
+          "expireAfterSeconds": 0
+        }
+      ],
+      "$comment": "The only collection holding secret values (ciphertext). Separate role: only the broker's key-resolution path can read it."
+    },
+    "tools": {
+      "schema": "tool.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "draft.internalName": 1
+          },
+          "name": "org_internal_name"
+        }
+      ]
+    },
+    "tool_versions": {
+      "schema": "tool_version.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "toolId": 1,
+            "version": -1
+          },
+          "name": "org_tool_version",
+          "unique": true
+        }
+      ]
+    },
+    "grants": {
+      "schema": "grant.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "workspaceId": 1,
+            "toolId": 1
+          },
+          "name": "org_ws_tool",
+          "unique": true
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "toolId": 1
+          },
+          "name": "org_tool"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "keyIds": 1
+          },
+          "name": "org_keys"
+        }
+      ]
+    },
+    "workspace_availability": {
+      "schema": "workspace_availability.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "availableKeyIds": 1
+          },
+          "name": "org_avail_keys"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "exposedKeyIds": 1
+          },
+          "name": "org_exposed_keys"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "availableToolIds": 1
+          },
+          "name": "org_avail_tools"
+        }
+      ]
+    },
+    "workspace_settings": {
+      "schema": "workspace_settings.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "slug": 1
+          },
+          "name": "slug",
+          "unique": true,
+          "global": true
+        }
+      ]
+    },
+    "cabinets": {
+      "schema": "cabinet.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "workspaceId": 1
+          },
+          "name": "org_ws"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "keyIds": 1
+          },
+          "name": "org_keys"
+        }
+      ]
+    },
+    "agent_profiles": {
+      "schema": "agent_profile.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "token.current.hash": 1
+          },
+          "name": "token_hash",
+          "unique": true,
+          "partialFilterExpression": {
+            "token.current.hash": {
+              "$exists": true
+            }
+          },
+          "global": true
+        },
+        {
+          "key": {
+            "token.previous.digest.hash": 1
+          },
+          "name": "token_hash_prev",
+          "unique": true,
+          "partialFilterExpression": {
+            "token.previous.digest.hash": {
+              "$exists": true
+            }
+          },
+          "global": true
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "status": 1
+          },
+          "name": "org_status"
+        }
+      ]
+    },
+    "connectors": {
+      "schema": "connector.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "credential.current.hash": 1
+          },
+          "name": "credential_hash",
+          "unique": true,
+          "partialFilterExpression": {
+            "credential.current.hash": {
+              "$exists": true
+            }
+          },
+          "global": true
+        },
+        {
+          "key": {
+            "credential.previous.digest.hash": 1
+          },
+          "name": "credential_hash_prev",
+          "unique": true,
+          "partialFilterExpression": {
+            "credential.previous.digest.hash": {
+              "$exists": true
+            }
+          },
+          "global": true
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "kind": 1,
+            "workspaceId": 1
+          },
+          "name": "org_kind_ws"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "agentId": 1
+          },
+          "name": "org_agent",
+          "partialFilterExpression": {
+            "kind": "sidecar"
+          }
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "routesStoreIds": 1
+          },
+          "name": "org_routes"
+        }
+      ]
+    },
+    "enrollment_tokens": {
+      "schema": "enrollment_token.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "token.hash": 1
+          },
+          "name": "token_hash",
+          "unique": true,
+          "global": true
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "status": 1,
+            "expiresAt": 1
+          },
+          "name": "org_status_exp"
+        },
+        {
+          "key": {
+            "deleteAt": 1
+          },
+          "name": "ttl_deleteAt",
+          "expireAfterSeconds": 0
+        }
+      ]
+    },
+    "store_connection_tests": {
+      "schema": "store_connection_test.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "storeId": 1,
+            "startedAt": -1
+          },
+          "name": "org_store_at"
+        },
+        {
+          "key": {
+            "deleteAt": 1
+          },
+          "name": "ttl_deleteAt",
+          "expireAfterSeconds": 0
+        }
+      ]
+    },
+    "store_event_sources": {
+      "schema": "store_event_source.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "storeId": 1
+          },
+          "name": "org_store"
+        }
+      ]
+    },
+    "issuer_keys": {
+      "schema": "issuer_key.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "status": 1
+          },
+          "name": "status"
+        },
+        {
+          "key": {
+            "kid": 1
+          },
+          "name": "kid",
+          "unique": true
+        }
+      ],
+      "$comment": "Platform-level (not tenant data)."
+    },
+    "org_settings": {
+      "schema": "org_settings.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": []
+    },
+    "audit_events": {
+      "schema": "../shared/audit_event.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "orgId": 1,
+            "at": -1
+          },
+          "name": "org_at"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "workspaceId": 1,
+            "at": -1
+          },
+          "name": "org_ws_at"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "actor.id": 1,
+            "at": -1
+          },
+          "name": "org_actor_at"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "subject.id": 1,
+            "at": -1
+          },
+          "name": "org_subject_at"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "trk": 1
+          },
+          "name": "org_trk"
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "causationId": 1
+          },
+          "name": "org_causation",
+          "partialFilterExpression": {
+            "causationId": {
+              "$exists": true
+            }
+          }
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "actor.via.id": 1,
+            "at": -1
+          },
+          "name": "org_via_at",
+          "partialFilterExpression": {
+            "actor.via.id": {
+              "$exists": true
+            }
+          }
+        },
+        {
+          "key": {
+            "orgId": 1,
+            "type": 1,
+            "at": -1
+          },
+          "name": "org_type_at"
+        },
+        {
+          "key": {
+            "expireAt": 1
+          },
+          "name": "ttl_expireAt",
+          "expireAfterSeconds": 0
+        }
+      ],
+      "detailSchema": "audit_detail.schema.json",
+      "$comment": "Keyhole-only rows (shared: false). High volume: request rows. Consider a time-series collection when request volume passes ~1k/s per cluster."
+    },
+    "applied_events": {
+      "schema": "../shared/applied_event.schema.json",
+      "validationLevel": "strict",
+      "validationAction": "error",
+      "indexes": [
+        {
+          "key": {
+            "deleteAt": 1
+          },
+          "name": "ttl_deleteAt",
+          "expireAfterSeconds": 0
+        }
+      ]
+    }
+  }
+}

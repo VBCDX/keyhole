@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/applied_event.schema.json",
+  "title": "Applied outbox event",
+  "description": "<app>.applied_events — idempotency ledger each app's projector keeps in its own database: one row per outbox event it applied. Insert-if-absent inside the same transaction as the projection's writes.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "type",
+    "appliedAt",
+    "deleteAt"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "common.schema.json#/$defs/outboxEventId"
+    },
+    "orgId": {
+      "$ref": "common.schema.json#/$defs/orgId"
+    },
+    "type": {
+      "type": "string"
+    },
+    "appliedAt": {
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+    "deleteAt": {
+      "$ref": "common.schema.json#/$defs/isoDate",
+      "description": "TTL: 14 days (twice the outbox retention)."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/keyhole/local_key_value.schema.json",
+  "title": "Local-store key value",
+  "description": "keyhole.local_key_values — the only secret values Keyhole's Mongo ever holds. One row per version, envelope-encrypted (AES-256-GCM data key wrapped by a KMS key). Kept apart from keys so listing keys never loads ciphertext. AAD = orgId|keyId|version.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "keyId",
+    "version",
+    "envelope",
+    "length",
+    "createdAt",
+    "createdBy"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../shared/common.schema.json#/$defs/localKeyValueId"
+    },
+    "orgId": {
+      "$ref": "../shared/common.schema.json#/$defs/orgId"
+    },
+    "keyId": {
+      "$ref": "../shared/common.schema.json#/$defs/keyId"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "envelope": {
+      "$ref": "../shared/common.schema.json#/$defs/envelope"
+    },
+    "length": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "createdAt": {
+      "$ref": "../shared/common.schema.json#/$defs/isoDate"
+    },
+    "createdBy": {
+      "$ref": "../shared/common.schema.json#/$defs/principalRef"
+    },
+    "supersededAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate"
+    },
+    "destroyAt": {
+      "$ref": "../shared/common.schema.json#/$defs/nullableDate",
+      "description": "TTL: superseded versions are destroyed 30 days after supersededAt (rollback window)."
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "_id": "lkv_stripe3",
+      "orgId": "org_acme",
+      "keyId": "k_stripe",
+      "version": 3,
+      "envelope": {
+        "alg": "AES-256-GCM",
+        "nonce": "q83vEjRWeJCrze8S",
+        "ciphertext": "8b1v…base64…",
+        "aad": "org_acme|k_stripe|3",
+        "dek": {
+          "wrapped": "AQIDAHh…base64…",
+          "kmsKeyRef": "aws-kms:arn:aws:kms:us-east-1:999999999999:key/1a2b3c4d-keyhole-local",
+          "wrappedAt": "2026-09-21T10:00:00Z"
+        }
+      },
+      "length": 32,
+      "createdAt": "2026-09-21T10:00:00Z",
+      "createdBy": {
+        "kind": "user",
+        "id": "u_dana"
+      },
+      "supersededAt": null
+    }
+  ]
+}

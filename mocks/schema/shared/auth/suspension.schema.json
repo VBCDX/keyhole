@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vbcdx.dev/shared/auth/suspension.schema.json",
+  "title": "Suspension",
+  "description": "auth.suspensions — history of per-org suspensions. The current state is on org_memberships.",
+  "type": "object",
+  "required": [
+    "_id",
+    "orgId",
+    "userId",
+    "membershipId",
+    "status",
+    "suspendedAt",
+    "suspendedBy",
+    "previousStatus"
+  ],
+  "properties": {
+    "_id": {
+      "$ref": "../common.schema.json#/$defs/suspensionId"
+    },
+    "orgId": {
+      "$ref": "../common.schema.json#/$defs/orgId"
+    },
+    "userId": {
+      "$ref": "../common.schema.json#/$defs/userId"
+    },
+    "membershipId": {
+      "$ref": "../common.schema.json#/$defs/orgMembershipId"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "ended"
+      ]
+    },
+    "suspendedAt": {
+      "$ref": "../common.schema.json#/$defs/isoDate"
+    },
+    "suspendedBy": {
+      "$ref": "../common.schema.json#/$defs/principalRef"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "previousStatus": {
+      "enum": [
+        "active",
+        "invited"
+      ]
+    },
+    "resumedAt": {
+      "$ref": "../common.schema.json#/$defs/nullableDate"
+    },
+    "resumedBy": {
+      "anyOf": [
+        {
+          "$ref": "../common.schema.json#/$defs/principalRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

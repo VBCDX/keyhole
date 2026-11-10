@@ -1,0 +1,64 @@
+# Local use: Keyhole plus Postgres.
+#
+#   cp .env.example .env    # then set POSTGRES_PASSWORD (and anything else)
+#   docker compose up --build
+#
+# SQLite needs no compose at all: see the README.
+services:
+  keyhole:
+    build: .
+    # Published on this machine only; put a reverse proxy in front to serve
+    # it to anyone else.
+    ports:
+      - "127.0.0.1:${KEYHOLE_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://keyhole:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/keyhole?sslmode=disable
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      AUTH_MODE: ${AUTH_MODE:-local}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
+      OIDC_POST_LOGOUT_REDIRECT_URL: ${OIDC_POST_LOGOUT_REDIRECT_URL:-}
+      OIDC_SCOPES: ${OIDC_SCOPES:-}
+      SESSION_TTL: ${SESSION_TTL:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID:-}
+      SUITE_APPS: ${SUITE_APPS:-}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - keyhole-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_USER: keyhole
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: keyhole
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # Over TCP, not the unix socket: on first start the image's init runs a
+      # temporary server with listen_addresses='' (docker-entrypoint.sh,
+      # docker_temp_server_start), then restarts. A socket check passes
+      # against that temporary server, Keyhole connects during the restart
+      # (57P03 "the database system is starting up"), and is restarted once.
+      # Only the real server listens on 127.0.0.1.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U keyhole -d keyhole"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  keyhole-data:
+  postgres-data:

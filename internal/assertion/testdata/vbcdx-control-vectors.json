@@ -1,0 +1,29 @@
+{
+  "comment": "Issued by vbcdx-control assertion::KeySet (vbcdx-core main) for keyhole's Go verifier tests.",
+  "dispatch": "eyJhbGciOiJFZERTQSIsImtpZCI6IkJYdUNKUFpicGpHWWFjSEMiLCJ0eXAiOiJ2YmNkeC1hc3NlcnRpb24rand0In0.eyJhdWQiOiJkaXNwYXRjaCIsImV4cCI6MTgwMDAwMDA2MCwiaWF0IjoxODAwMDAwMDAwLCJpc3MiOiJ2YmNkeC1jb250cm9sIiwianRpIjoicmVxX2syIiwia2luZCI6InVzZXIiLCJsb2NhbF9wZWVyIjoxMDAwLCJvcmciOnsiaWQiOiJvcmdfaGVyZCIsInJvbGUiOiJPd25lciJ9LCJzZXNzaW9uIjoiaF83OTAiLCJzaWRlY2FyIjoic2NfNzkwIiwic3ViIjoidXNyX2hlcmQ3OTAifQ.Zlh3AMP4dIl9pSUimHzK6xQ-6lsFpAkFXoTZ6kEY5sGakt0dUdeoxc6MASBawz8HW60s6j1fSAYV4z5qViLaBQ",
+  "jwks": {
+    "keys": [
+      {
+        "alg": "EdDSA",
+        "crv": "Ed25519",
+        "kid": "BXuCJPZbpjGYacHC",
+        "kty": "OKP",
+        "status": "current",
+        "use": "sig",
+        "x": "MWgzyqLozP0Rl7AgNCd9g0_ewURHXsPt5f9BfX0hmec"
+      },
+      {
+        "alg": "EdDSA",
+        "crv": "Ed25519",
+        "kid": "FKIONXgMfMHbnPJH",
+        "kty": "OKP",
+        "status": "next",
+        "use": "sig",
+        "x": "4sZcdER4dDFzP9difk1wDJ9VRh65FvQAEC0QMzPgLHU"
+      }
+    ]
+  },
+  "keyhole": "eyJhbGciOiJFZERTQSIsImtpZCI6IkJYdUNKUFpicGpHWWFjSEMiLCJ0eXAiOiJ2YmNkeC1hc3NlcnRpb24rand0In0.eyJhdWQiOiJrZXlob2xlIiwiZXhwIjoxODAwMDAwMDYwLCJpYXQiOjE4MDAwMDAwMDAsImlzcyI6InZiY2R4LWNvbnRyb2wiLCJqdGkiOiJyZXFfazEiLCJraW5kIjoidXNlciIsImxvY2FsX3BlZXIiOjEwMDAsIm9yZyI6eyJpZCI6Im9yZ19oZXJkIiwicm9sZSI6Ik93bmVyIn0sInNlc3Npb24iOiJoXzc5MCIsInNpZGVjYXIiOiJzY183OTAiLCJzdWIiOiJ1c3JfaGVyZDc5MCJ9.jddBJcYlJ08o0dRm75PITlwi6ve3rBQDYqnKMHtvo-sOVomc01L6-9o800PApNBuauIt7DFCl7uxl6t-4GQODg",
+  "keyhole_no_sidecar": "eyJhbGciOiJFZERTQSIsImtpZCI6IkJYdUNKUFpicGpHWWFjSEMiLCJ0eXAiOiJ2YmNkeC1hc3NlcnRpb24rand0In0.eyJhdWQiOiJrZXlob2xlIiwiZXhwIjoxODAwMDAwMDYwLCJpYXQiOjE4MDAwMDAwMDAsImlzcyI6InZiY2R4LWNvbnRyb2wiLCJqdGkiOiJyZXFfazMiLCJraW5kIjoidXNlciIsImxvY2FsX3BlZXIiOjEwMDAsIm9yZyI6eyJpZCI6Im9yZ19oZXJkIiwicm9sZSI6Ik93bmVyIn0sInNlc3Npb24iOiJoXzc5MCIsInN1YiI6InVzcl9oZXJkNzkwIn0.XHQ3XMbpy-H1nPPTHkTiVTyU9mbYpQXTbDCuXL8PLRKutSbue-0UO9h2Fbc7OeA2oIL7zT3twMoMhl0qvjy8Bg",
+  "now": 1800000000
+}

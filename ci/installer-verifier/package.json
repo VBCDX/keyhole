@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "The service installer's minisign verifier, vendored for the release contract test in ci.yml"
+}

@@ -1,0 +1,2290 @@
+{
+ "description": "Keyhole demo data: the populated scenario of mocks/v1/src/lib/seed.ts, shaped to the SQL schema. Times are \"@now\" offsets (d, h, m, s), resolved when the fixture is loaded. Every token, digest and secret reference is an obvious placeholder (\"demo-placeholder:\"); no row holds a secret.",
+ "tables": [
+  {
+   "table": "orgs",
+   "rows": [
+    {
+     "id": "org_acme",
+     "name": "Acme Corp",
+     "status": "active",
+     "audit_retention_days": 365,
+     "created_at": "@now-60d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-60d",
+     "rev": 0
+    },
+    {
+     "id": "org_nw",
+     "name": "Northwind Labs",
+     "status": "active",
+     "audit_retention_days": 365,
+     "created_at": "@now-200d",
+     "created_by_kind": "user",
+     "created_by_id": "u_noor",
+     "updated_at": "@now-200d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "users",
+   "rows": [
+    {
+     "id": "u_dana",
+     "email": "dana@acme.com",
+     "email_lower": "dana@acme.com",
+     "name": "Dana Keller",
+     "status": "active",
+     "last_sign_in_at": "@now",
+     "created_at": "@now-120d",
+     "updated_at": "@now-120d"
+    },
+    {
+     "id": "u_ravi",
+     "email": "ravi@acme.com",
+     "email_lower": "ravi@acme.com",
+     "name": "Ravi Mehta",
+     "status": "active",
+     "last_sign_in_at": "@now-2h",
+     "created_at": "@now-100d",
+     "updated_at": "@now-100d"
+    },
+    {
+     "id": "u_mia",
+     "email": "mia@acme.com",
+     "email_lower": "mia@acme.com",
+     "name": "Mia Chen",
+     "status": "active",
+     "last_sign_in_at": "@now-3h",
+     "created_at": "@now-90d",
+     "updated_at": "@now-90d"
+    },
+    {
+     "id": "u_jo",
+     "email": "jo@acme.com",
+     "email_lower": "jo@acme.com",
+     "name": "Jo Reyes",
+     "status": "active",
+     "last_sign_in_at": "@now-6d",
+     "created_at": "@now-80d",
+     "updated_at": "@now-80d"
+    },
+    {
+     "id": "u_noor",
+     "email": "noor@northwind.dev",
+     "email_lower": "noor@northwind.dev",
+     "name": "Noor Haddad",
+     "status": "active",
+     "last_sign_in_at": "@now-1d",
+     "created_at": "@now-210d",
+     "updated_at": "@now-210d"
+    },
+    {
+     "id": "u_sam",
+     "email": "sam@acme.com",
+     "email_lower": "sam@acme.com",
+     "name": "Sam Ortiz",
+     "status": "active",
+     "last_sign_in_at": "@now-10m",
+     "created_at": "@now-2d",
+     "updated_at": "@now-2d"
+    }
+   ]
+  },
+  {
+   "table": "sessions",
+   "rows": [
+    {
+     "id_hash": "demo-placeholder:ses_1",
+     "user_id": "u_dana",
+     "method": "local",
+     "amr": [
+      "pwd"
+     ],
+     "csrf_token": "demo-placeholder:csrf",
+     "client": "web:keyhole",
+     "device": "MacBook Pro",
+     "place": "San Francisco",
+     "created_at": "@now",
+     "last_seen_at": "@now",
+     "expires_at": "@now+1d"
+    },
+    {
+     "id_hash": "demo-placeholder:ses_2",
+     "user_id": "u_dana",
+     "method": "local",
+     "amr": [
+      "pwd"
+     ],
+     "csrf_token": "demo-placeholder:csrf",
+     "client": "web:keyhole",
+     "device": "iPhone",
+     "place": "San Francisco",
+     "created_at": "@now-2h",
+     "last_seen_at": "@now-2h",
+     "expires_at": "@now+1d"
+    },
+    {
+     "id_hash": "demo-placeholder:ses_3",
+     "user_id": "u_ravi",
+     "method": "local",
+     "amr": [
+      "pwd"
+     ],
+     "csrf_token": "demo-placeholder:csrf",
+     "client": "web:keyhole",
+     "device": "ThinkPad",
+     "place": "Austin",
+     "created_at": "@now-2h",
+     "last_seen_at": "@now-2h",
+     "expires_at": "@now+1d"
+    },
+    {
+     "id_hash": "demo-placeholder:ses_4",
+     "user_id": "u_mia",
+     "method": "local",
+     "amr": [
+      "pwd"
+     ],
+     "csrf_token": "demo-placeholder:csrf",
+     "client": "web:keyhole",
+     "device": "MacBook Air",
+     "place": "Seattle",
+     "created_at": "@now-3h",
+     "last_seen_at": "@now-3h",
+     "expires_at": "@now+1d"
+    },
+    {
+     "id_hash": "demo-placeholder:ses_5",
+     "user_id": "u_mia",
+     "method": "local",
+     "amr": [
+      "pwd"
+     ],
+     "csrf_token": "demo-placeholder:csrf",
+     "client": "web:keyhole",
+     "device": "Pixel 8",
+     "place": "Seattle",
+     "created_at": "@now-5h",
+     "last_seen_at": "@now-5h",
+     "expires_at": "@now+1d"
+    },
+    {
+     "id_hash": "demo-placeholder:ses_6",
+     "user_id": "u_noor",
+     "method": "local",
+     "amr": [
+      "pwd"
+     ],
+     "csrf_token": "demo-placeholder:csrf",
+     "client": "web:keyhole",
+     "device": "MacBook Pro",
+     "place": "Lisbon",
+     "created_at": "@now-1d",
+     "last_seen_at": "@now-1d",
+     "expires_at": "@now+1d"
+    },
+    {
+     "id_hash": "demo-placeholder:ses_7",
+     "user_id": "u_sam",
+     "method": "local",
+     "amr": [
+      "pwd"
+     ],
+     "csrf_token": "demo-placeholder:csrf",
+     "client": "web:keyhole",
+     "device": "Chromebook",
+     "place": "Denver",
+     "created_at": "@now-10m",
+     "last_seen_at": "@now-10m",
+     "expires_at": "@now+1d"
+    }
+   ]
+  },
+  {
+   "table": "org_memberships",
+   "rows": [
+    {
+     "id": "om_acme_dana",
+     "org_id": "org_acme",
+     "user_id": "u_dana",
+     "role": "Owner",
+     "status": "active",
+     "joined_at": "@now-60d",
+     "created_at": "@now-60d",
+     "updated_at": "@now-60d",
+     "rev": 0
+    },
+    {
+     "id": "om_acme_ravi",
+     "org_id": "org_acme",
+     "user_id": "u_ravi",
+     "role": "userAdmin",
+     "status": "active",
+     "joined_at": "@now-60d",
+     "created_at": "@now-60d",
+     "updated_at": "@now-60d",
+     "rev": 0
+    },
+    {
+     "id": "om_acme_mia",
+     "org_id": "org_acme",
+     "user_id": "u_mia",
+     "role": "user",
+     "status": "active",
+     "joined_at": "@now-60d",
+     "created_at": "@now-60d",
+     "updated_at": "@now-60d",
+     "rev": 0
+    },
+    {
+     "id": "om_acme_jo",
+     "org_id": "org_acme",
+     "user_id": "u_jo",
+     "role": "user",
+     "status": "suspended",
+     "joined_at": "@now-60d",
+     "created_at": "@now-60d",
+     "updated_at": "@now-5d",
+     "rev": 1,
+     "suspended_from": "active",
+     "suspension_id": "susp_jo",
+     "updated_by_kind": "user",
+     "updated_by_id": "u_dana"
+    },
+    {
+     "id": "om_nw_mia",
+     "org_id": "org_nw",
+     "user_id": "u_mia",
+     "role": "user",
+     "status": "active",
+     "joined_at": "@now-60d",
+     "created_at": "@now-60d",
+     "updated_at": "@now-60d",
+     "rev": 0
+    },
+    {
+     "id": "om_nw_noor",
+     "org_id": "org_nw",
+     "user_id": "u_noor",
+     "role": "Owner",
+     "status": "active",
+     "joined_at": "@now-60d",
+     "created_at": "@now-60d",
+     "updated_at": "@now-60d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "suspensions",
+   "rows": [
+    {
+     "id": "susp_jo",
+     "org_id": "org_acme",
+     "user_id": "u_jo",
+     "membership_id": "om_acme_jo",
+     "status": "active",
+     "suspended_at": "@now-5d",
+     "suspended_by_kind": "user",
+     "suspended_by_id": "u_dana",
+     "previous_status": "active"
+    }
+   ]
+  },
+  {
+   "table": "invitations",
+   "rows": [
+    {
+     "id": "inv_sam",
+     "org_id": "org_acme",
+     "email": "sam@acme.com",
+     "email_lower": "sam@acme.com",
+     "role": "user",
+     "workspace_grants": [
+      {
+       "workspaceId": "ws_prod",
+       "role": "member"
+      }
+     ],
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:inv_sam",
+     "token_prefix": "au_inv_",
+     "token_last4": "DEMO",
+     "token_issued_at": "@now-2d",
+     "token_expires_at": "@now+5d",
+     "status": "pending",
+     "invited_at": "@now-2d",
+     "invited_by_kind": "user",
+     "invited_by_id": "u_dana",
+     "expires_at": "@now+5d"
+    },
+    {
+     "id": "inv_nw_old",
+     "org_id": "org_nw",
+     "email": "sam@acme.com",
+     "email_lower": "sam@acme.com",
+     "role": "user",
+     "workspace_grants": [],
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:inv_nw_old",
+     "token_prefix": "au_inv_",
+     "token_last4": "DEMO",
+     "token_issued_at": "@now-10d",
+     "token_expires_at": "@now-3d",
+     "status": "expired",
+     "invited_at": "@now-10d",
+     "invited_by_kind": "user",
+     "invited_by_id": "u_noor",
+     "expires_at": "@now-3d"
+    }
+   ]
+  },
+  {
+   "table": "workspaces",
+   "rows": [
+    {
+     "id": "ws_prod",
+     "org_id": "org_acme",
+     "name": "Production",
+     "status": "active",
+     "created_at": "@now-50d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-50d",
+     "rev": 0
+    },
+    {
+     "id": "ws_staging",
+     "org_id": "org_acme",
+     "name": "Staging",
+     "status": "active",
+     "created_at": "@now-40d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-40d",
+     "rev": 0
+    },
+    {
+     "id": "ws_sandbox",
+     "org_id": "org_acme",
+     "name": "Sandbox",
+     "status": "active",
+     "created_at": "@now-20d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "agents",
+   "rows": [
+    {
+     "id": "ag_billing",
+     "org_id": "org_acme",
+     "label": "billing-agent",
+     "label_lower": "billing-agent",
+     "created_at": "@now-3d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "created_by_label": "Dana Keller",
+     "updated_at": "@now-3d",
+     "rev": 0
+    },
+    {
+     "id": "ag_ops",
+     "org_id": "org_acme",
+     "label": "ops-agent",
+     "label_lower": "ops-agent",
+     "created_at": "@now-81d",
+     "created_by_kind": "user",
+     "created_by_id": "u_ravi",
+     "created_by_label": "Ravi Mehta",
+     "updated_at": "@now-81d",
+     "rev": 0
+    },
+    {
+     "id": "ag_docs",
+     "org_id": "org_acme",
+     "label": "docs-agent",
+     "label_lower": "docs-agent",
+     "created_at": "@now-25d",
+     "created_by_kind": "user",
+     "created_by_id": "u_ravi",
+     "created_by_label": "Ravi Mehta",
+     "updated_at": "@now-25d",
+     "rev": 0
+    },
+    {
+     "id": "ag_report",
+     "org_id": "org_acme",
+     "label": "reporting-bot",
+     "label_lower": "reporting-bot",
+     "created_at": "@now-45d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "created_by_label": "Dana Keller",
+     "updated_at": "@now-45d",
+     "rev": 0
+    },
+    {
+     "id": "ag_oldci",
+     "org_id": "org_acme",
+     "label": "old-ci",
+     "label_lower": "old-ci",
+     "created_at": "@now-120d",
+     "created_by_kind": "user",
+     "created_by_id": "u_ravi",
+     "created_by_label": "Ravi Mehta",
+     "updated_at": "@now-120d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "workspace_memberships",
+   "rows": [
+    {
+     "id": "wm_prod_dana",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "member_kind": "user",
+     "member_id": "u_dana",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_prod_ravi",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "member_kind": "user",
+     "member_id": "u_ravi",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_prod_mia",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "member_kind": "user",
+     "member_id": "u_mia",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_prod_billing",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "member_kind": "agent",
+     "member_id": "ag_billing",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_prod_ops",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "member_kind": "agent",
+     "member_id": "ag_ops",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_prod_docs",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "member_kind": "agent",
+     "member_id": "ag_docs",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_prod_report",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "member_kind": "agent",
+     "member_id": "ag_report",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_staging_ravi",
+     "org_id": "org_acme",
+     "workspace_id": "ws_staging",
+     "member_kind": "user",
+     "member_id": "u_ravi",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_staging_jo",
+     "org_id": "org_acme",
+     "workspace_id": "ws_staging",
+     "member_kind": "user",
+     "member_id": "u_jo",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_staging_docs",
+     "org_id": "org_acme",
+     "workspace_id": "ws_staging",
+     "member_kind": "agent",
+     "member_id": "ag_docs",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_sandbox_ravi",
+     "org_id": "org_acme",
+     "workspace_id": "ws_sandbox",
+     "member_kind": "user",
+     "member_id": "u_ravi",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "id": "wm_sandbox_oldci",
+     "org_id": "org_acme",
+     "workspace_id": "ws_sandbox",
+     "member_kind": "agent",
+     "member_id": "ag_oldci",
+     "role": "member",
+     "added_at": "@now-20d",
+     "added_by_kind": "user",
+     "added_by_id": "u_dana",
+     "updated_at": "@now-20d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "org_settings",
+   "rows": [
+    {
+     "org_id": "org_acme",
+     "config_version": 1,
+     "checklist_dismissed_at": "@now-3d",
+     "config_downloaded_at": "@now-3d",
+     "updated_at": "@now-3d"
+    },
+    {
+     "org_id": "org_nw",
+     "config_version": 0,
+     "updated_at": "@now-200d"
+    }
+   ]
+  },
+  {
+   "table": "workspace_settings",
+   "rows": [
+    {
+     "workspace_id": "ws_prod",
+     "org_id": "org_acme",
+     "slug": "ws_1a2b",
+     "https": false,
+     "mcp": true,
+     "updated_at": "@now-50d",
+     "rev": 0
+    },
+    {
+     "workspace_id": "ws_staging",
+     "org_id": "org_acme",
+     "slug": "ws_7c3d",
+     "https": true,
+     "mcp": false,
+     "updated_at": "@now-40d",
+     "rev": 0
+    },
+    {
+     "workspace_id": "ws_sandbox",
+     "org_id": "org_acme",
+     "slug": "ws_5e9f",
+     "https": false,
+     "mcp": false,
+     "updated_at": "@now-20d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "agent_profiles",
+   "rows": [
+    {
+     "agent_id": "ag_billing",
+     "org_id": "org_acme",
+     "status": "active",
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:ag_billing",
+     "token_pepper_version": 1,
+     "token_prefix": "kh_live_",
+     "token_last4": "6TpE",
+     "token_issued_at": "@now-3d",
+     "expires_at": "@now+87d",
+     "rate_limit_per_minute": 60,
+     "last_used_at": "@now-2m",
+     "created_at": "@now-3d",
+     "updated_at": "@now-3d",
+     "rev": 0
+    },
+    {
+     "agent_id": "ag_ops",
+     "org_id": "org_acme",
+     "status": "active",
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:ag_ops",
+     "token_pepper_version": 1,
+     "token_prefix": "kh_live_",
+     "token_last4": "r7Qm",
+     "token_issued_at": "@now-81d",
+     "expires_at": "@now+9d",
+     "rate_limit_per_minute": 30,
+     "last_used_at": "@now-2m27s",
+     "created_at": "@now-81d",
+     "updated_at": "@now-81d",
+     "rev": 0
+    },
+    {
+     "agent_id": "ag_docs",
+     "org_id": "org_acme",
+     "status": "active",
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:ag_docs",
+     "token_pepper_version": 1,
+     "token_prefix": "kh_live_",
+     "token_last4": "X2dk",
+     "token_issued_at": "@now-25d",
+     "last_used_at": "@now-3m",
+     "created_at": "@now-25d",
+     "updated_at": "@now-25d",
+     "rev": 0
+    },
+    {
+     "agent_id": "ag_report",
+     "org_id": "org_acme",
+     "status": "suspended",
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:ag_report",
+     "token_pepper_version": 1,
+     "token_prefix": "kh_live_",
+     "token_last4": "hN4s",
+     "token_issued_at": "@now-45d",
+     "expires_at": "@now+200d",
+     "rate_limit_per_minute": 10,
+     "last_used_at": "@now-8d",
+     "created_at": "@now-45d",
+     "updated_at": "@now-45d",
+     "rev": 0,
+     "suspended_at": "@now-8d",
+     "suspended_by_kind": "user",
+     "suspended_by_id": "u_dana"
+    },
+    {
+     "agent_id": "ag_oldci",
+     "org_id": "org_acme",
+     "status": "revoked",
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:ag_oldci",
+     "token_pepper_version": 1,
+     "token_prefix": "kh_live_",
+     "token_last4": "Pw9a",
+     "token_issued_at": "@now-120d",
+     "last_used_at": "@now-30d",
+     "created_at": "@now-120d",
+     "updated_at": "@now-120d",
+     "rev": 0,
+     "revoked_at": "@now-30d",
+     "revoked_by_kind": "user",
+     "revoked_by_id": "u_ravi"
+    }
+   ]
+  },
+  {
+   "table": "enrollment_tokens",
+   "rows": [
+    {
+     "id": "enr_edge01",
+     "org_id": "org_acme",
+     "app": "keyhole",
+     "component_kind": "vault_connector",
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:enr_edge01",
+     "token_pepper_version": 1,
+     "token_prefix": "kh_enr_",
+     "token_last4": "DEMO",
+     "token_issued_at": "@now-3d",
+     "status": "consumed",
+     "intent": {
+      "name": "edge-01",
+      "workspaceId": "ws_prod",
+      "cachePolicy": {
+       "mode": "memory"
+      }
+     },
+     "created_at": "@now-3d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "expires_at": "@now-3d",
+     "consumed_at": "@now-3d",
+     "consumed_by_component_id": "cn_edge01"
+    },
+    {
+     "id": "enr_edge02",
+     "org_id": "org_acme",
+     "app": "keyhole",
+     "component_kind": "vault_connector",
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:enr_edge02",
+     "token_pepper_version": 1,
+     "token_prefix": "kh_enr_",
+     "token_last4": "DEMO",
+     "token_issued_at": "@now-3d",
+     "status": "consumed",
+     "intent": {
+      "name": "edge-02",
+      "workspaceId": "ws_staging",
+      "cachePolicy": {
+       "mode": "memory"
+      }
+     },
+     "created_at": "@now-3d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "expires_at": "@now-3d",
+     "consumed_at": "@now-3d",
+     "consumed_by_component_id": "cn_edge02"
+    },
+    {
+     "id": "enr_lab",
+     "org_id": "org_acme",
+     "app": "keyhole",
+     "component_kind": "vault_connector",
+     "token_alg": "sha256",
+     "token_hash": "demo-placeholder:enr_lab",
+     "token_pepper_version": 1,
+     "token_prefix": "kh_enr_",
+     "token_last4": "DEMO",
+     "token_issued_at": "@now-14d",
+     "status": "consumed",
+     "intent": {
+      "name": "lab-runner",
+      "workspaceId": "ws_sandbox",
+      "cachePolicy": {
+       "mode": "memory"
+      }
+     },
+     "created_at": "@now-14d",
+     "created_by_kind": "user",
+     "created_by_id": "u_ravi",
+     "expires_at": "@now-14d",
+     "consumed_at": "@now-14d",
+     "consumed_by_component_id": "cn_lab"
+    }
+   ]
+  },
+  {
+   "table": "connectors",
+   "rows": [
+    {
+     "id": "cn_edge01",
+     "org_id": "org_acme",
+     "kind": "vault",
+     "name": "edge-01",
+     "status": "active",
+     "workspace_id": "ws_prod",
+     "enrollment_token_id": "enr_edge01",
+     "enrolled_at": "@now-3d",
+     "enrolled_by_kind": "user",
+     "enrolled_by_id": "u_dana",
+     "credential_alg": "sha256",
+     "credential_hash": "demo-placeholder:cn_edge01",
+     "credential_pepper_version": 1,
+     "credential_prefix": "kh_conn_",
+     "credential_last4": "DEMO",
+     "credential_issued_at": "@now-3d",
+     "install": {
+      "method": "docker",
+      "os": "linux",
+      "arch": "amd64",
+      "version": "1.4.2"
+     },
+     "health_status": "healthy",
+     "health_last_seen_at": "@now-20s",
+     "health_ip": "10.2.14.7",
+     "health_missed_heartbeats": 0,
+     "health_reported_version": "1.4.2",
+     "health_config_version": 1,
+     "cache_policy": {
+      "mode": "memory"
+     },
+     "egress_tunnel": "wss",
+     "created_at": "@now-3d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-20s",
+     "rev": 0
+    },
+    {
+     "id": "cn_edge02",
+     "org_id": "org_acme",
+     "kind": "vault",
+     "name": "edge-02",
+     "status": "active",
+     "workspace_id": "ws_staging",
+     "enrollment_token_id": "enr_edge02",
+     "enrolled_at": "@now-3d",
+     "enrolled_by_kind": "user",
+     "enrolled_by_id": "u_dana",
+     "credential_alg": "sha256",
+     "credential_hash": "demo-placeholder:cn_edge02",
+     "credential_pepper_version": 1,
+     "credential_prefix": "kh_conn_",
+     "credential_last4": "DEMO",
+     "credential_issued_at": "@now-3d",
+     "install": {
+      "method": "docker",
+      "os": "linux",
+      "arch": "amd64",
+      "version": "1.4.0"
+     },
+     "health_status": "degraded",
+     "health_last_seen_at": "@now-1m30s",
+     "health_ip": "10.2.14.9",
+     "health_missed_heartbeats": 2,
+     "health_reported_version": "1.4.0",
+     "health_config_version": 1,
+     "cache_policy": {
+      "mode": "memory"
+     },
+     "egress_tunnel": "wss",
+     "created_at": "@now-3d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-1m30s",
+     "rev": 0
+    },
+    {
+     "id": "cn_lab",
+     "org_id": "org_acme",
+     "kind": "vault",
+     "name": "lab-runner",
+     "status": "active",
+     "workspace_id": "ws_sandbox",
+     "enrollment_token_id": "enr_lab",
+     "enrolled_at": "@now-14d",
+     "enrolled_by_kind": "user",
+     "enrolled_by_id": "u_ravi",
+     "credential_alg": "sha256",
+     "credential_hash": "demo-placeholder:cn_lab",
+     "credential_pepper_version": 1,
+     "credential_prefix": "kh_conn_",
+     "credential_last4": "DEMO",
+     "credential_issued_at": "@now-14d",
+     "install": {
+      "method": "docker",
+      "os": "linux",
+      "arch": "amd64",
+      "version": "1.3.9"
+     },
+     "health_status": "offline",
+     "health_last_seen_at": "@now-2h",
+     "health_missed_heartbeats": 0,
+     "health_reported_version": "1.3.9",
+     "health_config_version": 1,
+     "cache_policy": {
+      "mode": "memory"
+     },
+     "egress_tunnel": "wss",
+     "created_at": "@now-14d",
+     "created_by_kind": "user",
+     "created_by_id": "u_ravi",
+     "updated_at": "@now-2h",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "stores",
+   "rows": [
+    {
+     "id": "st_local",
+     "org_id": "org_acme",
+     "name": "Local store",
+     "provider": "local",
+     "status": "active",
+     "route_mode": "internal",
+     "network_exposure": "unknown",
+     "health_status": "healthy",
+     "health_code": "ok",
+     "health_checked_at": "@now-40s",
+     "cache_default_ttl_seconds": 300,
+     "created_at": "@now-60d",
+     "created_by_kind": "system",
+     "created_by_id": "org_setup",
+     "updated_at": "@now-60d",
+     "rev": 0
+    },
+    {
+     "id": "st_bao",
+     "org_id": "org_acme",
+     "name": "Payments vault",
+     "provider": "openbao",
+     "status": "active",
+     "route_mode": "connector",
+     "route_connector_id": "cn_edge01",
+     "network_exposure": "private",
+     "address": "https://bao.acme.internal:8200",
+     "ca_bundle_name": "vault-ca.pem",
+     "skip_tls_verify": false,
+     "kv_mount": "secret",
+     "kv_path_prefix": "payments/",
+     "auth_method": "approle",
+     "auth_mount": "approle",
+     "auth_role_id": "demo-placeholder:role-id",
+     "settings": {
+      "auth": {
+       "bindSecretId": true,
+       "secretId": {
+        "kind": "sealed",
+        "uri": "kss://demo-placeholder/org_acme/st_bao/secret_id",
+        "kmsKeyRef": "transit:demo-placeholder/keyhole",
+        "version": 1,
+        "setAt": "@now-14d",
+        "setBy": {
+         "kind": "user",
+         "id": "u_dana"
+        }
+       }
+      }
+     },
+     "health_status": "healthy",
+     "health_code": "ok",
+     "health_checked_at": "@now-4m",
+     "health_last_test_id": "ctest_bao_1",
+     "cache_default_ttl_seconds": 60,
+     "invalidation": {
+      "revalidation": "kv2_metadata"
+     },
+     "created_at": "@now-14d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-14d",
+     "rev": 1
+    },
+    {
+     "id": "st_removed",
+     "org_id": "org_acme",
+     "name": "Old vault",
+     "provider": "openbao",
+     "status": "removed",
+     "route_mode": "direct",
+     "network_exposure": "unknown",
+     "address": "https://vault.old.acme.example:8200",
+     "auth_method": "approle",
+     "auth_mount": "approle",
+     "health_status": "unknown",
+     "health_checked_at": "@now-60d",
+     "created_at": "@now-120d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-60d",
+     "removed_at": "@now-60d",
+     "removed_by_kind": "user",
+     "removed_by_id": "u_dana",
+     "rev": 2
+    }
+   ]
+  },
+  {
+   "table": "store_connection_tests",
+   "rows": [
+    {
+     "id": "ctest_bao_1",
+     "org_id": "org_acme",
+     "store_id": "st_bao",
+     "trigger": "scheduled",
+     "ran_via_mode": "connector",
+     "ran_via_connector_id": "cn_edge01",
+     "started_at": "@now-4m",
+     "finished_at": "@now-4m",
+     "ok": true,
+     "health_code": "ok",
+     "steps": [
+      {
+       "step": "reachability",
+       "ok": true
+      },
+      {
+       "step": "tls",
+       "ok": true
+      },
+      {
+       "step": "auth",
+       "ok": true
+      },
+      {
+       "step": "permission",
+       "ok": true
+      }
+     ],
+     "requested_by_kind": "system",
+     "requested_by_id": "scheduler",
+     "delete_at": "@now+30d"
+    }
+   ]
+  },
+  {
+   "table": "cabinets",
+   "rows": [
+    {
+     "id": "cb_mia",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "name": "Mia's billing set",
+     "created_by_kind": "user",
+     "created_by_id": "u_mia",
+     "managed_by": "u_mia",
+     "access_everyone": false,
+     "created_at": "@now-3h",
+     "updated_at": "@now-3h",
+     "rev": 0
+    },
+    {
+     "id": "cb_team",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "name": "Team sandbox",
+     "created_by_kind": "user",
+     "created_by_id": "u_ravi",
+     "managed_by": "u_ravi",
+     "access_everyone": true,
+     "created_at": "@now-10d",
+     "updated_at": "@now-10d",
+     "rev": 0
+    },
+    {
+     "id": "cb_legacy",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "name": "Legacy imports",
+     "access_everyone": true,
+     "created_at": "@now-90d",
+     "updated_at": "@now-90d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "keys",
+   "rows": [
+    {
+     "id": "k_stripe",
+     "org_id": "org_acme",
+     "name": "stripe_secret",
+     "store_id": "st_local",
+     "provider": "local",
+     "pinned": false,
+     "length": 32,
+     "rotated_at": "@now-6d",
+     "rotation_reminder_days": 90,
+     "notes": "Restricted key — charges read only",
+     "status": "active",
+     "created_at": "@now-20d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-6d",
+     "rev": 0
+    },
+    {
+     "id": "k_slack",
+     "org_id": "org_acme",
+     "name": "SLACK_BOT_TOKEN",
+     "store_id": "st_local",
+     "provider": "local",
+     "pinned": false,
+     "length": 57,
+     "expires_at": "@now+10d",
+     "notes": "",
+     "status": "active",
+     "created_at": "@now-12d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-12d",
+     "rev": 0
+    },
+    {
+     "id": "k_gh",
+     "org_id": "org_acme",
+     "name": "github_token",
+     "store_id": "st_local",
+     "provider": "local",
+     "pinned": false,
+     "length": 40,
+     "expires_at": "@now+80d",
+     "rotation_reminder_days": 30,
+     "notes": "Fine-grained PAT, issues only",
+     "status": "active",
+     "created_at": "@now-30d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-30d",
+     "rev": 0
+    },
+    {
+     "id": "k_mia1",
+     "org_id": "org_acme",
+     "name": "mia_stripe_test",
+     "store_id": "st_local",
+     "provider": "local",
+     "pinned": false,
+     "length": 32,
+     "notes": "Cabinet key",
+     "status": "active",
+     "cabinet_id": "cb_mia",
+     "created_at": "@now-3h",
+     "created_by_kind": "user",
+     "created_by_id": "u_mia",
+     "updated_at": "@now-3h",
+     "rev": 0
+    },
+    {
+     "id": "k_mia2",
+     "org_id": "org_acme",
+     "name": "mia_webhook",
+     "store_id": "st_local",
+     "provider": "local",
+     "pinned": false,
+     "length": 38,
+     "notes": "Cabinet key",
+     "status": "active",
+     "cabinet_id": "cb_mia",
+     "created_at": "@now-3h",
+     "created_by_kind": "user",
+     "created_by_id": "u_mia",
+     "updated_at": "@now-3h",
+     "rev": 0
+    },
+    {
+     "id": "k_legacy_c",
+     "org_id": "org_acme",
+     "name": "old_mailgun",
+     "store_id": "st_local",
+     "provider": "local",
+     "pinned": false,
+     "length": 36,
+     "notes": "Cabinet key",
+     "status": "active",
+     "cabinet_id": "cb_legacy",
+     "created_at": "@now-90d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-90d",
+     "rev": 0
+    },
+    {
+     "id": "k_bao1",
+     "org_id": "org_acme",
+     "name": "payments/api_key",
+     "store_id": "st_bao",
+     "provider": "openbao",
+     "address": {
+      "engine": "kv2",
+      "mount": "secret",
+      "path": "payments",
+      "field": "api_key"
+     },
+     "pinned": false,
+     "length": 48,
+     "notes": "",
+     "status": "active",
+     "created_at": "@now-14d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-14d",
+     "rev": 0
+    },
+    {
+     "id": "k_bao2",
+     "org_id": "org_acme",
+     "name": "payments/webhook_secret",
+     "store_id": "st_bao",
+     "provider": "openbao",
+     "address": {
+      "engine": "kv2",
+      "mount": "secret",
+      "path": "payments",
+      "field": "webhook_secret"
+     },
+     "pinned": false,
+     "length": 44,
+     "notes": "",
+     "status": "active",
+     "created_at": "@now-14d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-14d",
+     "rev": 0
+    },
+    {
+     "id": "k_bao3",
+     "org_id": "org_acme",
+     "name": "payments/refund_key",
+     "store_id": "st_bao",
+     "provider": "openbao",
+     "address": {
+      "engine": "kv2",
+      "mount": "secret",
+      "path": "payments",
+      "field": "refund_key"
+     },
+     "pinned": false,
+     "length": 48,
+     "notes": "",
+     "status": "active",
+     "created_at": "@now-14d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-14d",
+     "rev": 0
+    },
+    {
+     "id": "k_bao4",
+     "org_id": "org_acme",
+     "name": "payments/ledger_token",
+     "store_id": "st_bao",
+     "provider": "openbao",
+     "address": {
+      "engine": "kv2",
+      "mount": "secret",
+      "path": "payments",
+      "field": "ledger_token"
+     },
+     "pinned": false,
+     "length": 36,
+     "notes": "",
+     "status": "active",
+     "created_at": "@now-14d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-14d",
+     "rev": 0
+    },
+    {
+     "id": "k_old",
+     "org_id": "org_acme",
+     "name": "billing/api_key",
+     "store_id": "st_removed",
+     "provider": "openbao",
+     "address": {
+      "engine": "kv2",
+      "mount": "secret",
+      "path": "billing",
+      "field": "api_key"
+     },
+     "pinned": false,
+     "length": 40,
+     "notes": "From the retired \"Old vault\" store",
+     "status": "source_removed",
+     "created_at": "@now-70d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-70d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "tools",
+   "rows": [
+    {
+     "id": "t_stripe",
+     "org_id": "org_acme",
+     "status": "published",
+     "draft_internal_name": "stripe_charges",
+     "draft_display_name": "Stripe charges",
+     "draft_description": "Lists recent charges from a Stripe account. Use when the user asks about recent payments, charge amounts, refunds, or payment status. Returns amounts in the account currency.",
+     "draft_base_url": "https://api.stripe.com",
+     "draft_actions": [
+      {
+       "id": "a_charges",
+       "method": "GET",
+       "path": "/v1/charges",
+       "summary": "List recent charges",
+       "inputs": [
+        {
+         "id": "i_limit",
+         "name": "limit",
+         "type": "integer",
+         "required": false,
+         "description": "How many charges to return (1–100). Defaults to 10."
+        }
+       ]
+      },
+      {
+       "id": "a_charge",
+       "method": "GET",
+       "path": "/v1/charges/{id}",
+       "summary": "Get one charge by id",
+       "inputs": [
+        {
+         "id": "i_id",
+         "name": "id",
+         "type": "string",
+         "required": true,
+         "description": "The charge id, starting with ch_."
+        }
+       ]
+      }
+     ],
+     "draft_slots": [
+      {
+       "id": "s_stripe",
+       "name": "stripe_secret",
+       "location": "header",
+       "field": "Authorization",
+       "scheme": "Bearer"
+      }
+     ],
+     "draft_per_minute": 60,
+     "draft_timeout_ms": 10000,
+     "published_version": 2,
+     "catalog": "stripe",
+     "created_at": "@now-3d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-3d",
+     "rev": 2
+    },
+    {
+     "id": "t_github",
+     "org_id": "org_acme",
+     "status": "published",
+     "draft_internal_name": "github_issues",
+     "draft_display_name": "GitHub issues",
+     "draft_description": "Lists and opens issues in the organization's GitHub repositories. Use when the user asks about open bugs, wants to file an issue, or needs the status of a ticket.",
+     "draft_base_url": "https://api.github.com",
+     "draft_actions": [
+      {
+       "id": "a_list",
+       "method": "GET",
+       "path": "/repos/{owner}/{repo}/issues",
+       "summary": "List issues in a repository",
+       "inputs": [
+        {
+         "id": "i_owner",
+         "name": "owner",
+         "type": "string",
+         "required": true,
+         "description": "Repository owner."
+        },
+        {
+         "id": "i_repo",
+         "name": "repo",
+         "type": "string",
+         "required": true,
+         "description": "Repository name."
+        },
+        {
+         "id": "i_state",
+         "name": "state",
+         "type": "string",
+         "required": false,
+         "description": "open, closed, or all."
+        }
+       ]
+      },
+      {
+       "id": "a_create",
+       "method": "POST",
+       "path": "/repos/{owner}/{repo}/issues",
+       "summary": "Open a new issue",
+       "inputs": [
+        {
+         "id": "i_owner2",
+         "name": "owner",
+         "type": "string",
+         "required": true,
+         "description": "Repository owner."
+        },
+        {
+         "id": "i_repo2",
+         "name": "repo",
+         "type": "string",
+         "required": true,
+         "description": "Repository name."
+        },
+        {
+         "id": "i_title",
+         "name": "title",
+         "type": "string",
+         "required": true,
+         "description": "Issue title."
+        }
+       ]
+      }
+     ],
+     "draft_slots": [
+      {
+       "id": "s_gh",
+       "name": "github_token",
+       "location": "header",
+       "field": "Authorization",
+       "scheme": "Bearer"
+      }
+     ],
+     "draft_per_minute": 30,
+     "draft_timeout_ms": 10000,
+     "published_version": 1,
+     "catalog": "github",
+     "created_at": "@now-9d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-9d",
+     "rev": 1
+    },
+    {
+     "id": "t_slack",
+     "org_id": "org_acme",
+     "status": "draft",
+     "draft_internal_name": "slack_messages",
+     "draft_display_name": "Slack messages",
+     "draft_description": "Posts a message to a Slack channel the bot has joined. Use when the user asks to notify a team or share a short update. Never use for direct messages.",
+     "draft_base_url": "https://slack.com/api",
+     "draft_actions": [
+      {
+       "id": "a_post",
+       "method": "POST",
+       "path": "/chat.postMessage",
+       "summary": "Post a message to a channel",
+       "inputs": [
+        {
+         "id": "i_channel",
+         "name": "channel",
+         "type": "string",
+         "required": true,
+         "description": "Channel id or #name."
+        },
+        {
+         "id": "i_text",
+         "name": "text",
+         "type": "string",
+         "required": true,
+         "description": "Message text."
+        }
+       ]
+      }
+     ],
+     "draft_slots": [
+      {
+       "id": "s_slack",
+       "name": "SLACK_BOT_TOKEN",
+       "location": "header",
+       "field": "Authorization",
+       "scheme": "Bearer"
+      }
+     ],
+     "draft_per_minute": 20,
+     "draft_timeout_ms": 8000,
+     "catalog": "slack",
+     "created_at": "@now-1d",
+     "created_by_kind": "user",
+     "created_by_id": "u_dana",
+     "updated_at": "@now-1d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "tool_versions",
+   "rows": [
+    {
+     "id": "t_stripe@2",
+     "org_id": "org_acme",
+     "tool_id": "t_stripe",
+     "version": 2,
+     "snapshot": {
+      "internalName": "stripe_charges",
+      "displayName": "Stripe charges",
+      "description": "Lists recent charges from a Stripe account. Use when the user asks about recent payments, charge amounts, refunds, or payment status. Returns amounts in the account currency.",
+      "baseUrl": "https://api.stripe.com",
+      "actions": [
+       {
+        "id": "a_charges",
+        "method": "GET",
+        "path": "/v1/charges",
+        "summary": "List recent charges",
+        "inputs": [
+         {
+          "id": "i_limit",
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "How many charges to return (1–100). Defaults to 10."
+         }
+        ]
+       },
+       {
+        "id": "a_charge",
+        "method": "GET",
+        "path": "/v1/charges/{id}",
+        "summary": "Get one charge by id",
+        "inputs": [
+         {
+          "id": "i_id",
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "The charge id, starting with ch_."
+         }
+        ]
+       }
+      ],
+      "slots": [
+       {
+        "id": "s_stripe",
+        "name": "stripe_secret",
+        "location": "header",
+        "field": "Authorization",
+        "scheme": "Bearer"
+       }
+      ],
+      "perMinute": 60,
+      "timeoutMs": 10000
+     },
+     "changes": [
+      "Installed from the starter catalog"
+     ],
+     "published_at": "@now-3d",
+     "published_by_kind": "user",
+     "published_by_id": "u_dana"
+    },
+    {
+     "id": "t_github@1",
+     "org_id": "org_acme",
+     "tool_id": "t_github",
+     "version": 1,
+     "snapshot": {
+      "internalName": "github_issues",
+      "displayName": "GitHub issues",
+      "description": "Lists and opens issues in the organization's GitHub repositories. Use when the user asks about open bugs, wants to file an issue, or needs the status of a ticket.",
+      "baseUrl": "https://api.github.com",
+      "actions": [
+       {
+        "id": "a_list",
+        "method": "GET",
+        "path": "/repos/{owner}/{repo}/issues",
+        "summary": "List issues in a repository",
+        "inputs": [
+         {
+          "id": "i_owner",
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner."
+         },
+         {
+          "id": "i_repo",
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name."
+         },
+         {
+          "id": "i_state",
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "description": "open, closed, or all."
+         }
+        ]
+       },
+       {
+        "id": "a_create",
+        "method": "POST",
+        "path": "/repos/{owner}/{repo}/issues",
+        "summary": "Open a new issue",
+        "inputs": [
+         {
+          "id": "i_owner2",
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "description": "Repository owner."
+         },
+         {
+          "id": "i_repo2",
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "Repository name."
+         },
+         {
+          "id": "i_title",
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "Issue title."
+         }
+        ]
+       }
+      ],
+      "slots": [
+       {
+        "id": "s_gh",
+        "name": "github_token",
+        "location": "header",
+        "field": "Authorization",
+        "scheme": "Bearer"
+       }
+      ],
+      "perMinute": 30,
+      "timeoutMs": 10000
+     },
+     "changes": [
+      "Installed from the starter catalog"
+     ],
+     "published_at": "@now-9d",
+     "published_by_kind": "user",
+     "published_by_id": "u_dana"
+    }
+   ]
+  },
+  {
+   "table": "workspace_availability",
+   "rows": [
+    {
+     "workspace_id": "ws_prod",
+     "org_id": "org_acme",
+     "availability_set_by_kind": "user",
+     "availability_set_by_id": "u_dana",
+     "availability_set_at": "@now-20d",
+     "exposure_set_by_kind": "user",
+     "exposure_set_by_id": "u_dana",
+     "exposure_set_at": "@now-20d",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "workspace_id": "ws_staging",
+     "org_id": "org_acme",
+     "availability_set_by_kind": "user",
+     "availability_set_by_id": "u_dana",
+     "availability_set_at": "@now-20d",
+     "exposure_set_by_kind": "user",
+     "exposure_set_by_id": "u_dana",
+     "exposure_set_at": "@now-20d",
+     "updated_at": "@now-20d",
+     "rev": 0
+    },
+    {
+     "workspace_id": "ws_sandbox",
+     "org_id": "org_acme",
+     "availability_set_by_kind": "user",
+     "availability_set_by_id": "u_dana",
+     "availability_set_at": "@now-20d",
+     "exposure_set_by_kind": "user",
+     "exposure_set_by_id": "u_dana",
+     "exposure_set_at": "@now-20d",
+     "updated_at": "@now-20d",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "workspace_available_keys",
+   "rows": [
+    {
+     "workspace_id": "ws_prod",
+     "org_id": "org_acme",
+     "key_id": "k_stripe",
+     "exposed": true
+    },
+    {
+     "workspace_id": "ws_prod",
+     "org_id": "org_acme",
+     "key_id": "k_gh",
+     "exposed": true
+    },
+    {
+     "workspace_id": "ws_prod",
+     "org_id": "org_acme",
+     "key_id": "k_bao1",
+     "exposed": true
+    },
+    {
+     "workspace_id": "ws_prod",
+     "org_id": "org_acme",
+     "key_id": "k_old",
+     "exposed": true
+    },
+    {
+     "workspace_id": "ws_staging",
+     "org_id": "org_acme",
+     "key_id": "k_slack",
+     "exposed": true
+    },
+    {
+     "workspace_id": "ws_staging",
+     "org_id": "org_acme",
+     "key_id": "k_gh",
+     "exposed": true
+    }
+   ]
+  },
+  {
+   "table": "workspace_available_tools",
+   "rows": [
+    {
+     "workspace_id": "ws_prod",
+     "org_id": "org_acme",
+     "tool_id": "t_stripe"
+    },
+    {
+     "workspace_id": "ws_prod",
+     "org_id": "org_acme",
+     "tool_id": "t_github"
+    },
+    {
+     "workspace_id": "ws_staging",
+     "org_id": "org_acme",
+     "tool_id": "t_github"
+    }
+   ]
+  },
+  {
+   "table": "grants",
+   "rows": [
+    {
+     "id": "gr_prod_stripe",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "tool_id": "t_stripe",
+     "enabled": true,
+     "per_minute": 60,
+     "granted_at": "@now-45d",
+     "granted_by_kind": "user",
+     "granted_by_id": "u_dana",
+     "updated_at": "@now-45d",
+     "rev": 0
+    },
+    {
+     "id": "gr_prod_github",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "tool_id": "t_github",
+     "enabled": true,
+     "per_minute": 30,
+     "granted_at": "@now-45d",
+     "granted_by_kind": "user",
+     "granted_by_id": "u_dana",
+     "updated_at": "@now-45d",
+     "rev": 0
+    },
+    {
+     "id": "gr_staging_github",
+     "org_id": "org_acme",
+     "workspace_id": "ws_staging",
+     "tool_id": "t_github",
+     "enabled": true,
+     "per_minute": 30,
+     "granted_at": "@now-2h",
+     "granted_by_kind": "user",
+     "granted_by_id": "u_ravi",
+     "updated_at": "@now-2h",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "grant_slots",
+   "rows": [
+    {
+     "grant_id": "gr_prod_stripe",
+     "org_id": "org_acme",
+     "slot": "stripe_secret",
+     "key_id": "k_stripe"
+    },
+    {
+     "grant_id": "gr_prod_github",
+     "org_id": "org_acme",
+     "slot": "github_token",
+     "key_id": "k_gh"
+    },
+    {
+     "grant_id": "gr_staging_github",
+     "org_id": "org_acme",
+     "slot": "github_token",
+     "key_id": "k_gh"
+    }
+   ]
+  },
+  {
+   "table": "cabinet_keys",
+   "rows": [
+    {
+     "cabinet_id": "cb_mia",
+     "org_id": "org_acme",
+     "key_id": "k_mia1"
+    },
+    {
+     "cabinet_id": "cb_mia",
+     "org_id": "org_acme",
+     "key_id": "k_mia2"
+    },
+    {
+     "cabinet_id": "cb_team",
+     "org_id": "org_acme",
+     "key_id": "k_gh"
+    },
+    {
+     "cabinet_id": "cb_legacy",
+     "org_id": "org_acme",
+     "key_id": "k_legacy_c"
+    }
+   ]
+  },
+  {
+   "table": "cabinet_tools",
+   "rows": [
+    {
+     "cabinet_id": "cb_mia",
+     "org_id": "org_acme",
+     "tool_id": "t_stripe",
+     "slot_map": {
+      "stripe_secret": "k_mia1"
+     }
+    },
+    {
+     "cabinet_id": "cb_team",
+     "org_id": "org_acme",
+     "tool_id": "t_github",
+     "slot_map": {
+      "github_token": "k_gh"
+     }
+    },
+    {
+     "cabinet_id": "cb_team",
+     "org_id": "org_acme",
+     "tool_id": "t_stripe",
+     "slot_map": {
+      "stripe_secret": null
+     }
+    }
+   ]
+  },
+  {
+   "table": "cabinet_access",
+   "rows": [
+    {
+     "cabinet_id": "cb_mia",
+     "org_id": "org_acme",
+     "member_kind": "user",
+     "member_id": "u_mia"
+    },
+    {
+     "cabinet_id": "cb_mia",
+     "org_id": "org_acme",
+     "member_kind": "agent",
+     "member_id": "ag_billing"
+    }
+   ]
+  },
+  {
+   "table": "audit_events",
+   "rows": [
+    {
+     "id": "ev_1",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "app": "keyhole",
+     "shared": false,
+     "type": "request",
+     "severity": "ok",
+     "at": "@now-2m",
+     "actor_kind": "agent",
+     "actor_id": "ag_billing",
+     "actor_label": "billing-agent",
+     "object": "Stripe charges",
+     "result": "200 · 164 ms",
+     "trk": "trk_2b8xm4c1",
+     "detail": {
+      "kind": "request",
+      "toolId": "t_stripe",
+      "actionId": "a_charges",
+      "method": "GET",
+      "path": "/v1/charges",
+      "destinationHost": "api.stripe.com",
+      "status": 200,
+      "latencyMs": 164,
+      "route": "direct"
+     },
+     "expire_at": "@now+365d-2m",
+     "subject_kind": "tool",
+     "subject_id": "t_stripe",
+     "subject_label": "Stripe charges"
+    },
+    {
+     "id": "ev_2",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "app": "keyhole",
+     "shared": false,
+     "type": "blocked",
+     "severity": "blocked",
+     "at": "@now-2m27s",
+     "actor_kind": "agent",
+     "actor_id": "ag_ops",
+     "actor_label": "ops-agent",
+     "object": "Stripe charges",
+     "result": "Blocked",
+     "reason": "Blocked: path /v1/payouts isn’t allowed for the tool \"Stripe charges\".",
+     "trk": "trk_9k2fp7d3",
+     "detail": {
+      "kind": "blocked",
+      "rule": "path_not_allowed",
+      "attempted": "GET /v1/payouts",
+      "allowed": [
+       "/v1/charges",
+       "/v1/charges/{id}"
+      ],
+      "fix": "Add the action to the tool, or point the agent at an allowed path."
+     },
+     "expire_at": "@now+365d-2m27s",
+     "subject_kind": "tool",
+     "subject_id": "t_stripe",
+     "subject_label": "Stripe charges",
+     "link_label": "Open the tool’s actions",
+     "link_to": "/tools/t_stripe?section=actions"
+    },
+    {
+     "id": "ev_3",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "app": "keyhole",
+     "shared": false,
+     "type": "request",
+     "severity": "ok",
+     "at": "@now-3m",
+     "actor_kind": "agent",
+     "actor_id": "ag_docs",
+     "actor_label": "docs-agent",
+     "object": "GitHub issues",
+     "result": "201 · 340 ms",
+     "trk": "trk_6d9sk3m2",
+     "detail": {
+      "kind": "request",
+      "toolId": "t_github",
+      "actionId": "a_create",
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues",
+      "destinationHost": "api.github.com",
+      "status": 201,
+      "latencyMs": 340,
+      "route": "direct"
+     },
+     "expire_at": "@now+365d-3m",
+     "subject_kind": "tool",
+     "subject_id": "t_github",
+     "subject_label": "GitHub issues"
+    },
+    {
+     "id": "ev_4",
+     "org_id": "org_acme",
+     "workspace_id": "ws_staging",
+     "app": "keyhole",
+     "shared": false,
+     "type": "connection",
+     "severity": "warn",
+     "at": "@now-18m",
+     "actor_kind": "connector",
+     "actor_id": "cn_edge02",
+     "actor_label": "edge-02",
+     "object": "Heartbeat late — 2 of the last 5 missed",
+     "result": "Degraded",
+     "trk": "trk_4h8cz2p1",
+     "detail": {
+      "kind": "connection",
+      "componentId": "cn_edge02",
+      "event": "heartbeat_late"
+     },
+     "expire_at": "@now+365d-18m"
+    },
+    {
+     "id": "ev_5",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "app": "keyhole",
+     "shared": false,
+     "type": "request",
+     "severity": "ok",
+     "at": "@now-24m",
+     "actor_kind": "agent",
+     "actor_id": "ag_billing",
+     "actor_label": "billing-agent",
+     "object": "Stripe charges",
+     "result": "200 · 182 ms",
+     "trk": "trk_8f2ka91x",
+     "detail": {
+      "kind": "request",
+      "toolId": "t_stripe",
+      "actionId": "a_charges",
+      "method": "GET",
+      "path": "/v1/charges",
+      "destinationHost": "api.stripe.com",
+      "status": 200,
+      "latencyMs": 182,
+      "route": "direct"
+     },
+     "expire_at": "@now+365d-24m",
+     "subject_kind": "tool",
+     "subject_id": "t_stripe",
+     "subject_label": "Stripe charges"
+    },
+    {
+     "id": "ev_6",
+     "org_id": "org_acme",
+     "workspace_id": "ws_staging",
+     "app": "keyhole",
+     "shared": false,
+     "type": "request",
+     "severity": "ok",
+     "at": "@now-47m",
+     "actor_kind": "agent",
+     "actor_id": "ag_docs",
+     "actor_label": "docs-agent",
+     "object": "GitHub issues",
+     "result": "200 · 212 ms",
+     "trk": "trk_1q7vm3x8",
+     "detail": {
+      "kind": "request",
+      "toolId": "t_github",
+      "actionId": "a_list",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues",
+      "destinationHost": "api.github.com",
+      "status": 200,
+      "latencyMs": 212,
+      "route": "connector",
+      "connectorId": "cn_edge02"
+     },
+     "expire_at": "@now+365d-47m",
+     "subject_kind": "tool",
+     "subject_id": "t_github",
+     "subject_label": "GitHub issues"
+    },
+    {
+     "id": "ev_7",
+     "org_id": "org_acme",
+     "workspace_id": "ws_staging",
+     "app": "keyhole",
+     "shared": false,
+     "type": "error",
+     "severity": "warn",
+     "at": "@now-1h5m",
+     "actor_kind": "agent",
+     "actor_id": "ag_docs",
+     "actor_label": "docs-agent",
+     "object": "GitHub issues",
+     "result": "502 · upstream timeout",
+     "reason": "The destination didn’t answer within 10 s. Keyhole did not retry.",
+     "trk": "trk_5r2kd9w4",
+     "detail": {
+      "kind": "request",
+      "toolId": "t_github",
+      "actionId": "a_list",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues",
+      "destinationHost": "api.github.com",
+      "status": 502,
+      "latencyMs": 10000,
+      "route": "direct"
+     },
+     "expire_at": "@now+365d-1h5m",
+     "subject_kind": "tool",
+     "subject_id": "t_github",
+     "subject_label": "GitHub issues"
+    },
+    {
+     "id": "ev_8",
+     "org_id": "org_acme",
+     "workspace_id": "ws_staging",
+     "app": "keyhole",
+     "shared": false,
+     "type": "admin",
+     "severity": "info",
+     "at": "@now-2h",
+     "actor_kind": "user",
+     "actor_id": "u_ravi",
+     "actor_label": "Ravi Mehta",
+     "object": "Granted GitHub issues to Staging",
+     "result": "Done",
+     "trk": "trk_3m6pt8k2",
+     "detail": {
+      "kind": "admin",
+      "changes": [
+       {
+        "field": "grants",
+        "before": null,
+        "after": "gr_staging_github"
+       }
+      ]
+     },
+     "expire_at": "@now+365d-2h",
+     "subject_kind": "tool",
+     "subject_id": "t_github",
+     "subject_label": "GitHub issues"
+    },
+    {
+     "id": "ev_9",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "app": "keyhole",
+     "shared": false,
+     "type": "admin",
+     "severity": "info",
+     "at": "@now-3h",
+     "actor_kind": "user",
+     "actor_id": "u_mia",
+     "actor_label": "Mia Chen",
+     "object": "Created cabinet Mia's billing set (locked)",
+     "result": "Done",
+     "trk": "trk_7x2nb4q9",
+     "detail": {
+      "kind": "admin",
+      "changes": [
+       {
+        "field": "cabinet",
+        "before": null,
+        "after": "cb_mia"
+       }
+      ]
+     },
+     "expire_at": "@now+365d-3h",
+     "subject_kind": "cabinet",
+     "subject_id": "cb_mia",
+     "subject_label": "Mia's billing set"
+    },
+    {
+     "id": "ev_10",
+     "org_id": "org_acme",
+     "app": "keyhole",
+     "shared": true,
+     "type": "admin",
+     "severity": "info",
+     "at": "@now-2d",
+     "actor_kind": "user",
+     "actor_id": "u_dana",
+     "actor_label": "Dana Keller",
+     "object": "Invited sam@acme.com as user",
+     "result": "Done",
+     "trk": "trk_9b3ws6h1",
+     "expire_at": "@now+365d-2d",
+     "subject_kind": "invitation",
+     "subject_id": "inv_sam",
+     "subject_label": "sam@acme.com"
+    },
+    {
+     "id": "ev_11",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "app": "keyhole",
+     "shared": false,
+     "type": "verification",
+     "severity": "ok",
+     "at": "@now-3d",
+     "actor_kind": "agent",
+     "actor_id": "ag_billing",
+     "actor_label": "billing-agent",
+     "object": "First request verified",
+     "result": "200 · 182 ms",
+     "trk": "trk_1v8rf5k3",
+     "detail": {
+      "kind": "request",
+      "toolId": "t_stripe",
+      "actionId": "a_charges",
+      "method": "GET",
+      "path": "/v1/charges",
+      "destinationHost": "api.stripe.com",
+      "status": 200,
+      "latencyMs": 182,
+      "route": "direct"
+     },
+     "expire_at": "@now+365d-3d",
+     "subject_kind": "tool",
+     "subject_id": "t_stripe",
+     "subject_label": "Stripe charges"
+    },
+    {
+     "id": "ev_12",
+     "org_id": "org_acme",
+     "workspace_id": "ws_prod",
+     "app": "keyhole",
+     "shared": false,
+     "type": "connection",
+     "severity": "ok",
+     "at": "@now-3d1h",
+     "actor_kind": "connector",
+     "actor_id": "cn_edge01",
+     "actor_label": "edge-01",
+     "object": "Connector enrolled",
+     "result": "First heartbeat",
+     "trk": "trk_2e7yl4c6",
+     "detail": {
+      "kind": "connection",
+      "componentId": "cn_edge01",
+      "event": "enrolled"
+     },
+     "expire_at": "@now+365d-3d1h"
+    }
+   ]
+  }
+ ]
+}

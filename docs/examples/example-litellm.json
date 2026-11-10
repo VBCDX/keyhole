@@ -1,0 +1,273 @@
+{
+ "description": "An example: one org, one workspace, an agent, a Local store, an LLM gateway tool and its grant. Replace org_example (the orgs row's id and every org_id) with your control plane's own org id (org_…; see docs/local-store.md, \"The org id\"), or nothing resolves. No value: put it with `keyhole keys put --org org_… --key k_litellm_test --kek-file …`.",
+ "tables": [
+  {
+   "table": "orgs",
+   "rows": [
+    {
+     "id": "org_example",
+     "name": "Example",
+     "status": "active",
+     "audit_retention_days": 365,
+     "created_at": "@now",
+     "created_by_kind": "system",
+     "created_by_id": "keyhole-cli",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "workspaces",
+   "rows": [
+    {
+     "id": "ws_example",
+     "org_id": "org_example",
+     "name": "Example agents",
+     "status": "active",
+     "created_at": "@now",
+     "created_by_kind": "system",
+     "created_by_id": "keyhole-cli",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "agents",
+   "rows": [
+    {
+     "id": "ag_example",
+     "org_id": "org_example",
+     "label": "example-agent",
+     "label_lower": "example-agent",
+     "created_at": "@now",
+     "created_by_kind": "system",
+     "created_by_id": "keyhole-cli",
+     "created_by_label": "keyhole load",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "workspace_memberships",
+   "rows": [
+    {
+     "id": "wm_example",
+     "org_id": "org_example",
+     "workspace_id": "ws_example",
+     "member_kind": "agent",
+     "member_id": "ag_example",
+     "role": "member",
+     "added_at": "@now",
+     "added_by_kind": "system",
+     "added_by_id": "keyhole-cli",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "stores",
+   "rows": [
+    {
+     "id": "st_example_local",
+     "org_id": "org_example",
+     "name": "Local store",
+     "provider": "local",
+     "status": "active",
+     "route_mode": "internal",
+     "network_exposure": "unknown",
+     "health_status": "healthy",
+     "health_code": "ok",
+     "health_checked_at": "@now",
+     "cache_default_ttl_seconds": 300,
+     "created_at": "@now",
+     "created_by_kind": "system",
+     "created_by_id": "keyhole-cli",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "keys",
+   "rows": [
+    {
+     "id": "k_litellm_test",
+     "org_id": "org_example",
+     "name": "example-test-key",
+     "store_id": "st_example_local",
+     "provider": "local",
+     "pinned": false,
+     "notes": "A budget-capped LLM gateway key for testing (for example $5 / 30 days).",
+     "status": "active",
+     "created_at": "@now",
+     "created_by_kind": "system",
+     "created_by_id": "keyhole-cli",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "tools",
+   "rows": [
+    {
+     "id": "t_litellm",
+     "org_id": "org_example",
+     "status": "published",
+     "draft_internal_name": "litellm",
+     "draft_display_name": "LiteLLM",
+     "draft_description": "An LLM gateway (LiteLLM-compatible). Lists models and creates chat completions with a budget-capped key.",
+     "draft_base_url": "https://llm.example.com",
+     "draft_actions": [
+      {
+       "id": "a_models",
+       "method": "GET",
+       "path": "/v1/models",
+       "summary": "List the models this key may use",
+       "inputs": []
+      },
+      {
+       "id": "a_chat",
+       "method": "POST",
+       "path": "/v1/chat/completions",
+       "summary": "Create a chat completion",
+       "inputs": []
+      }
+     ],
+     "draft_slots": [
+      {
+       "id": "s_litellm",
+       "name": "litellm_key",
+       "location": "header",
+       "field": "Authorization",
+       "scheme": "Bearer"
+      }
+     ],
+     "draft_per_minute": 30,
+     "draft_timeout_ms": 60000,
+     "published_version": 1,
+     "created_at": "@now",
+     "created_by_kind": "system",
+     "created_by_id": "keyhole-cli",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "tool_versions",
+   "rows": [
+    {
+     "id": "t_litellm@1",
+     "org_id": "org_example",
+     "tool_id": "t_litellm",
+     "version": 1,
+     "snapshot": {
+      "internalName": "litellm",
+      "displayName": "LiteLLM",
+      "description": "An LLM gateway (LiteLLM-compatible). Lists models and creates chat completions with a budget-capped key.",
+      "baseUrl": "https://llm.example.com",
+      "actions": [
+       {
+        "id": "a_models",
+        "method": "GET",
+        "path": "/v1/models",
+        "summary": "List the models this key may use",
+        "inputs": []
+       },
+       {
+        "id": "a_chat",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "summary": "Create a chat completion",
+        "inputs": []
+       }
+      ],
+      "slots": [
+       {
+        "id": "s_litellm",
+        "name": "litellm_key",
+        "location": "header",
+        "field": "Authorization",
+        "scheme": "Bearer"
+       }
+      ],
+      "perMinute": 30,
+      "timeoutMs": 60000
+     },
+     "changes": [
+      "Created for the example"
+     ],
+     "published_at": "@now",
+     "published_by_kind": "system",
+     "published_by_id": "keyhole-cli"
+    }
+   ]
+  },
+  {
+   "table": "workspace_availability",
+   "rows": [
+    {
+     "workspace_id": "ws_example",
+     "org_id": "org_example",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "workspace_available_keys",
+   "rows": [
+    {
+     "workspace_id": "ws_example",
+     "org_id": "org_example",
+     "key_id": "k_litellm_test",
+     "exposed": false
+    }
+   ]
+  },
+  {
+   "table": "workspace_available_tools",
+   "rows": [
+    {
+     "workspace_id": "ws_example",
+     "org_id": "org_example",
+     "tool_id": "t_litellm"
+    }
+   ]
+  },
+  {
+   "table": "grants",
+   "rows": [
+    {
+     "id": "gr_example_llm",
+     "org_id": "org_example",
+     "workspace_id": "ws_example",
+     "tool_id": "t_litellm",
+     "enabled": true,
+     "per_minute": 30,
+     "granted_at": "@now",
+     "granted_by_kind": "system",
+     "granted_by_id": "keyhole-cli",
+     "updated_at": "@now",
+     "rev": 0
+    }
+   ]
+  },
+  {
+   "table": "grant_slots",
+   "rows": [
+    {
+     "grant_id": "gr_example_llm",
+     "org_id": "org_example",
+     "slot": "litellm_key",
+     "key_id": "k_litellm_test"
+    }
+   ]
+  }
+ ]
+}
